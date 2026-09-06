@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String?
+  fullName  String?  @map("full_name")
+  role      String   @default("viewer")
+  zoneId    String?  @map("zone_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  zone      Zone?    @relation(fields: [zoneId], references: [id])
+
+  @@map("profiles")
+}
+
+model Zone {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String    @unique
+  area      String?
+  hub       String?
+  rawData   Json?     @map("raw_data")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profiles  Profile[]
+  riders    Rider[]
+
+  @@map("zones")
+}
+
+model Rider {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kv               String?
+  homeDistrict     String?           @map("home_district")
+  cot              String?
+  riderCode        String            @unique @map("rider_code")
+  fullName         String?           @map("full_name")
+  pickupDistrict   String?           @map("pickup_district")
+  pickupWard       String?           @map("pickup_ward")
+  pointName        String?           @map("point_name")
+  deliveryDistrict String?           @map("delivery_district")
+  deliveryWard     String?           @map("delivery_ward")
+  avatarUrl        String?           @map("avatar_url")
+  name             String?
+  phone            String?
+  zoneId           String?           @map("zone_id") @db.Uuid
+  status           String            @default("active")
+  currentShift     String?           @map("current_shift")
+  rawData          Json?             @map("raw_data")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  zone             Zone?             @relation(fields: [zoneId], references: [id])
+  attendance       AttendanceLog[]
+  offRequests      RiderOffRequest[]
+
+  @@map("riders")
+}
+
+model RiderOffRequest {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId                 String    @default(dbgenerated("gen_random_uuid()")) @map("batch_id") @db.Uuid
+  riderId                 String    @map("rider_id") @db.Uuid
+  riderCode               String    @map("rider_code")
+  offDate                 DateTime  @map("off_date") @db.Date
+  requestType             String    @map("request_type")
+  shift                   String    @default("FULL_DAY")
+  reason                  String?
+  evidencePath            String?   @map("evidence_path")
+  evidenceName            String?   @map("evidence_name")
+  evidenceType            String?   @map("evidence_type")
+  requesterEmail          String?   @map("requester_email")
+  emailNotificationStatus String    @default("PENDING") @map("email_notification_status")
+  emailNotificationError  String?   @map("email_notification_error")
+  emailNotifiedAt         DateTime? @map("email_notified_at") @db.Timestamptz(6)
+  status                  String    @default("PENDING")
+  reviewedBy              String?   @map("reviewed_by") @db.Uuid
+  reviewedAt              DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote              String?   @map("review_note")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rider                   Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@unique([riderId, offDate])
+  @@index([offDate])
+  @@index([status])
+  @@index([batchId])
+  @@map("rider_off_requests")
+}
+
+model AttendanceLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  riderId   String?  @map("rider_id") @db.Uuid
+  riderCode String   @map("rider_code")
+  workDate  DateTime @map("work_date") @db.Date
+  shift     String?
+  status    String
+  note      String?
+  rawData   Json?    @map("raw_data")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rider     Rider?   @relation(fields: [riderId], references: [id])
+
+  @@unique([riderCode, workDate])
+  @@index([workDate])
+  @@index([status])
+  @@index([riderCode])
+  @@map("attendance_logs")
+}
+
+model AttendanceSheetSyncOutbox {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  riderCode       String    @map("rider_code")
+  workDate        DateTime  @map("work_date") @db.Date
+  attendanceStatus String   @map("attendance_status")
+  operation       String
+  state           String    @default("PENDING")
+  attempts        Int       @default(0)
+  nextAttemptAt   DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError       String?   @map("last_error")
+  syncedAt        DateTime? @map("synced_at") @db.Timestamptz(6)
+  sourceUpdatedAt DateTime  @default(now()) @map("source_updated_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([riderCode, workDate, createdAt(sort: Desc)])
+  @@map("attendance_sheet_sync_outbox")
+}
+
+model ImportBatch {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source       String?
+  totalRecords Int      @default(0) @map("total_records")
+  successCount Int      @default(0) @map("success_count")
+  errorCount   Int      @default(0) @map("error_count")
+  rawData      Json?    @map("raw_data")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("import_batches")
+}
+
+model ActivityLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id") @db.Uuid
+  action     String
+  message    String
+  rawData    Json?    @map("raw_data")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model PersonalNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String
+  content   String   @default("")
+  isPinned  Boolean  @default(false) @map("is_pinned")
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, isPinned, updatedAt])
+  @@map("personal_notes")
+}
+
+model AiUserPreference {
+  userId        String   @id @map("user_id") @db.Uuid
+  memoryEnabled Boolean  @default(true) @map("memory_enabled")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("ai_user_preferences")
+}
+
+model AiConversation {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  title     String      @default("Cuộc trò chuyện mới")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  messages  AiMessage[]
+
+  @@unique([id, userId])
+  @@index([userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String         @map("conversation_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  role           String
+  content        String
+  pagePath       String?        @map("page_path")
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   AiConversation @relation(fields: [conversationId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiPendingAction {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  actionType String    @map("action_type")
+  status     String    @default("PENDING")
+  payload    Json
+  expiresAt  DateTime  @default(dbgenerated("now() + interval '10 minutes'")) @map("expires_at") @db.Timestamptz(6)
+  executedAt DateTime? @map("executed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@map("ai_pending_actions")
+}
