@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, LoaderCircle, ShieldCheck, UserPlus, UsersRound, X } from "lucide-react";
+import { ChevronDown, LoaderCircle, ShieldCheck, Trash2, UserPlus, UsersRound, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,7 @@ type Member = {
   created_at: string;
   last_sign_in_at: string | null;
   is_current_user: boolean;
+  is_super_admin: boolean;
   permissions: MemberPermissions;
 };
 type MembersResponse = { success: boolean; members?: Member[]; error?: string; message?: string };
@@ -75,6 +76,10 @@ export function MemberManagement() {
   }
 
   async function updateMember(member: Member, patch: { role?: MemberRole; permissions?: MemberPermissions }) {
+    if (member.is_super_admin) {
+      setError("Không thể sửa Super Admin");
+      return;
+    }
     setUpdatingId(member.id);
     setError(null);
     setSuccess(null);
@@ -97,13 +102,35 @@ export function MemberManagement() {
     setSuccess(`Đã cập nhật ${member.full_name ?? member.email}.`);
   }
 
+  async function deleteMember(member: Member) {
+    if (member.is_super_admin) {
+      setError("Không thể xóa Super Admin");
+      return;
+    }
+    if (!window.confirm(`Gỡ ${member.email} khỏi danh sách được phép?`)) return;
+    setUpdatingId(member.id);
+    const response = await fetch("/api/admin/members", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: member.id }),
+    });
+    const result = await response.json().catch(() => null) as MembersResponse | null;
+    setUpdatingId(null);
+    if (!response.ok || !result?.success) {
+      setError(result?.error ?? "Không thể xóa thành viên");
+      return;
+    }
+    setMembers((current) => current.filter((item) => item.id !== member.id));
+    setSuccess(`Đã gỡ ${member.email}`);
+  }
+
   return (
     <div className="space-y-5">
       <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         <Card className="h-fit">
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700"><UserPlus size={19} /></span>
-            <div><h2 className="font-bold text-slate-950">Thêm email được phép</h2><p className="text-sm text-slate-500">Chỉ email này mới đăng nhập Google. Chọn nhiều quyền bằng dropdown.</p></div>
+            <div><h2 className="font-bold text-slate-950">Thêm email được phép</h2><p className="text-sm text-slate-500">Chỉ email này mới đăng nhập Google. Super Admin được gán từ biến môi trường, không xóa được.</p></div>
           </div>
           <form className="mt-5 space-y-4" onSubmit={createMember}>
             <Field label="Họ và tên"><Input required minLength={2} value={form.full_name} onChange={(event) => setForm((current) => ({ ...current, full_name: event.target.value }))} placeholder="Nguyễn Văn A" /></Field>
@@ -125,8 +152,8 @@ export function MemberManagement() {
             <Button type="button" variant="secondary" className="h-9" onClick={() => void loadMembers()} disabled={loading}>Làm mới</Button>
           </div>
           <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Thành viên</th><th className="px-4 py-3">Vai trò</th><th className="px-4 py-3">Quyền</th><th className="px-4 py-3">Đăng nhập gần nhất</th></tr></thead>
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Thành viên</th><th className="px-4 py-3">Vai trò</th><th className="px-4 py-3">Quyền</th><th className="px-4 py-3">Đăng nhập gần nhất</th><th className="px-4 py-3"></th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {members.map((member) => (
                   <tr key={member.id} className="bg-white align-top">
@@ -134,13 +161,17 @@ export function MemberManagement() {
                       <div className="flex items-center gap-3">
                         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">{initials(member.full_name ?? member.email)}</span>
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">{member.full_name ?? "Chưa có tên"} {member.is_current_user ? <Badge tone="blue">Bạn</Badge> : null}</p>
+                          <p className="truncate font-semibold text-slate-900">
+                            {member.full_name ?? "Chưa có tên"}{" "}
+                            {member.is_super_admin ? <Badge tone="blue">Super Admin</Badge> : null}{" "}
+                            {member.is_current_user ? <Badge>Bạn</Badge> : null}
+                          </p>
                           <p className="truncate text-xs text-slate-500">{member.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Select aria-label={`Vai trò của ${member.full_name ?? member.email}`} className="h-9 min-w-32" value={member.role} disabled={updatingId === member.id || member.is_current_user} onChange={(event) => void updateMember(member, { role: event.target.value as MemberRole, permissions: defaultPermissionsForRole(event.target.value) })}>
+                      <Select aria-label={`Vai trò của ${member.full_name ?? member.email}`} className="h-9 min-w-32" value={member.role} disabled={updatingId === member.id || member.is_current_user || member.is_super_admin} onChange={(event) => void updateMember(member, { role: event.target.value as MemberRole, permissions: defaultPermissionsForRole(event.target.value) })}>
                         <option value="member">Member</option>
                         <option value="viewer">Viewer</option>
                         <option value="leader">Leader</option>
@@ -148,12 +179,19 @@ export function MemberManagement() {
                       </Select>
                     </td>
                     <td className="px-4 py-3 min-w-[240px]">
-                      <PermissionMultiSelect value={member.permissions} disabled={updatingId === member.id || member.role === "admin"} onChange={(permissions) => void updateMember(member, { permissions })} />
+                      <PermissionMultiSelect value={member.permissions} disabled={updatingId === member.id || member.role === "admin" || member.is_super_admin} onChange={(permissions) => void updateMember(member, { permissions })} />
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(member.last_sign_in_at)}</td>
+                    <td className="px-4 py-3">
+                      {member.is_super_admin || member.is_current_user ? null : (
+                        <Button type="button" variant="secondary" className="h-9 px-2 text-red-700" disabled={updatingId === member.id} onClick={() => void deleteMember(member)}>
+                          <Trash2 size={15} />
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {!loading && members.length === 0 ? <tr><td colSpan={4} className="h-40 text-center text-slate-500">Chưa có thành viên.</td></tr> : null}
+                {!loading && members.length === 0 ? <tr><td colSpan={5} className="h-40 text-center text-slate-500">Chưa có thành viên.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -161,7 +199,7 @@ export function MemberManagement() {
       </div>
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
       {success ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{success}</p> : null}
-      <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><ShieldCheck className="mt-0.5 shrink-0" size={18} /><p><strong>Cách cấp quyền:</strong> mở dropdown và tick nhiều chức năng. Ví dụ chỉ cho sửa Rider và Return thì chọn đúng 2 mục đó. Admin luôn có đủ quyền.</p></div>
+      <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><ShieldCheck className="mt-0.5 shrink-0" size={18} /><p><strong>Super Admin</strong> là email trong <code>BOOTSTRAP_ADMIN_EMAIL</code>. Tài khoản này luôn đăng nhập được, không hạ quyền và không xóa được.</p></div>
     </div>
   );
 }
