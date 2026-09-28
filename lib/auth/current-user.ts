@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
 
 export type CurrentUserContext = {
   user: {
@@ -10,15 +11,10 @@ export type CurrentUserContext = {
   profile: {
     full_name: string | null;
     role: string;
+    permissions: MemberPermissions;
   };
 };
 
-/**
- * Resolves the signed-in operator once per Server Component render.
- *
- * getClaims verifies the session JWT and avoids an unnecessary Auth server
- * round-trip when the Supabase project uses asymmetric signing keys.
- */
 export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext | null> => {
   const supabase = await createClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
@@ -28,10 +24,13 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
     return null;
   }
 
+  const email = typeof claimsData.claims.email === "string" ? claimsData.claims.email.trim().toLowerCase() : "";
+  if (!email.endsWith("@spxexpress.com")) return null;
+
   const admin = createAdminClient();
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("full_name, role")
+    .select("full_name, role, email")
     .eq("id", userId)
     .maybeSingle();
 
@@ -39,34 +38,21 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
     throw new Error(`Unable to load the signed-in user's profile: ${profileError.message}`);
   }
 
-  const email = typeof claimsData.claims.email === "string" ? claimsData.claims.email : "";
+  const { data: byEmail } = profile
+    ? { data: profile }
+    : await admin.from("profiles").select("full_name, role, email").eq("email", email).maybeSingle();
 
-  if (!profile) {
-    // Self-heal: user exists in auth.users but has no public.profiles row
-    // (e.g. created manually in the dashboard, no signup trigger yet).
-    const { data: created, error: upsertError } = await admin
-      .from("profiles")
-      .upsert({ id: userId, email: email || null, role: "viewer" }, { onConflict: "id" })
-      .select("full_name, role")
-      .single();
+  if (!byEmail) return null;
 
-    if (upsertError || !created) {
-      throw new Error(
-        `Signed-in user has no profile row. Ask an admin to run: insert into public.profiles (id, email, role) values ('${userId}', '${email}', 'viewer'). Cause: ${upsertError?.message ?? "unknown"}`
-      );
-    }
-
-    return {
-      user: { id: userId, email },
-      profile: created,
-    };
-  }
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const permissions = normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
 
   return {
-    user: {
-      id: userId,
-      email,
+    user: { id: userId, email },
+    profile: {
+      full_name: byEmail.full_name,
+      role: byEmail.role,
+      permissions,
     },
-    profile,
   };
 });
