@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, Bike, CalendarDays, CalendarOff, ChevronDown, ClipboardCheck, Columns2, ListChecks, ListTodo, LogOut, MapPinned, Menu, Moon, NotebookPen, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Repeat2, Sun, Truck, Upload, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, Bike, ChevronDown, Columns2, ListChecks, LogOut, Menu, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
 import { AppBrand, AppCopyright } from "@/components/layout/app-brand";
@@ -11,12 +11,12 @@ import { AppLoadingOverlay } from "@/components/layout/app-loading-overlay";
 import { NavigationPendingIndicator } from "@/components/layout/navigation-pending-indicator";
 import { RouteReveal } from "@/components/layout/route-reveal";
 
-// LITE BUILD (KV1-KV6): chỉ giữ Dashboard, Realtime, Riders, Performance, Return Tổng quan, Volume.
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/realtime-dashboard", label: "Realtime Dashboard", icon: Activity },
   { href: "/riders", label: "Riders", icon: Bike },
   { href: "/performance", label: "Performance", icon: BarChart3 },
+  { href: "/settings", label: "Thành viên", icon: UsersRound },
 ];
 
 const mobileNavItems = navItems.slice(0, 4);
@@ -30,7 +30,7 @@ const returnItems = [
 ];
 const toolItems: Array<{ href: string; label: string; icon: typeof PencilRuler }> = [];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/performance", "/return-orders", "/volume"];
+const morePaths = ["/performance", "/return-orders", "/volume", "/settings"];
 type ThemeMode = "light" | "dark";
 const subscribeToFrameContext = () => () => {};
 
@@ -58,11 +58,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleToolItems = memberToolRestricted ? [] : toolItems;
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
+  const workspaceItems = navItems.filter((item) => item.href !== "/settings");
+  const systemItems = navItems.filter((item) => item.href === "/settings");
   const moreNavItems = [
     ...volumeItems,
-    ...navItems.slice(4).filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
+    ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
     ...visiblePickupItems,
     ...visibleReturnItems,
+    ...systemItems,
   ];
   const volumeActive = pathname.startsWith("/volume");
   const [volumeOpen, setVolumeOpen] = useState(volumeActive);
@@ -83,8 +86,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {
-    // The root boot script applies the saved mode before paint; this only syncs the control label.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
   }, []);
 
@@ -123,7 +124,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
         <div className="app-sidebar-context"><span className="app-live-dot" aria-hidden="true" /><span>Operations workspace</span></div>
         <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
           <p className="app-nav-eyebrow">Workspace</p>
-          {navItems.slice(0, 11).filter((item) => item.href !== "/return-orders").map((item) => {
+          {workspaceItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
@@ -157,7 +158,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             })}
           </SidebarDisclosure> : null}
           <p className="app-nav-eyebrow app-nav-eyebrow-secondary">System</p>
-          {navItems.slice(13).map((item) => {
+          {systemItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
