@@ -29,31 +29,16 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const superAdmin = isSuperAdminEmail(email);
-  const { data: allowed } = await admin
-    .from("profiles")
-    .select("id, role, full_name")
-    .eq("email", email)
-    .maybeSingle();
+  const { data: allowed } = await admin.from("profiles").select("id, role, full_name").eq("email", email).maybeSingle();
 
   if (!allowed && !superAdmin) {
     await supabase.auth.signOut();
     return redirectWithError(origin, "not_allowed");
   }
 
-  const fullName = typeof data.user.user_metadata.full_name === "string"
-    ? data.user.user_metadata.full_name
-    : allowed?.full_name ?? null;
+  const fullName = typeof data.user.user_metadata.full_name === "string" ? data.user.user_metadata.full_name : allowed?.full_name ?? null;
   const role = superAdmin ? "admin" : (allowed?.role ?? "admin");
-
-  const { error: profileError } = await admin
-    .from("profiles")
-    .upsert({
-      id: data.user.id,
-      email,
-      full_name: fullName,
-      role,
-    }, { onConflict: "id" });
-
+  const { error: profileError } = await admin.from("profiles").upsert({ id: data.user.id, email, full_name: fullName, role }, { onConflict: "id" });
   if (profileError) {
     await supabase.auth.signOut();
     return redirectWithError(origin, "profile");
@@ -68,6 +53,7 @@ export async function GET(request: Request) {
           manage_return: true,
           manage_volume: true,
           manage_performance: true,
+          manage_pickup: true,
         },
         super_admin: true,
       },
