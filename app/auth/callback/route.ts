@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isSuperAdminEmail } from "@/lib/auth/super-admin";
 
 const ALLOWED_DOMAIN = "@spxexpress.com";
 
@@ -27,17 +28,14 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-  const bootstrapEmail = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? "").trim().toLowerCase();
-  const [{ data: allowed }, { data: admins }] = await Promise.all([
-    admin.from("profiles").select("id, role, full_name").eq("email", email).maybeSingle(),
-    admin.from("profiles").select("id").eq("role", "admin").limit(1),
-  ]);
+  const superAdmin = isSuperAdminEmail(email);
+  const { data: allowed } = await admin
+    .from("profiles")
+    .select("id, role, full_name")
+    .eq("email", email)
+    .maybeSingle();
 
-  const noAdminYet = !admins?.length;
-  const isBootstrapEmail = bootstrapEmail !== "" && email === bootstrapEmail;
-  const canCreateAdmin = noAdminYet || isBootstrapEmail;
-
-  if (!allowed && !canCreateAdmin) {
+  if (!allowed && !superAdmin) {
     await supabase.auth.signOut();
     return redirectWithError(origin, "not_allowed");
   }
@@ -45,7 +43,7 @@ export async function GET(request: Request) {
   const fullName = typeof data.user.user_metadata.full_name === "string"
     ? data.user.user_metadata.full_name
     : allowed?.full_name ?? null;
-  const role = allowed?.role ?? "admin";
+  const role = superAdmin ? "admin" : (allowed?.role ?? "admin");
 
   const { error: profileError } = await admin
     .from("profiles")
@@ -61,7 +59,7 @@ export async function GET(request: Request) {
     return redirectWithError(origin, "profile");
   }
 
-  if (!allowed && canCreateAdmin) {
+  if (superAdmin) {
     await admin.auth.admin.updateUserById(data.user.id, {
       app_metadata: {
         permissions: {
@@ -71,6 +69,7 @@ export async function GET(request: Request) {
           manage_volume: true,
           manage_performance: true,
         },
+        super_admin: true,
       },
     });
   }

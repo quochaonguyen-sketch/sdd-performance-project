@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { defaultPermissionsForRole, normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
+import { isSuperAdminEmail } from "@/lib/auth/super-admin";
 
 const roleSchema = z.enum(["admin", "leader", "viewer", "member"]);
 const permissionsSchema = z.record(z.string(), z.boolean());
@@ -17,6 +18,7 @@ const updateMemberSchema = z.object({
   role: roleSchema.optional(),
   permissions: permissionsSchema.optional(),
 });
+const deleteMemberSchema = z.object({ id: z.string().uuid() });
 
 async function getAdminSession() {
   const client = await createClient();
@@ -24,11 +26,11 @@ async function getAdminSession() {
   if (!user) return { error: NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 }) };
 
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const { data: profile } = await admin.from("profiles").select("role, email").eq("id", user.id).maybeSingle();
   if (profile?.role !== "admin") {
     return { error: NextResponse.json({ success: false, error: "Chỉ admin được quản lý thành viên" }, { status: 403 }) };
   }
-  return { admin, user };
+  return { admin, user, profile };
 }
 
 function permissionsFor(role: string, overrides?: Partial<MemberPermissions> | null, stored?: unknown) {
@@ -49,11 +51,13 @@ export async function GET() {
   const authById = new Map(authResult.data.users.map((user) => [user.id, user]));
   const members = (profiles ?? []).map((profile) => {
     const authUser = authById.get(profile.id);
+    const email = profile.email ?? authUser?.email ?? "";
     return {
       ...profile,
-      email: profile.email ?? authUser?.email ?? "",
+      email,
       last_sign_in_at: authUser?.last_sign_in_at ?? null,
       is_current_user: profile.id === session.user.id,
+      is_super_admin: isSuperAdminEmail(email),
       permissions: permissionsFor(profile.role, null, authUser?.app_metadata?.permissions),
     };
   });
@@ -73,7 +77,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Chỉ thêm email @spxexpress.com" }, { status: 400 });
   }
 
-  const permissions = permissionsFor(role, parsed.data.permissions);
+  const nextRole = isSuperAdminEmail(email) ? "admin" : role;
+  const permissions = permissionsFor(nextRole, parsed.data.permissions);
   const { data: existingProfile } = await session.admin.from("profiles").select("id,email").eq("email", email).maybeSingle();
   if (existingProfile) {
     return NextResponse.json({ success: false, error: "Email này đã nằm trong danh sách thành viên" }, { status: 400 });
@@ -83,7 +88,7 @@ export async function POST(request: Request) {
     email,
     email_confirm: true,
     user_metadata: { full_name },
-    app_metadata: { permissions },
+    app_metadata: { permissions, super_admin: isSuperAdminEmail(email) },
   });
 
   let userId = created.user?.id;
@@ -96,7 +101,7 @@ export async function POST(request: Request) {
     userId = existingAuth.id;
     await session.admin.auth.admin.updateUserById(userId, {
       user_metadata: { full_name },
-      app_metadata: { ...existingAuth.app_metadata, permissions },
+      app_metadata: { ...existingAuth.app_metadata, permissions, super_admin: isSuperAdminEmail(email) },
     });
   }
 
@@ -104,7 +109,7 @@ export async function POST(request: Request) {
     id: userId,
     email,
     full_name,
-    role,
+    role: nextRole,
   });
   if (profileError) {
     return NextResponse.json({ success: false, error: profileError.message }, { status: 400 });
@@ -118,12 +123,16 @@ export async function PATCH(request: Request) {
   if ("error" in session) return session.error;
   const parsed = updateMemberSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Dữ liệu không hợp lệ" }, { status: 400 });
+
+  const { data: current } = await session.admin.from("profiles").select("id,role,email").eq("id", parsed.data.id).maybeSingle();
+  if (!current) return NextResponse.json({ success: false, error: "Không tìm thấy thành viên" }, { status: 400 });
+
+  if (isSuperAdminEmail(current.email)) {
+    return NextResponse.json({ success: false, error: "Không thể sửa vai trò hoặc quyền của Super Admin" }, { status: 400 });
+  }
   if (parsed.data.id === session.user.id && parsed.data.role && parsed.data.role !== "admin") {
     return NextResponse.json({ success: false, error: "Bạn không thể tự hạ quyền admin của mình" }, { status: 400 });
   }
-
-  const { data: current } = await session.admin.from("profiles").select("id,role").eq("id", parsed.data.id).maybeSingle();
-  if (!current) return NextResponse.json({ success: false, error: "Không tìm thấy thành viên" }, { status: 400 });
 
   const nextRole = parsed.data.role ?? current.role;
   const { data: authUser } = await session.admin.auth.admin.getUserById(parsed.data.id);
@@ -144,4 +153,24 @@ export async function PATCH(request: Request) {
   }
 
   return NextResponse.json({ success: true, permissions });
+}
+
+export async function DELETE(request: Request) {
+  const session = await getAdminSession();
+  if ("error" in session) return session.error;
+  const parsed = deleteMemberSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ success: false, error: "Dữ liệu không hợp lệ" }, { status: 400 });
+
+  const { data: current } = await session.admin.from("profiles").select("id,email").eq("id", parsed.data.id).maybeSingle();
+  if (!current) return NextResponse.json({ success: false, error: "Không tìm thấy thành viên" }, { status: 400 });
+  if (isSuperAdminEmail(current.email)) {
+    return NextResponse.json({ success: false, error: "Không thể xóa Super Admin" }, { status: 400 });
+  }
+  if (current.id === session.user.id) {
+    return NextResponse.json({ success: false, error: "Không thể tự xóa tài khoản đang đăng nhập" }, { status: 400 });
+  }
+
+  await session.admin.from("profiles").delete().eq("id", current.id);
+  await session.admin.auth.admin.deleteUser(current.id);
+  return NextResponse.json({ success: true });
 }
