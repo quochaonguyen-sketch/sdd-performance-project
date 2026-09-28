@@ -2,14 +2,10 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
-import { Outfit, Source_Serif_4 } from "next/font/google";
+import { Outfit } from "next/font/google";
 import { cn } from "@/lib/utils";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-sans" });
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  variable: "--font-serif",
-});
 const themeBootScript = `(()=>{try{const saved=localStorage.getItem("rider-ops-theme");const dark=saved? saved==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",dark);document.documentElement.dataset.theme=dark?"dark":"light"}catch{}})()`;
 
 export const metadata: Metadata = {
@@ -19,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="vi" suppressHydrationWarning className={cn("font-sans", outfit.variable, sourceSerif.variable)}>
+    <html lang="vi" suppressHydrationWarning className={cn("font-sans", outfit.variable)}>
       <body>
         {children}
         <Script id="rider-ops-theme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeBootScript }} />
