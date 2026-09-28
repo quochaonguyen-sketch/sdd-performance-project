@@ -76,6 +76,14 @@ const SOURCE_KEY = process.env.OPS56_SERVICE_KEY;
 const TARGET_URL = process.env.TARGET_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const TARGET_KEY = process.env.TARGET_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PAGE = Number(process.env.OPS56_PAGE ?? "1000");
+// Realtime la replace-data: chi lay N ngay gan nhat, khong om lich su.
+const REALTIME_DAYS = Number(process.env.OPS56_REALTIME_DAYS ?? "14");
+const REPLACE_TABLES = new Set(
+  (process.env.OPS56_REPLACE_TABLES ?? "realtime_delivery_riders,realtime_delivery_riders_10am")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
 const TABLES = (process.env.OPS56_TABLES ?? "")
   .split(",")
   .map((s) => s.trim())
@@ -117,6 +125,7 @@ async function copyTable(table) {
   if (!(await tableExists(dst, table))) {
     return { table, status: "skip (target thieu — chay prisma/*.sql tuong ung truoc)" };
   }
+  if (REPLACE_TABLES.has(table)) return replaceTable(table);
   let from = 0;
   let total = 0;
   for (;;) {
@@ -135,6 +144,34 @@ async function copyTable(table) {
     if (data.length < PAGE) break;
   }
   return { table, status: `ok (${total} rows)` };
+}
+
+// Replace-mode cho realtime: xoa window cu o target, chi chep N ngay gan nhat tu source.
+async function replaceTable(table) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (REALTIME_DAYS - 1));
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const { error: delErr } = await dst.from(table).delete().gte("work_date", "2000-01-01");
+  if (delErr) return { table, status: `loi xoa target: ${delErr.message}` };
+  let from = 0;
+  let total = 0;
+  for (;;) {
+    const { data, error } = await src
+      .from(table)
+      .select("*")
+      .gte("work_date", cutoffStr)
+      .order("work_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) return { table, status: `loi doc source: ${error.message} (da copy ${total})` };
+    if (!data || data.length === 0) break;
+    const { error: insErr } = await dst.from(table).insert(data);
+    if (insErr) return { table, status: `loi ghi target: ${insErr.message} (da copy ${total})` };
+    total += data.length;
+    from += data.length;
+    if (data.length < PAGE) break;
+  }
+  return { table, status: `ok replace (tu ${cutoffStr}, ${total} rows)` };
 }
 
 console.log(`SOURCE: ${SOURCE_URL}`);

@@ -13,13 +13,10 @@ import {
   ArrowUpDown,
   Bike,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
-  Clock3,
   MapPin,
-  PackageCheck,
   RefreshCcw,
   Search,
   TrendingUp,
@@ -39,7 +36,6 @@ type RiderProfile = { rider_code: string; full_name: string | null; kv: string |
 type RiderStatus = "delivering" | "completed" | "warning";
 type DisplayRider = RealtimeRider & { name: string; kv: string; district: string; ward: string; cot: string; status: RiderStatus; progress: number };
 type SortKey = "name" | "status" | "eta" | "delivered" | "cot";
-type TimeRange = "15m" | "1h" | "today";
 type DistrictDetail = {
   name: string;
   kv: string;
@@ -58,19 +54,27 @@ type DistrictDetail = {
 const PAGE_SIZE = 15;
 const STATUS_ORDER: Record<RiderStatus, number> = { warning: 0, delivering: 1, completed: 2 };
 const HIGH_FAILURE_RATE = 0.2;
-const COMMON_DISTRICT = "Khu vực chung";
-const COMMON_KV = "CHUNG";
+const BACKUP_DISTRICT = "Backup";
+type KvTone = "blue" | "violet" | "emerald";
+// 3 cot doc: KV1-2 | KV3-4 | KV5-6, moi cap 1 mau.
+const KV_PAIR_TONE: Record<string, KvTone> = { "KV1-2": "blue", "KV3-4": "violet", "KV5-6": "emerald" };
+function kvPairOf(kv: string) {
+  const n = Number(kv.replace(/^KV/i, ""));
+  if (n === 1 || n === 2) return "KV1-2";
+  if (n === 3 || n === 4) return "KV3-4";
+  return "KV5-6";
+}
 
 export function RealtimeDashboardView() {
-  const [date, setDate] = useState(todayInVietnam());
   const [rows, setRows] = useState<RealtimeRider[]>([]);
   const [profiles, setProfiles] = useState<RiderProfile[]>([]);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  const [workDate, setWorkDate] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [zone, setZone] = useState("all");
+  const [kvFilter, setKvFilter] = useState("all");
   const [status, setStatus] = useState<RiderStatus | "all">("all");
   const [cot, setCot] = useState<string>("all");
-  const [timeRange, setTimeRange] = useState<TimeRange>("15m");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "status", direction: "asc" });
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<DisplayRider | null>(null);
@@ -93,25 +97,34 @@ export function RealtimeDashboardView() {
     const supabase = createClient();
     setLoading(true);
     setError(null);
-    const latest = await supabase.from("realtime_delivery_riders").select("snapshot_id,snapshot_at").eq("work_date", date).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
+    // Realtime = snapshot moi nhat, khong loc ngay.
+    const latest = await supabase.from("realtime_delivery_riders").select("work_date,snapshot_id,snapshot_at").order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
     if (latest.error) {
-      setError(latest.error.message);
+      if (!isMissingTableError(latest.error)) setError(latest.error.message);
       setRows([]);
+      setSnapshotAt(null);
+      setWorkDate(null);
       setLoading(false);
       return;
     }
     if (!latest.data) {
       setRows([]);
       setSnapshotAt(null);
+      setWorkDate(null);
       setLoading(false);
       return;
     }
-    const result = await supabase.from("realtime_delivery_riders").select("id,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at").eq("work_date", date).eq("snapshot_id", latest.data.snapshot_id);
-    if (result.error) setError(result.error.message);
-    setRows((result.data ?? []) as RealtimeRider[]);
+    const result = await supabase.from("realtime_delivery_riders").select("id,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at").eq("work_date", latest.data.work_date).eq("snapshot_id", latest.data.snapshot_id);
+    if (result.error) {
+      if (!isMissingTableError(result.error)) setError(result.error.message);
+      setRows([]);
+    } else {
+      setRows((result.data ?? []) as RealtimeRider[]);
+    }
     setSnapshotAt(latest.data.snapshot_at);
+    setWorkDate(latest.data.work_date);
     setLoading(false);
-  }, [date]);
+  }, []);
 
   const load = useCallback(() => {
     void Promise.all([loadProfiles(), loadRealtime()]);
@@ -129,18 +142,14 @@ export function RealtimeDashboardView() {
     return rows.flatMap((row): DisplayRider[] => {
       const profile = profileMap.get(normalize(row.driver_id));
       if (!profile) return [];
-      const isKv = isKv56(profile.kv);
-      const isCommon = !isKv && (isBackupDistrict(profile.delivery_district) || (!profile.delivery_district?.trim() && !profile.kv?.trim()));
-      if (!isKv && !isCommon) return [];
+      // Chi rider co KV hop le (KV1-KV6). Khong con bucket chung/Backup rieng:
+      // rider khong co quan duoc gom vao quan "Backup" theo KV trong profile.
+      const kv = (profile.kv ?? "").trim().toUpperCase();
+      if (!isKv56(profile.kv)) return [];
       const progress = row.total_assigned ? Math.round((row.delivered / row.total_assigned) * 100) : 0;
-      let kv = profile.kv?.trim() || "—";
-      let district = profile.delivery_district?.trim() || "Chưa xác định quận";
-      let ward = profile.delivery_ward?.trim() || "Chưa xác định phường";
-      if (isCommon) {
-        kv = COMMON_KV;
-        district = COMMON_DISTRICT;
-        ward = COMMON_DISTRICT;
-      }
+      const rawDistrict = profile.delivery_district?.trim();
+      const district = rawDistrict || BACKUP_DISTRICT;
+      const ward = profile.delivery_ward?.trim() || (rawDistrict ? "Chưa xác định phường" : BACKUP_DISTRICT);
       return [{
         ...row,
         name: profile.full_name?.trim() || row.driver_name?.trim() || "Chưa có tên",
@@ -155,21 +164,38 @@ export function RealtimeDashboardView() {
   }, [profiles, rows]);
 
   const zones = useMemo(() => [...new Set(riders.map((rider) => rider.district))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders]);
+  const kvOptions = useMemo(() => {
+    const order = ["KV1", "KV2", "KV3", "KV4", "KV5", "KV6"];
+    const present = new Set(riders.map((rider) => rider.kv));
+    return order.filter((kv) => present.has(kv));
+  }, [riders]);
   const cotOptions = useMemo(() => [...new Set(riders.map((r) => r.cot).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders]);
   const districtDetails = useMemo(() => buildDistrictDetails(riders), [riders]);
   const kvAggregates = useMemo(() => buildKvAggregates(districtDetails), [districtDetails]);
+  // Mac dinh chi hien 6 o KV (+Backup). Chon KV thi so quan trong KV do ra.
+  const visibleDistricts = useMemo(
+    () => (kvFilter === "all" ? [] : districtDetails.filter((d) => d.kv === kvFilter)),
+    [districtDetails, kvFilter],
+  );
+
+  const toggleKv = useCallback((kv: string) => {
+    setKvFilter((current) => (current === kv ? "all" : kv));
+    setActiveDistrict(null);
+    setPage(1);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = normalize(query);
     const districtFiltered = activeDistrict ? riders.filter((r) => r.district === activeDistrict) : riders;
     const result = districtFiltered.filter((rider) =>
+      (kvFilter === "all" || rider.kv === kvFilter) &&
       (zone === "all" || rider.district === zone) &&
       (status === "all" || rider.status === status) &&
       (cot === "all" || rider.cot === cot || normalize(rider.cot) === normalize(cot)) &&
       (!q || normalize(`${rider.driver_id} ${rider.name} ${rider.district} ${rider.ward} ${rider.cot}`).includes(q)),
     );
     return result.sort((a, b) => compareRiders(a, b, sort.key) * (sort.direction === "asc" ? 1 : -1));
-  }, [query, riders, sort, status, zone, cot, activeDistrict]);
+  }, [query, riders, sort, status, zone, kvFilter, cot, activeDistrict]);
 
   const totals = useMemo(() => riders.reduce((sum, rider) => ({
     assigned: sum.assigned + rider.total_assigned,
@@ -203,15 +229,11 @@ export function RealtimeDashboardView() {
           <p>Mỗi ô là một quận. Màu, thanh tiến độ và cảnh báo cho biết quận nào cần can thiệp ngay.</p>
         </div>
         <div className="dashboard-command-actions">
-          <div className="flex items-center gap-2">
-            <span className="hidden text-xs font-semibold text-[var(--color-graphite-ink)]/70 lg:inline">Ngày</span>
-            <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setPage(1); }} className="h-9 rounded-md border border-[var(--color-graphite-2)] bg-[var(--color-graphite-2)] px-3 text-sm font-semibold text-[var(--color-graphite-ink)] outline-none focus:border-[var(--color-focus)]" />
-          </div>
           <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} className={loading ? "animate-spin" : undefined} /><span>Làm mới</span></Button>
         </div>
       </header>
 
-      <div className="dashboard-readout-strip"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span className="hidden sm:inline">KV1-KV6 only</span>{activeDistrict ? <button type="button" onClick={() => setActiveDistrict(null)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-bold text-[var(--color-accent)]">Đang lọc: {activeDistrict} <X size={12} /></button> : <span className="ml-auto hidden items-center gap-1.5 text-xs text-[var(--color-muted)] sm:inline-flex"><MapPin size={12} />{districtDetails.length} quận có rider</span>}</div>
+      <div className="dashboard-readout-strip"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span className="hidden sm:inline">KV1–KV6{workDate ? ` · snapshot ${workDate}` : ""}</span>{activeDistrict ? <button type="button" onClick={() => setActiveDistrict(null)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-bold text-[var(--color-accent)]">Đang lọc: {activeDistrict} <X size={12} /></button> : <span className="ml-auto hidden items-center gap-1.5 text-xs text-[var(--color-muted)] sm:inline-flex"><MapPin size={12} />{districtDetails.length} quận có rider</span>}</div>
       {error ? <div role="alert" className="dashboard-error">{error}</div> : null}
 
       {/* KPI */}
@@ -231,8 +253,8 @@ export function RealtimeDashboardView() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="flex items-center gap-2"><span className="font-mono text-xs font-bold tracking-[0.12em] text-[var(--color-accent)]">02 — BENTO</span><span className="h-px w-8 bg-[var(--color-rule-strong)]" aria-hidden="true" /></div>
-            <h2 id="district-bento-heading" className="mt-1 text-base font-bold tracking-tight text-[var(--color-ink)]">Vận hành theo quận</h2>
-            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">Mỗi ô là một quận. Chạm để lọc bảng rider bên dưới. Kích thước ô phản ánh khối lượng đơn.</p>
+            <h2 id="district-bento-heading" className="mt-1 text-base font-bold tracking-tight text-[var(--color-ink)]">Vận hành theo khu vực</h2>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">Chạm một khu vực để sổ các quận bên trong ra. Chạm quận để lọc bảng rider bên dưới.</p>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-error)]" />Cảnh báo</span>
@@ -245,16 +267,25 @@ export function RealtimeDashboardView() {
           <div className="grid grid-cols-12 gap-3">
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="col-span-12 h-40 animate-pulse rounded-xl bg-[var(--color-paper-3)] md:col-span-6 lg:col-span-4 xl:col-span-3" />)}
           </div>
-        ) : districtDetails.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-8 text-center text-sm text-[var(--color-muted)]">Chưa có dữ liệu quận cho ngày {date}.</p>
+        ) : districtDetails.length === 0 && kvAggregates.kvs.every(({ detail }) => !detail) ? (
+          <p className="rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-8 text-center text-sm text-[var(--color-muted)]">Chưa có dữ liệu realtime.</p>
         ) : (
           <div className="grid auto-rows-[minmax(168px,auto)] grid-cols-12 gap-3">
-            {/* KV aggregates — large bento tiles */}
-            <KvBentoTile kv="KV5" detail={kvAggregates.kv5} onSelectDistrict={setActiveDistrict} activeDistrict={activeDistrict} />
-            <KvBentoTile kv="KV6" detail={kvAggregates.kv6} onSelectDistrict={setActiveDistrict} activeDistrict={activeDistrict} />
-            <KvBentoTile kv="CHUNG" detail={kvAggregates.chung} onSelectDistrict={setActiveDistrict} activeDistrict={activeDistrict} />
-            {/* District tiles — bento irregular: top 2 districts span 6, rest span 3 */}
-            {districtDetails.map((d, idx) => {
+            {/* KV theo 3 cot doc: KV1-2 | KV3-4 | KV5-6, cham de loc */}
+            {(Object.entries(KV_PAIR_TONE) as Array<[string, KvTone]>).map(([pairKey, tone]) => (
+              <div key={pairKey} className="col-span-12 flex flex-col gap-3 md:col-span-4">
+                {kvAggregates.kvs
+                  .filter(({ kv }) => kvPairOf(kv) === pairKey)
+                  .map(({ kv, detail }) => (
+                    <KvBentoTile key={kv} kv={kv} detail={detail} tone={tone} active={kvFilter === kv} onSelect={() => toggleKv(kv)} />
+                  ))}
+              </div>
+            ))}
+            {/* District tiles — chi hien khi da loc KV */}
+            {kvFilter !== "all" && visibleDistricts.length === 0 ? (
+              <p className="col-span-12 rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-6 text-center text-sm text-[var(--color-muted)]">Không có quận nào trong {kvFilter}.</p>
+            ) : null}
+            {visibleDistricts.map((d, idx) => {
               const isLarge = idx < 2;
               return <DistrictBentoCard key={d.name} district={d} large={isLarge} active={activeDistrict === d.name} onSelect={() => setActiveDistrict((cur) => cur === d.name ? null : d.name)} />;
             })}
@@ -270,9 +301,8 @@ export function RealtimeDashboardView() {
       </section>
 
       <FilterBar
-        date={date} timeRange={timeRange} zone={zone} status={status} cot={cot} zones={zones} cotOptions={cotOptions}
-        onDateChange={(value) => { setDate(value); setPage(1); }}
-        onTimeRangeChange={(value) => { setTimeRange(value); setPage(1); }}
+        zone={zone} kvFilter={kvFilter} kvOptions={kvOptions} status={status} cot={cot} zones={zones} cotOptions={cotOptions}
+        onKvChange={(value) => { setKvFilter(value); setActiveDistrict(null); setPage(1); }}
         onZoneChange={(value) => { setZone(value); setPage(1); }}
         onStatusChange={(value) => { setStatus(value); setPage(1); }}
         onCotChange={(value) => { setCot(value); setPage(1); }}
@@ -299,26 +329,42 @@ export const KpiCard = memo(function KpiCard({ icon: Icon, label, value, helper,
   return <article className={cn("min-h-36 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-slate-600">{label}</p><p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-950">{loading ? "—" : typeof value === "number" ? value.toLocaleString("vi-VN") : value}</p></div><span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", colors[tone])}><Icon size={18} /></span></div><p className="mt-4 text-xs text-slate-500">{helper}</p></article>;
 });
 
-function KvBentoTile({ kv, detail, onSelectDistrict, activeDistrict }: { kv: "KV5" | "KV6" | "CHUNG"; detail: DistrictDetail | null; onSelectDistrict: (name: string) => void; activeDistrict: string | null }) {
-  if (!detail) return <article className="col-span-12 flex min-h-[168px] flex-col justify-center rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-5 md:col-span-4"><p className="font-mono text-xs font-bold tracking-[0.12em] text-[var(--color-muted)]">{kv}</p><p className="mt-2 text-sm font-semibold text-[var(--color-muted)]">Chưa có rider</p></article>;
+function KvBentoTile({ kv, detail, tone, active, onSelect }: { kv: string; detail: DistrictDetail | null; tone: KvTone; active: boolean; onSelect: () => void }) {
+  // Nen tint + diem nhan dam theo cap KV: KV1-2 xanh duong, KV3-4 tim, KV5-6 xanh la.
+  const tones: Record<KvTone, { tile: string; badge: string; area: string; chip: string; track: string; bar: string }> = {
+    blue: { tile: "border-blue-300 bg-blue-50", badge: "bg-blue-600 text-white", area: "text-blue-800", chip: "bg-white text-blue-700 ring-1 ring-blue-200", track: "bg-blue-100", bar: "bg-blue-600" },
+    violet: { tile: "border-violet-300 bg-violet-50", badge: "bg-violet-600 text-white", area: "text-violet-800", chip: "bg-white text-violet-700 ring-1 ring-violet-200", track: "bg-violet-100", bar: "bg-violet-600" },
+    emerald: { tile: "border-emerald-300 bg-emerald-50", badge: "bg-emerald-600 text-white", area: "text-emerald-800", chip: "bg-white text-emerald-700 ring-1 ring-emerald-200", track: "bg-emerald-100", bar: "bg-emerald-600" },
+  };
+  const t = tones[tone];
+  if (!detail) return <article className="flex min-h-[168px] w-full flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-white p-5"><p className="font-mono text-xs font-bold tracking-[0.12em] text-slate-400">{kv}</p><p className="mt-2 text-sm font-semibold text-slate-500">Chưa có rider</p></article>;
   const pct = detail.totalAssigned ? Math.round((detail.delivered / detail.totalAssigned) * 100) : 0;
-  const isChung = kv === "CHUNG";
   return (
-    <article className={cn("col-span-12 flex min-h-[168px] flex-col rounded-xl border p-5 md:col-span-4", isChung ? "border-amber-200 bg-amber-50 text-amber-950" : "border-[var(--color-graphite-2)] bg-[var(--color-graphite)] text-[var(--color-graphite-ink)]")}>
+    <article
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+      className={cn("flex min-h-[180px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border-2 p-5 pt-0 transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500", t.tile, active ? "shadow-lg ring-2 ring-blue-500" : "shadow-sm")}>
+      <span aria-hidden="true" className={cn("-mx-5 mb-4 h-2", t.bar)} />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-xs font-bold tracking-[0.16em] opacity-70">{kv} · {detail.area}</p>
-          <h3 className="mt-1 text-lg font-bold tracking-tight">{detail.name === "KV5" || detail.name === "KV6" ? `Khu vực ${kv.slice(-1)}` : detail.name === "CHUNG" ? COMMON_DISTRICT : detail.name}</h3>
-          <p className="mt-1 text-xs opacity-70">{detail.riders.length} rider · {detail.totalAssigned} đơn · {detail.warning} cảnh báo</p>
+          <p className="flex items-center gap-2">
+            <span className={cn("rounded-md px-2 py-0.5 font-mono text-xs font-extrabold tracking-[0.14em]", t.badge)}>{kv}</span>
+            <span className={cn("text-xs font-bold uppercase tracking-wide", t.area)}>{detail.area}</span>
+          </p>
+          <h3 className="mt-2 text-xl font-extrabold tracking-tight text-slate-950">{/^KV[1-6]$/.test(kv) ? `Khu vực ${kv.slice(-1)}` : detail.name}</h3>
+          <p className="mt-1 text-xs font-medium text-slate-600">{detail.riders.length} rider · {detail.totalAssigned} đơn · {detail.warning} cảnh báo</p>
         </div>
-        <span className={cn("grid size-9 place-items-center rounded-lg", isChung ? "bg-amber-100 text-amber-700" : "bg-[var(--color-graphite-ink)]/10 text-[var(--color-graphite-ink)]")}><UsersRound size={16} /></span>
+        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl shadow-sm", t.chip)}><UsersRound size={18} /></span>
       </div>
       <div className="mt-auto grid grid-cols-3 gap-3 pt-4">
-        <div><p className="font-mono text-xs opacity-60">Đã gán</p><p className="text-sm font-bold tabular-nums">{detail.totalAssigned}</p></div>
-        <div><p className="font-mono text-xs opacity-60">Tiến độ</p><p className="text-sm font-bold tabular-nums">{pct}%</p></div>
-        <div><p className="font-mono text-xs opacity-60">Đang giao</p><p className="text-sm font-bold tabular-nums">{detail.delivering}</p></div>
+        <div><p className="font-mono text-xs font-semibold text-slate-500">Đã gán</p><p className="text-base font-extrabold tabular-nums text-slate-950">{detail.totalAssigned}</p></div>
+        <div><p className="font-mono text-xs font-semibold text-slate-500">Tiến độ</p><p className="text-base font-extrabold tabular-nums text-slate-950">{pct}%</p></div>
+        <div><p className="font-mono text-xs font-semibold text-slate-500">Đang giao</p><p className="text-base font-extrabold tabular-nums text-slate-950">{detail.delivering}</p></div>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-graphite-ink)]/15"><div className="h-full rounded-full bg-[var(--color-accent)] transition-all" style={{ width: `${pct}%` }} /></div>
+      <div className={cn("mt-3 h-2 overflow-hidden rounded-full", t.track)}><div className={cn("h-full rounded-full transition-all", t.bar)} style={{ width: `${pct}%` }} /></div>
     </article>
   );
 }
@@ -390,8 +436,8 @@ function DistrictBentoCard({ district, large, active, onSelect }: { district: Di
   );
 }
 
-export function FilterBar({ date, timeRange, zone, status, cot, zones, cotOptions, onDateChange, onTimeRangeChange, onZoneChange, onStatusChange, onCotChange }: { date: string; timeRange: TimeRange; zone: string; status: RiderStatus | "all"; cot: string; zones: string[]; cotOptions: string[]; onDateChange: (value: string) => void; onTimeRangeChange: (value: TimeRange) => void; onZoneChange: (value: string) => void; onStatusChange: (value: RiderStatus | "all") => void; onCotChange: (value: string) => void }) {
-  return <section aria-label="Bộ lọc toàn cục" className="rounded-xl border border-slate-200 bg-white p-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"><FilterField label="Ngày"><Input type="date" value={date} onChange={(event) => onDateChange(event.target.value)} /></FilterField><FilterField label="Khoảng thời gian"><Select value={timeRange} onChange={(event) => onTimeRangeChange(event.target.value as TimeRange)}><option value="15m">15 phút gần nhất</option><option value="1h">1 giờ gần nhất</option><option value="today">Hôm nay</option></Select></FilterField><FilterField label="Khu vực"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả khu vực</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{timeRange === "15m" ? "15 phút" : timeRange === "1h" ? "1 giờ" : "Hôm nay"}</FilterChip><FilterChip>{zone === "all" ? "Mọi khu vực" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
+export function FilterBar({ zone, kvFilter, kvOptions, status, cot, zones, cotOptions, onKvChange, onZoneChange, onStatusChange, onCotChange }: { zone: string; kvFilter: string; kvOptions: string[]; status: RiderStatus | "all"; cot: string; zones: string[]; cotOptions: string[]; onKvChange: (value: string) => void; onZoneChange: (value: string) => void; onStatusChange: (value: RiderStatus | "all") => void; onCotChange: (value: string) => void }) {
+  return <section aria-label="Bộ lọc toàn cục" className="rounded-xl border border-slate-200 bg-white p-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><FilterField label="Khu vực"><Select value={kvFilter} onChange={(event) => onKvChange(event.target.value)}><option value="all">Tất cả khu vực (KV1–KV6)</option>{kvOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Quận"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả quận</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{kvFilter === "all" ? "Mọi khu vực" : kvFilter}</FilterChip><FilterChip>{zone === "all" ? "Mọi quận" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
 }
 
 export function StatusBadge({ status }: { status: RiderStatus }) {
@@ -466,19 +512,17 @@ function buildDistrictDetails(riders: DisplayRider[]): DistrictDetail[] {
     const warning = entries.filter((r) => r.status === "warning").length;
     const completed = entries.filter((r) => r.status === "completed").length;
     const avgProgress = totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0;
-    if (name === COMMON_DISTRICT) {
-      return { name, kv: COMMON_KV, area: COMMON_DISTRICT, riders: entries, totalAssigned, delivered, delivering, failed, warning, completed, rate: totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0, avgProgress };
+    const kvCounts = new Map<string, number>();
+    for (const r of entries) {
+      const k = (r.kv || "").toUpperCase();
+      if (/^KV[1-6]$/.test(k)) kvCounts.set(k, (kvCounts.get(k) ?? 0) + 1);
     }
-    const kvCounts = entries.reduce((acc, r) => { const k = (r.kv || "").toUpperCase(); if (k.includes("5")) acc.kv5 += 1; else if (k.includes("6")) acc.kv6 += 1; return acc; }, { kv5: 0, kv6: 0 });
-    const kv = kvCounts.kv5 >= kvCounts.kv6 ? "KV5" : "KV6";
-    const area = kv === "KV5" ? "Khu vực 5" : "Khu vực 6";
-    return { name, kv, area, riders: entries, totalAssigned, delivered, delivering, failed, warning, completed, rate: totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0, avgProgress };
+    const topKv = [...kvCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "KV5";
+    const area = `Khu vực ${topKv.slice(-1)}`;
+    return { name, kv: topKv, area, riders: entries, totalAssigned, delivered, delivering, failed, warning, completed, rate: totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0, avgProgress };
   }).sort((a, b) => b.totalAssigned - a.totalAssigned || a.name.localeCompare(b.name, "vi"));
 }
-function buildKvAggregates(details: DistrictDetail[]): Record<"kv5" | "kv6" | "chung", DistrictDetail | null> {
-  const kv5Details = details.filter((d) => d.kv === "KV5");
-  const kv6Details = details.filter((d) => d.kv === "KV6");
-  const chungDetails = details.filter((d) => d.kv === COMMON_KV);
+function buildKvAggregates(details: DistrictDetail[]): { kvs: Array<{ kv: string; detail: DistrictDetail | null }> } {
   const agg = (list: DistrictDetail[], kv: string, area: string): DistrictDetail | null => {
     if (!list.length) return null;
     const riders = list.flatMap((d) => d.riders);
@@ -493,18 +537,18 @@ function buildKvAggregates(details: DistrictDetail[]): Record<"kv5" | "kv6" | "c
       rate: 0, avgProgress: 0,
     };
   };
-  return { kv5: agg(kv5Details, "KV5", "Khu vực 5"), kv6: agg(kv6Details, "KV6", "Khu vực 6"), chung: agg(chungDetails, COMMON_KV, COMMON_DISTRICT) };
+  const order = ["KV1", "KV2", "KV3", "KV4", "KV5", "KV6"];
+  return {
+    kvs: order.map((kv) => ({ kv, detail: agg(details.filter((d) => d.kv === kv), kv, `Khu vực ${kv.slice(-1)}`) })),
+  };
 }
 function statusLabel(status: RiderStatus) { return ({ delivering: "Đang giao", completed: "Đã giao xong", warning: "Cảnh báo" } as const)[status]; }
 function isKv56(value: string | null) { return /^(?:kv|khu vuc)?\s*[1-6]$/i.test(normalize(value ?? "")); }
-function isBackupDistrict(value: string | null) {
-  if (!value) return false;
-  const n = normalize(value).replace(/\s+/g, "");
-  return n === "backup";
-}
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").toLowerCase().trim(); }
 function formatDateTime(value: string | null | undefined) { if (!value) return "—"; const date = new Date(value); if (!Number.isFinite(date.getTime())) return "—"; return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(date); }
 function formatAge(seconds: number) { if (seconds < 60) return `${seconds} giây trước`; if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`; return formatDateTime(new Date(Date.now() - seconds * 1000).toISOString()); }
 function formatDuration(seconds: number) { if (!seconds) return "—"; const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours ? `${hours}g ${minutes}p` : `${minutes} phút`; }
 function formatFailureRate(row: Pick<RealtimeRider, "failed" | "total_assigned">) { return row.total_assigned > 0 ? `${Math.round(row.failed / row.total_assigned * 100)}%` : "0%"; }
-function todayInVietnam() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
+function isMissingTableError(error: { code?: string; message?: string }) {
+  return error?.code === "PGRST205" || (error?.message ?? "").includes("schema cache");
+}

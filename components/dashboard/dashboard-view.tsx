@@ -29,7 +29,7 @@ type RealtimeRow = { work_date: string; driver_id: string; total_assigned: numbe
 type ReturnOverdueOrder = { shipmentId: string; startedAt: string; ageHours: number; zone: string; district: string; ward: string };
 type ReturnOverdueRider = { riderCode: string; riderName: string; kv: string; cot: string; totalOrders: number; oldestHours: number; oldestAt: string; orders: ReturnOverdueOrder[] };
 type ReturnOverdueState = { thresholdHours: number; totalOrders: number; missingStartedAt: number; snapshotAt: string | null; riders: ReturnOverdueRider[] };
-type DashboardState = { riders: Rider[]; activity: ActivityLog[]; delivery: VolumeRow[]; pickup: VolumeRow[]; realtime: RealtimeRow[]; returnOverdue: ReturnOverdueState; failedLeaders: FailedLeaders; violations: TopViolations };
+type DashboardState = { riders: Rider[]; activity: ActivityLog[]; delivery: VolumeRow[]; pickup: VolumeRow[]; realtime: RealtimeRow[]; returnOverdue: ReturnOverdueState; failedLeaders: FailedLeaders };
 type FailedLeader = { riderCode: string; riderName: string; district: string; failed: number; assigned: number };
 type FailedLeaders = { day: FailedLeader[]; week: FailedLeader[] };
 type DistrictOnHold = { district: string; area: "KV5" | "KV6"; onHold: number; assigned: number; delivered: number; riders: number; worstRider: { riderCode: string; riderName: string; onHold: number } | null };
@@ -37,13 +37,9 @@ type DistrictOnHoldDaily = { date: string; district: string; area: "KV5" | "KV6"
 type DistrictOnHoldState = { day: DistrictOnHold[]; week: DistrictOnHold[]; daily: DistrictOnHoldDaily[] };
 type AreaTotals = { deliveryVolume: number; pickupVolume: number; assigned: number; delivered: number; delivering: number; failed: number };
 type AreaBreakdown = { kv5: AreaTotals; kv6: AreaTotals };
-type ViolationLeader = { riderCode: string; riderName: string; district: string; total: number; breakdown: Array<{ key: string; label: string; count: number }> };
-type ViolationStatus = { key: string; label: string; count: number; severity: "critical" | "warning" };
-type TopViolations = { day: ViolationLeader[]; week: ViolationLeader[]; statuses: ViolationStatus[] };
 const emptyReturnOverdue: ReturnOverdueState = { thresholdHours: 48, totalOrders: 0, missingStartedAt: 0, snapshotAt: null, riders: [] };
 const emptyDistrictOnHold: DistrictOnHoldState = { day: [], week: [], daily: [] };
-const emptyViolations: TopViolations = { day: [], week: [], statuses: [] };
-const emptyState: DashboardState = { riders: [], activity: [], delivery: [], pickup: [], realtime: [], returnOverdue: emptyReturnOverdue, failedLeaders: { day: [], week: [] }, violations: emptyViolations };
+const emptyState: DashboardState = { riders: [], activity: [], delivery: [], pickup: [], realtime: [], returnOverdue: emptyReturnOverdue, failedLeaders: { day: [], week: [] } };
 
 export function DashboardView() {
   const [state, setState] = useState<DashboardState>(emptyState);
@@ -61,7 +57,7 @@ export function DashboardView() {
     setLoading(true);
     setError(null);
     const historyStart = monthStartOffset(dateRange.end, -11);
-    const [riders, activity, delivery, pickup, realtime, returnOverdue, failedLeaders, violations] = await Promise.all([
+    const [riders, activity, delivery, pickup, realtime, returnOverdue, failedLeaders] = await Promise.all([
       supabase.from("riders").select("*, zones(id,name,area,hub)").order("updated_at", { ascending: false }),
       supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(10),
       fetchVolumeRows(supabase, "delivery_order", historyStart, dateRange.end),
@@ -69,16 +65,14 @@ export function DashboardView() {
       fetchRealtimeHistory(supabase, dateRange.end),
       fetchReturnOverdue(),
       fetchFailedLeaders(dateRange.end),
-      fetchTopViolations(dateRange.end),
     ]);
     const results = [riders, activity, delivery, pickup, realtime];
     const firstError = results.find((result) => result.error)?.error;
     if (firstError) setError(firstError.message ?? "Không thể tải dữ liệu dashboard");
     else {
-      setState({ riders: (riders.data ?? []) as Rider[], activity: (activity.data ?? []) as ActivityLog[], delivery: (delivery.data ?? []) as VolumeRow[], pickup: (pickup.data ?? []) as VolumeRow[], realtime: (realtime.data ?? []) as RealtimeRow[], returnOverdue: returnOverdue.data ?? emptyReturnOverdue, failedLeaders: failedLeaders.data ?? { day: [], week: [] }, violations: violations.data ?? emptyViolations });
+      setState({ riders: (riders.data ?? []) as Rider[], activity: (activity.data ?? []) as ActivityLog[], delivery: (delivery.data ?? []) as VolumeRow[], pickup: (pickup.data ?? []) as VolumeRow[], realtime: (realtime.data ?? []) as RealtimeRow[], returnOverdue: returnOverdue.data ?? emptyReturnOverdue, failedLeaders: failedLeaders.data ?? { day: [], week: [] } });
       if (returnOverdue.error) setError(`Không thể tải cảnh báo đơn trả quá hạn: ${returnOverdue.error.message}`);
       if (failedLeaders.error) setError(`Không thể tải bảng xếp hạng Failed: ${failedLeaders.error.message}`);
-      if (violations.error) setError(`Không thể tải top vi phạm chấm công: ${violations.error.message}`);
       setLastUpdated(new Date());
     }
     setLoading(false);
@@ -168,13 +162,8 @@ export function DashboardView() {
       <div className="grid gap-3 lg:grid-cols-2"><FailedLeaderboard title="Selected day" subtitle={formatDate(dateRange.end)} rows={state.failedLeaders.day} loading={loading} /><FailedLeaderboard title="Last 7 days" subtitle={`${formatDate(shiftDate(dateRange.end, -6))}–${formatDate(dateRange.end)}`} rows={state.failedLeaders.week} loading={loading} /></div>
     </section>
 
-    <section aria-labelledby="top-violations" className="space-y-3">
-      <DashboardSectionHeading id="top-violations" index="06" title="Top vi phạm chấm công" description="Xếp hạng rider KV5/KV6 theo vi phạm: OFF đột xuất, OFF nhưng không OFF, không lên lấy hàng, không đi giao." />
-      <TopViolationsCard data={state.violations} loading={loading} endDate={dateRange.end} />
-    </section>
-
     <section aria-labelledby="district-onhold" className="space-y-3">
-      <DashboardSectionHeading id="district-onhold" index="07" title="On Hold theo quận" description="Đơn chưa giao (assigned − delivered) tổng hợp theo quận KV5/KV6; so sánh ngày đã chọn với trung bình 7 ngày." />
+      <DashboardSectionHeading id="district-onhold" index="06" title="On Hold theo quận" description="Đơn chưa giao (assigned − delivered) tổng hợp theo quận KV5/KV6; so sánh ngày đã chọn với trung bình 7 ngày." />
       <DistrictOnHoldCard initialEndDate={dateRange.end} />
     </section>
 
@@ -182,8 +171,11 @@ export function DashboardView() {
   </div>;
 }
 
-async function fetchVolumeRows(
-  supabase: ReturnType<typeof createClient>,
+function isMissingTableError(error: { code?: string; message?: string }) {
+  return error?.code === "PGRST205" || (error?.message ?? "").includes("schema cache");
+}
+
+async function fetchVolumeRows(  supabase: ReturnType<typeof createClient>,
   table: "delivery_order" | "pickup_volume",
   startDate: string,
   endDate: string,
@@ -200,7 +192,12 @@ async function fetchVolumeRows(
       .order("report_date", { ascending: true })
       .range(from, from + pageSize - 1);
 
-    if (error) return { data: null, error };
+    if (error) {
+      // Bang chua ton tai tren project nay (vd delivery_order) -> coi nhu khong co du lieu,
+      // dashboard van load binh thuong thay vi do thanh banner do.
+      if (isMissingTableError(error)) return { data: rows, error: null };
+      return { data: null, error };
+    }
 
     const page = (data ?? []) as VolumeRow[];
     rows.push(...page);
@@ -221,7 +218,10 @@ async function fetchRealtimeHistory(supabase: ReturnType<typeof createClient>, e
       .limit(1)
       .maybeSingle();
 
-    if (latest.error || !latest.data?.snapshot_id) return { data: [] as RealtimeRow[], error: latest.error };
+    if (latest.error || !latest.data?.snapshot_id) {
+      if (latest.error && isMissingTableError(latest.error)) return { data: [] as RealtimeRow[], error: null };
+      return { data: [] as RealtimeRow[], error: latest.error };
+    }
 
     const rows = await supabase
       .from("realtime_delivery_riders")
@@ -230,6 +230,7 @@ async function fetchRealtimeHistory(supabase: ReturnType<typeof createClient>, e
       .eq("snapshot_id", latest.data.snapshot_id)
       .limit(1000);
 
+    if (rows.error && isMissingTableError(rows.error)) return { data: [] as RealtimeRow[], error: null };
     return { data: (rows.data ?? []) as RealtimeRow[], error: rows.error };
   }));
 
@@ -260,19 +261,6 @@ async function fetchFailedLeaders(endDate: string): Promise<{ data: FailedLeader
     return { data: result.leaders, error: null };
   } catch (error) {
     return { data: null, error: { message: error instanceof Error ? error.message : "Không thể tải bảng xếp hạng Failed" } };
-  }
-}
-
-async function fetchTopViolations(endDate: string): Promise<{ data: TopViolations | null; error: { message: string } | null }> {
-  try {
-    const response = await fetch(`/api/dashboard/top-violations?end=${encodeURIComponent(endDate)}`, { cache: "no-store" });
-    const result = (await response.json().catch(() => null)) as { success?: boolean; error?: string; violations?: TopViolations } | null;
-    if (!response.ok || !result?.success || !result.violations) {
-      return { data: null, error: { message: result?.error ?? "Không thể tải top vi phạm chấm công" } };
-    }
-    return { data: result.violations, error: null };
-  } catch (error) {
-    return { data: null, error: { message: error instanceof Error ? error.message : "Không thể tải top vi phạm chấm công" } };
   }
 }
 
@@ -376,63 +364,6 @@ function FailedLeaderboard({ title, subtitle, rows, loading }: { title: string; 
       {!loading && rows.length === 0 ? <Empty text="Không có đơn chưa giao trong dữ liệu performance." /> : null}
     </div>
   </article>;
-}
-
-function TopViolationsCard({ data, loading, endDate }: { data: TopViolations; loading: boolean; endDate: string }) {
-  const totalStatuses = data.statuses.reduce((sum, item) => sum + item.count, 0);
-  return (
-    <article className="dashboard-hold-card is-violations">
-      <div className="dashboard-card-title">
-        <span className="is-violation">
-          <CircleAlert size={17} aria-hidden="true" />
-        </span>
-        <div>
-          <h3>Vi phạm chấm công theo rider</h3>
-          <p>7 ngày kết thúc {formatDate(endDate)} · KV1-KV6 · bấm để sang hồ sơ vi phạm</p>
-        </div>
-        <Link href="/violations" className="dashboard-card-action">
-          Xem tất cả <ChevronRight size={14} aria-hidden="true" />
-        </Link>
-      </div>
-      <div className="dashboard-violation-strip">
-        {data.statuses.map((status) => (
-          <div key={status.key} className={cn("dashboard-violation-chip", status.severity === "critical" ? "is-critical" : "is-warning")}>
-            <strong>{loading ? "—" : status.count.toLocaleString("vi-VN")}</strong>
-            <span>{status.label}</span>
-          </div>
-        ))}
-        {!loading && totalStatuses === 0 ? <p className="dashboard-violation-empty">Không có vi phạm chấm công trong 7 ngày này.</p> : null}
-      </div>
-      <div className="dashboard-hold-list">
-        {loading
-          ? Array.from({ length: 5 }, (_, index) => <div key={index} className="dashboard-hold-row is-loading" />)
-          : data.week.map((row, index) => (
-              <Link href={`/violations?q=${encodeURIComponent(row.riderCode)}`} key={row.riderCode} className="dashboard-hold-row is-violation">
-                <span className="dashboard-hold-rank">{String(index + 1).padStart(2, "0")}</span>
-                <div className="min-w-0">
-                  <strong>{row.riderName}</strong>
-                  <p>
-                    <MapPin size={11} aria-hidden="true" />
-                    {row.riderCode} · {row.district}
-                  </p>
-                </div>
-                <div className="dashboard-hold-value">
-                  <strong>{row.total.toLocaleString("vi-VN")} vi phạm</strong>
-                  <span>{row.breakdown.map((item) => `${item.label} ${item.count}`).join(" · ")}</span>
-                </div>
-              </Link>
-            ))}
-        {!loading && data.week.length === 0 ? <Empty text="Không có vi phạm chấm công trong 7 ngày này." /> : null}
-      </div>
-      {!loading && data.week.length > 0 ? (
-        <div className="dashboard-card-footer">
-          <Link href="/violations" className="dashboard-card-footer-link">
-            Mở hồ sơ vi phạm <ChevronRight size={14} aria-hidden="true" />
-          </Link>
-        </div>
-      ) : null}
-    </article>
-  );
 }
 
 function DistrictOnHoldCard({ initialEndDate }: { initialEndDate: string }) {

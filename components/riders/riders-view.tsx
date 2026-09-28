@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Clock3,
   CloudDownload,
+  FileDown,
   MapPin,
   Navigation,
   Pencil,
@@ -42,7 +43,9 @@ import {
   canonicalDistrictName,
   canonicalWardNames,
   districtDefinitionFor,
+  districtsForKv,
   hcmDistricts,
+  KV_OPTIONS,
   wardNamesForDistrict,
   type DistrictDefinition,
 } from "@/lib/locations/hcm";
@@ -146,6 +149,7 @@ export function RidersView({
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [planSyncing, setPlanSyncing] = useState(false);
   const [planWriteSyncing, setPlanWriteSyncing] = useState(false);
   const [importIssues, setImportIssues] = useState<ImportIssue[]>([]);
@@ -314,6 +318,8 @@ export function RidersView({
   useSupabaseRealtime<RiderRealtimeRow>({ table: "riders", onChange: handleRealtimeChange });
 
   const districtOptions = useMemo(() => districts.map((district) => district.name), [districts]);
+  // Quan lay/giao loc theo KV da chon. KV5/KV6 (va gia tri la) giu full danh sach nhu cu.
+  const kvDistrictOptions = useMemo(() => districtsForKv(form.kv, districts), [districts, form.kv]);
   const cotOptions = registry.options.cots;
   const shiftOptions = registry.options.shifts;
   const zoneOptions = registry.options.delivery_districts;
@@ -406,6 +412,28 @@ export function RidersView({
     await load();
   }
 
+  async function downloadTemplate() {
+    setDownloadingTemplate(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/riders/template");
+      if (!response.ok) throw new Error("Không tải được file mẫu");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rider-import-mau.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("Không tải được file mẫu");
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  }
+
   async function importExcel(file: File) {
     muteBulkRealtime(true);
     setImporting(true);
@@ -417,7 +445,7 @@ export function RidersView({
     body.set("file", file);
     const response = await fetch("/api/riders/import", { method: "POST", body });
     const result = (await response.json().catch(() => null)) as
-      | { error?: string; errors?: ImportIssue[]; imported?: number }
+      | { error?: string; errors?: ImportIssue[]; imported?: number; skipped?: number; skipped_codes?: string[]; message?: string }
       | null;
 
     setImporting(false);
@@ -430,7 +458,12 @@ export function RidersView({
       return;
     }
 
-    setSuccess(`Đã import ${result?.imported ?? 0} rider thành công.`);
+    const imported = result?.imported ?? 0;
+    const skipped = result?.skipped ?? 0;
+    setSuccess(
+      result?.message ??
+        `Đã import ${imported} rider thành công.${skipped > 0 ? ` Bỏ qua ${skipped} ID đã tồn tại (${(result?.skipped_codes ?? []).slice(0, 10).join(", ")}${(result?.skipped_codes ?? []).length > 10 ? ", ..." : ""}).` : ""}`,
+    );
     muteBulkRealtime();
     await load();
   }
@@ -445,6 +478,15 @@ export function RidersView({
       if (field === "delivery_district") return { ...current, delivery_district: value, delivery_ward: "" };
       return { ...current, home_district: value };
     });
+  }
+
+  function updateFormKv(value: string) {
+    setForm((current) => ({
+      ...current,
+      kv: value,
+      delivery_district: "",
+      delivery_ward: "",
+    }));
   }
 
   function beginAdd() {
@@ -585,6 +627,11 @@ export function RidersView({
               <span className="hidden sm:inline">{importing ? "Đang import..." : "Import Excel"}</span>
               <span className="sm:hidden">Excel</span>
             </Button>
+            <Button type="button" variant="secondary" className="riders-action" disabled={downloadingTemplate} onClick={() => void downloadTemplate()} title="Tải file Excel mẫu để import rider">
+              <FileDown size={16} />
+              <span className="hidden sm:inline">{downloadingTemplate ? "Đang tải..." : "File mẫu"}</span>
+              <span className="sm:hidden">Mẫu</span>
+            </Button>
             <Button type="button" className="riders-action riders-action-primary" onClick={beginAdd}>
               <Plus size={16} />
               Thêm rider
@@ -627,7 +674,13 @@ export function RidersView({
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
                   <SectionTitle icon={<UserRound size={16} />} title="Thông tin rider" />
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                    <Field label="KV" value={form.kv} onChange={(value) => updateForm("kv", value)} />
+                    <SelectField label="KV" value={KV_OPTIONS.includes(form.kv) ? form.kv : ""} onChange={updateFormKv}>
+                      <option value="">Chọn khu vực</option>
+                      {KV_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      {!KV_OPTIONS.includes(form.kv) && form.kv ? <option value={form.kv}>{form.kv}</option> : null}
+                    </SelectField>
                     <Field label="COT" value={form.cot} onChange={(value) => updateForm("cot", value)} />
                     <Field label="ID rider" value={form.rider_code} onChange={(value) => updateForm("rider_code", value)} required />
                     <Field label="Họ tên" value={form.full_name} onChange={(value) => updateForm("full_name", value)} required />
@@ -659,7 +712,7 @@ export function RidersView({
                 <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
                   <SectionTitle icon={<Navigation size={16} />} title="Khu vực giao" />
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <DistrictField label="Quận giao" value={form.delivery_district} options={districtOptions} onChange={(value) => updateFormDistrict("delivery_district", value)} />
+                    <DistrictField label="Quận giao" value={form.delivery_district} options={kvDistrictOptions} onChange={(value) => updateFormDistrict("delivery_district", value)} />
                     <WardField
                       label="Phường giao"
                       district={form.delivery_district}
@@ -704,7 +757,7 @@ export function RidersView({
               <option value="all">Tất cả trạng thái</option><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option>
             </Select>
             <Select value={kv} onChange={(event) => { setKv(event.target.value); setPage(1); }} aria-label="Lọc khu vực">
-              <option value="all">Tất cả khu vực</option><option value="KV5">KV5</option><option value="KV6">KV6</option>
+              <option value="all">Tất cả khu vực</option>{KV_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
             </Select>
             <Select value={shift} onChange={(event) => { setShift(event.target.value); setPage(1); }} aria-label="Lọc ca làm việc">
               <option value="all">Tất cả ca</option><option value="__has__">Có ca hiện tại</option><option value="__none__">Chưa có ca</option>{shiftOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -1190,10 +1243,12 @@ function SelectField({ label, value, onChange, children }: { label: string; valu
 }
 
 function DistrictField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  // Giu gia tri cu (du lieu Ops cu) ke ca khi no khong nam trong danh sach quan cua KV dang chon.
+  const visibleOptions = value && !options.includes(value) ? [value, ...options] : options;
   return (
     <SelectField label={label} value={value} onChange={onChange}>
       <option value="">Chọn quận/huyện</option>
-      {options.map((option) => (
+      {visibleOptions.map((option) => (
         <option key={option} value={option}>{option}</option>
       ))}
     </SelectField>

@@ -36,6 +36,7 @@ const headerAliases: Record<string, keyof Omit<ImportRow, "row">> = {
   "rider code": "rider_code",
   fullname: "full_name",
   "full name": "full_name",
+  "ho ten": "full_name",
   "quan lay": "pickup_district",
   "phuong lay": "pickup_ward",
   "point name": "point_name",
@@ -195,11 +196,9 @@ export async function POST(request: Request) {
     data?.forEach((rider) => existingCodes.add(rider.rider_code));
   }
 
-  rows.forEach((row) => {
-    if (existingCodes.has(row.rider_code)) {
-      errors.push({ row: row.row, rider_code: row.rider_code, error: "ID đã tồn tại trong hệ thống" });
-    }
-  });
+  // ID da ton tai thi bo qua (khong bao loi), chi import ID moi.
+  const skippedCodes = [...existingCodes].filter((code) => codeRows.has(code));
+  const newRows = rows.filter((row) => !existingCodes.has(row.rider_code));
 
   if (errors.length > 0) {
     return NextResponse.json(
@@ -207,11 +206,19 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
-  if (rows.length === 0) {
-    return NextResponse.json({ success: false, error: "Không có rider hợp lệ để import" }, { status: 400 });
+  if (newRows.length === 0) {
+    return NextResponse.json(
+      {
+        success: true,
+        imported: 0,
+        skipped: skippedCodes.length,
+        skipped_codes: skippedCodes.sort(),
+        message: "Không có rider mới để import (tất cả ID đã tồn tại).",
+      },
+    );
   }
 
-  const payload = rows.map(({ row, ...rider }) => ({
+  const payload = newRows.map(({ row, ...rider }) => ({
     ...rider,
     name: rider.full_name,
     raw_data: { ...rider, excel_row: row, source_file: file.name },
@@ -234,5 +241,10 @@ export async function POST(request: Request) {
   }
 
   invalidateRidersCache();
-  return NextResponse.json({ success: true, imported: inserted?.length ?? 0 });
+  return NextResponse.json({
+    success: true,
+    imported: inserted?.length ?? 0,
+    skipped: skippedCodes.length,
+    skipped_codes: skippedCodes.sort(),
+  });
 }

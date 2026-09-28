@@ -166,7 +166,40 @@ export const hcmDistricts: DistrictDefinition[] = [
       { name: "Trường Thạnh", aliases: ["tt"] },
     ],
   },
+  // KV1–KV4 (wards se bo sung sau, hien de trong).
+  { id: "quan-1", name: "Quận 1", shortName: "Quận 1", aliases: ["1", "quan 1", "q1", "district 1"], wards: [] },
+  { id: "quan-4", name: "Quận 4", shortName: "Quận 4", aliases: ["4", "quan 4", "q4", "district 4"], wards: [] },
+  { id: "quan-5", name: "Quận 5", shortName: "Quận 5", aliases: ["5", "quan 5", "q5", "district 5"], wards: [] },
+  { id: "quan-6", name: "Quận 6", shortName: "Quận 6", aliases: ["6", "quan 6", "q6", "district 6"], wards: [] },
+  { id: "quan-7", name: "Quận 7", shortName: "Quận 7", aliases: ["7", "quan 7", "q7", "district 7"], wards: [] },
+  { id: "quan-10", name: "Quận 10", shortName: "Quận 10", aliases: ["10", "quan 10", "q10", "district 10"], wards: [] },
+  { id: "quan-11", name: "Quận 11", shortName: "Quận 11", aliases: ["11", "quan 11", "q11", "district 11"], wards: [] },
+  { id: "tan-binh", name: "Quận Tân Bình", shortName: "Tân Bình", aliases: ["tan binh", "quan tan binh", "q tan binh"], wards: [] },
+  { id: "phu-nhuan", name: "Quận Phú Nhuận", shortName: "Phú Nhuận", aliases: ["phu nhuan", "quan phu nhuan", "q phu nhuan"], wards: [] },
+  { id: "thu-duc", name: "Thành phố Thủ Đức", shortName: "Thủ Đức", aliases: ["thu duc", "thanh pho thu duc", "tp thu duc", "tptd"], wards: [] },
+  { id: "binh-tan", name: "Quận Bình Tân", shortName: "Bình Tân", aliases: ["binh tan", "quan binh tan", "q binh tan"], wards: [] },
+  { id: "tan-phu", name: "Quận Tân Phú", shortName: "Tân Phú", aliases: ["tan phu", "quan tan phu", "q tan phu"], wards: [] },
+  { id: "binh-chanh", name: "Huyện Bình Chánh", shortName: "Bình Chánh", aliases: ["binh chanh", "huyen binh chanh", "bc"], wards: [] },
 ];
+
+export const KV_OPTIONS = ["KV1", "KV2", "KV3", "KV4", "KV5", "KV6"];
+
+// Quan/huyen thuoc tung khu vuc. KV5/KV6 giu nguyen danh sach chung (hcmDistricts).
+export const KV_DISTRICTS: Record<string, string[]> = {
+  KV1: ["Quận 5", "Quận 6", "Quận 11", "Huyện Bình Chánh"],
+  KV2: ["Quận Tân Bình", "Quận Phú Nhuận", "Thành phố Thủ Đức"],
+  KV3: ["Quận Bình Tân", "Quận Tân Phú", "Huyện Bình Chánh"],
+  KV4: ["Quận 1", "Quận 4", "Quận 7", "Quận 10"],
+};
+
+export function districtsForKv(
+  kv: string | null | undefined,
+  districts: DistrictDefinition[] = hcmDistricts,
+) {
+  const list = KV_DISTRICTS[(kv ?? "").trim().toUpperCase()];
+  if (!list) return districts.map((district) => district.name);
+  return list;
+}
 
 export function districtDefinitionFor(
   value: string | null | undefined,
