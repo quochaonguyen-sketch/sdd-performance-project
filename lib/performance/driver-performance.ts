@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma/client";
 
 export const performanceSortSchema = z.enum(["area", "rider", "delivery", "pickup", "deliveryRate", "pickupRate"]);
 export const performanceDirectionSchema = z.enum(["asc", "desc"]);
-export const performanceKvSchema = z.enum(["all", "KV1", "KV2", "KV3", "KV4", "KV5", "KV6"]);
+export const performanceKvSchema = z.enum(["all", "KV1", "KV2", "KV3", "KV4", "KV5"]);
 export const performancePeriodSchema = z.enum(["day", "week", "month"]);
 
 export type PerformanceSortKey = z.infer<typeof performanceSortSchema>;
@@ -217,7 +217,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         delivery_district,
         delivery_ward
       from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
         ${kvClause}
         ${districtClause}
         ${wardClause}
@@ -283,7 +283,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         cot,
         delivery_district
       from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
         ${kvClause}
     )
     select distinct
@@ -302,7 +302,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         delivery_district,
         delivery_ward
       from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
         ${kvClause}
         ${districtClause}
     )
@@ -323,7 +323,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         delivery_district,
         delivery_ward
       from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
         ${kvClause}
         ${districtClause}
     )

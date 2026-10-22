@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
   let upserted = 0;
 
   for (const chunk of chunkArray(summaryIds, IMPORT_CHUNK_SIZE)) {
-    const { data, error } = await admin.from("pickup_volume").select("summary_id").in("summary_id", chunk);
+    const { data, error } = await admin.from("pickup_volume").select("summary_id").in("area", OPERATING_AREAS).in("summary_id", chunk);
     if (error) {
       errors.push({ error: error.message });
       continue;

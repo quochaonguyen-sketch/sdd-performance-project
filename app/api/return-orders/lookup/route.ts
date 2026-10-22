@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
     ...plannedCodes,
   ].map((value) => String(value ?? "").trim()).filter(Boolean))];
   const profilesResult = identityCodes.length
-    ? await admin.from("riders").select("rider_code,full_name,kv,cot").in("rider_code", identityCodes)
+    ? await admin.from("riders").select("rider_code,full_name,kv,cot").in("kv", OPERATING_AREAS).in("rider_code", identityCodes)
     : { data: [], error: null };
   if (profilesResult.error) return NextResponse.json({ success: false, error: profilesResult.error.message }, { status: 400 });
 

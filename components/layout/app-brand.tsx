@@ -1,40 +1,18 @@
 import { cn } from "@/utils/cn";
-
 export const APP_NAME = "Rider Operations";
-export const APP_UNIT = "Khu vực 1-6 · SDD";
-
-export function AppBrand({ compact = false, inverse = false, className }: { compact?: boolean; inverse?: boolean; className?: string }) {
-  return (
-    <div className={cn("flex min-w-0 items-center gap-3", className)}>
-      <div
-        className={cn(
-          "relative grid shrink-0 place-items-center overflow-hidden rounded-md bg-teal-700 text-white shadow-[0_6px_18px_rgba(15,118,110,0.22)] ring-1 ring-inset ring-white/20",
-          compact ? "size-9" : "size-10",
-        )}
-        aria-hidden="true"
-      >
-        <svg viewBox="0 0 48 48" className={compact ? "size-6" : "size-7"} fill="none">
-          <path d="M13 31.5h4.5l5-14h9.75" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="m27.5 17.5 6 14H39" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="13" cy="33" r="6" stroke="currentColor" strokeWidth="3" />
-          <circle cx="37" cy="33" r="6" stroke="currentColor" strokeWidth="3" />
-          <path d="M19.5 25h11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          <path d="M20 12h8" stroke="#99f6e4" strokeWidth="3" strokeLinecap="round" />
-        </svg>
-        <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-teal-200 shadow-[0_0_0_3px_rgba(255,255,255,0.14)]" />
-      </div>
-      <div className="min-w-0">
-        <p className={cn("truncate font-bold tracking-[-0.02em]", inverse ? "text-white" : "text-slate-950", compact ? "text-sm" : "text-[15px]")}>{APP_NAME}</p>
-        <p className={cn("truncate text-[11px] font-semibold uppercase tracking-[0.12em]", inverse ? "text-teal-200/80" : "text-teal-800/65")}>{APP_UNIT}</p>
-      </div>
-    </div>
-  );
+export const APP_UNIT = "SDD · Khu vực 1–5";
+export function TransitMark({ className }: { className?: string }) {
+  return <svg className={cn("ops-brand-mark", className)} viewBox="0 0 40 40" fill="none" aria-hidden="true">
+    <path d="M8 8v16a8 8 0 0 0 8 8h16M32 8H16a8 8 0 0 0 0 16h16" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="8" cy="8" r="3" fill="currentColor" /><circle cx="32" cy="24" r="3" fill="currentColor" />
+  </svg>;
 }
-
+export function AppBrand({ compact = false, inverse = false, wordmarkOnly = false, className }: { compact?: boolean; inverse?: boolean; wordmarkOnly?: boolean; className?: string }) {
+  return <div className={cn("ops-brand", compact && "is-compact", inverse && "is-inverse", className)}>
+    {!wordmarkOnly ? <TransitMark /> : null}
+    <div><p className="ops-brand-name" aria-label={APP_NAME}>rider<span>.</span></p><p className="ops-brand-unit">Operations / SDD</p></div>
+  </div>;
+}
 export function AppCopyright({ className }: { className?: string }) {
-  return (
-    <p className={cn("text-center text-xs text-slate-400", className)}>
-      © {new Date().getFullYear()} Khu vực 1-6 SDD. Bảo lưu mọi quyền.
-    </p>
-  );
+  return <p className={cn("ops-copyright", className)}>© {new Date().getFullYear()} SDD · Khu vực 1–5</p>;
 }

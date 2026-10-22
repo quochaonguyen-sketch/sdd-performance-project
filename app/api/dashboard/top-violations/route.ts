@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -63,7 +64,7 @@ const STATUS_FIELD: Record<(typeof VIOLATION_STATUSES)[number], "offUnexpected" 
 
 function isKv56(value: string | null | undefined) {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim().toUpperCase();
-  return /^(?:(?:KV|KHU)[\s.]*)?[1-6]$/.test(normalized);
+  return /^(?:(?:KV|KHU)[\s.]*)?[1-5]$/.test(normalized);
 }
 
 type LogRow = {
@@ -108,7 +109,7 @@ export async function GET(request: Request) {
   const profileResult = riderCodes.length
     ? await supabase
         .from("riders")
-        .select("rider_code,full_name,delivery_district,kv")
+        .select("rider_code,full_name,delivery_district,kv").in("kv", OPERATING_AREAS)
         .in("rider_code", riderCodes)
     : { data: [], error: null };
   if (profileResult.error) {

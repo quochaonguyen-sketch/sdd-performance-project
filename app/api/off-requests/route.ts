@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
 
   const riderIds = Array.from(new Set((requests ?? []).map((item) => item.rider_id)));
   const { data: riders, error: riderError } = riderIds.length
-    ? await admin.from("riders").select("id,full_name,kv,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,current_shift").in("id", riderIds)
+    ? await admin.from("riders").select("id,full_name,kv,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,current_shift").in("kv", OPERATING_AREAS).in("id", riderIds)
     : { data: [], error: null };
   if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 500 });
 
@@ -105,7 +106,7 @@ async function computeWardConflicts(
   const extraRiders = missingCodes.length
     ? await admin
         .from("riders")
-        .select("id,rider_code,full_name,kv,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,current_shift")
+        .select("id,rider_code,full_name,kv,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,current_shift").in("kv", OPERATING_AREAS)
         .in("rider_code", missingCodes)
         .limit(500)
     : { data: [], error: null };

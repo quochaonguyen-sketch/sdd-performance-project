@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeOperatingArea, isOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import dynamic from "next/dynamic";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { Bike, MapPin, Users } from "lucide-react";
@@ -43,8 +44,8 @@ export function HcmZoneMap({ riders }: { riders: ZoneRider[] }) {
   const [addressPin, setAddressPin] = useState<AddressPin | null>(null);
 
   const deferredFilters = useDeferredValue(filters);
-  const ridersByZone = useMemo(() => indexRidersByZone(riders, mode), [mode, riders]);
-  const zones = useMemo(() => buildOperationalZones(ridersByZone), [ridersByZone]);
+  const ridersByZone = useMemo(() => indexRidersByZone(riders.filter((rider) => isOperatingArea(rider.kv) && (filters.area === "all" || normalizeOperatingArea(rider.kv) === filters.area)), mode), [mode, riders, filters.area]);
+  const zones = useMemo(() => buildOperationalZones(ridersByZone, mode), [ridersByZone, mode]);
   const filteredZones = useMemo(() => zones.filter((zone) => matchesFilters(zone, deferredFilters)), [deferredFilters, zones]);
   const visibleZoneIds = useMemo(() => filteredZones.map((zone) => zone.id), [filteredZones]);
   const visibleSelectedZoneId = selectedZoneId && visibleZoneIds.includes(selectedZoneId) ? selectedZoneId : null;
@@ -70,7 +71,7 @@ export function HcmZoneMap({ riders }: { riders: ZoneRider[] }) {
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700"><MapPin size={20} /></span><div><h2 className="font-bold text-slate-950">Bản đồ zone KV5 & KV6</h2><p className="text-sm text-slate-500">Tìm, lọc và chọn phường/xã để xem quân số vận hành</p></div></div>
+        <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700"><MapPin size={20} /></span><div><h2 className="font-bold text-slate-950">Bản đồ zone KV1–KV5</h2><p className="text-sm text-slate-500">Tìm, lọc và chọn phường/xã để xem quân số vận hành</p></div></div>
         <div className="flex w-full rounded-xl bg-slate-100 p-1 lg:w-auto">{modeOptions.map((option) => <button key={option.value} type="button" onClick={() => setMode(option.value)} className={cn("flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition sm:text-sm lg:flex-none", mode === option.value ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800")}>{option.label}</button>)}</div>
       </div>
 
@@ -97,16 +98,20 @@ export function HcmZoneMap({ riders }: { riders: ZoneRider[] }) {
   );
 }
 
-function buildOperationalZones(ridersByZone: Map<string, ZoneRider[]>) {
+function buildOperationalZones(ridersByZone: Map<string, ZoneRider[]>, mode: LocationMode) {
   let colorIndex = 0;
-  return MAP_DISTRICTS.flatMap((district) => district.wards.map((ward) => {
+  return MAP_DISTRICTS.flatMap((district) => {
+    const assigned = [...ridersByZone.values()].flat().filter((rider) => matchesDistrict(districtValue(rider, mode), district));
+    const wards = [...new Set([...district.wards, ...assigned.flatMap((rider) => splitLocationParts(wardValue(rider, mode)))])];
+    return wards.map((ward) => {
     const zoneRiders = ridersByZone.get(zoneId(district.id, ward)) ?? [];
+    const areas = [...new Set(zoneRiders.map((rider) => normalizeOperatingArea(rider.kv)).filter((area): area is OperatingArea => !!area))];
     const activeRiders = zoneRiders.filter((rider) => rider.status !== "inactive").length;
     const capacity: number | null = null;
     const status: ZoneStatus = capacity !== null && activeRiders >= capacity ? "full" : activeRiders > 0 ? "active" : "inactive";
     const color = ZONE_COLORS[colorIndex++ % ZONE_COLORS.length];
-    return { id: zoneId(district.id, ward), code: `${district.area}-${district.code}-${compactZoneName(ward).toUpperCase()}`, name: `${wardLabel(ward)} · ${district.shortName}`, districtId: district.id, districtName: district.name, ward, area: district.area, color, status, riderCount: zoneRiders.length, activeRiderCount: activeRiders, capacity } satisfies OperationalZone;
-  }));
+    return { id: zoneId(district.id, ward), code: `${areas.join("/") || "Chưa gán KV"}-${district.code}-${compactZoneName(ward).toUpperCase()}`, name: `${wardLabel(ward)} · ${district.shortName}`, districtId: district.id, districtName: district.name, ward, area: areas.join(" / ") || "Chưa gán KV", areas, color, status, riderCount: zoneRiders.length, activeRiderCount: activeRiders, capacity } satisfies OperationalZone;
+  }); });
 }
 
 function indexRidersByZone(riders: ZoneRider[], mode: LocationMode) {
@@ -132,7 +137,7 @@ function indexRidersByZone(riders: ZoneRider[], mode: LocationMode) {
 
 function matchesFilters(zone: OperationalZone, filters: ZoneFilters) {
   const query = normalize(filters.query);
-  return (!query || normalize(`${zone.name} ${zone.code}`).includes(query)) && (filters.area === "all" || zone.area === filters.area) && (filters.districtId === "all" || zone.districtId === filters.districtId) && (filters.wardId === "all" || zone.id === filters.wardId) && (filters.status === "all" || zone.status === filters.status);
+  return (!query || normalize(`${zone.name} ${zone.code}`).includes(query)) && (filters.area === "all" || zone.areas.includes(filters.area)) && (filters.districtId === "all" || zone.districtId === filters.districtId) && (filters.wardId === "all" || zone.id === filters.wardId) && (filters.status === "all" || zone.status === filters.status);
 }
 
 function normalize(value: string | null | undefined) { return (value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").toLowerCase().replace(/\b(phuong|p\.?|ward|xa|thi tran|tt\.?)\b/g, "").replace(/[.,/_-]+/g, " ").replace(/\s+/g, " ").trim(); }

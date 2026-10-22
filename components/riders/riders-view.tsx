@@ -318,7 +318,7 @@ export function RidersView({
   useSupabaseRealtime<RiderRealtimeRow>({ table: "riders", onChange: handleRealtimeChange });
 
   const districtOptions = useMemo(() => districts.map((district) => district.name), [districts]);
-  // Quan lay/giao loc theo KV da chon. KV5/KV6 (va gia tri la) giu full danh sach nhu cu.
+  // Quan lay/giao loc theo KV da chon. KV1–KV5 (va gia tri la) giu full danh sach nhu cu.
   const kvDistrictOptions = useMemo(() => districtsForKv(form.kv, districts), [districts, form.kv]);
   const cotOptions = registry.options.cots;
   const shiftOptions = registry.options.shifts;

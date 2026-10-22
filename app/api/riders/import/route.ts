@@ -1,8 +1,10 @@
+import { normalizeOperatingArea } from "@/lib/locations/operating-areas";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { canonicalDistrictName } from "@/lib/locations/hcm";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageRiders } from "@/lib/auth/permissions";
 import { invalidateRidersCache } from "@/lib/cache/operations-cache";
 
@@ -95,6 +97,7 @@ function parseRows(sheet: XLSX.WorkSheet) {
     const riderCode = values.rider_code ?? "";
     const rawStatus = (values.status ?? "active").toLowerCase();
 
+    if (!normalizeOperatingArea(values.kv)) { errors.push({ row: rowNumber, rider_code: riderCode, error: "KV phải từ KV1 đến KV5" }); continue; }
     if (!riderCode) {
       errors.push({ row: rowNumber, error: "Thiếu ID rider" });
       continue;
@@ -110,7 +113,7 @@ function parseRows(sheet: XLSX.WorkSheet) {
 
     rows.push({
       row: rowNumber,
-      kv: values.kv ?? null,
+      kv: normalizeOperatingArea(values.kv),
       home_district: normalizeBinhThanhDistrict(values.home_district),
       cot: values.cot ?? null,
       rider_code: riderCode,
@@ -128,18 +131,13 @@ function parseRows(sheet: XLSX.WorkSheet) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const context = await getCurrentUserContext();
+  if (!context) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (!canManageRiders(profile?.role)) {
+  if (!canManageRiders(context.profile.role, context.profile.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền import rider" }, { status: 403 });
   }
 
@@ -188,7 +186,7 @@ export async function POST(request: Request) {
   for (let index = 0; index < uniqueCodes.length; index += 500) {
     const { data, error } = await admin
       .from("riders")
-      .select("rider_code")
+      .select("rider_code").in("kv", OPERATING_AREAS)
       .in("rider_code", uniqueCodes.slice(index, index + 500));
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });

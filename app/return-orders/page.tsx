@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { canManageReturn } from "@/lib/auth/permissions";
 import { ProtectedPage } from "@/components/layout/protected-page";
 import { ReturnOrderFilters } from "@/components/return-orders/return-order-filters";
 import { ReturnOrderLookupScanner } from "@/components/return-orders/return-order-lookup-scanner";
@@ -91,16 +94,45 @@ function ReturnRiders({ status, driverId, driverName, riderKv, cot1, cot2 }: { s
   );
 }
 
-// LITE (KV1-KV6): Return chỉ giữ Tổng quan. Mọi view cũ đều render dashboard.
-export default async function ReturnOrdersPage() {
+export default async function ReturnOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const context = await getCurrentUserContext();
+  if (context && !canManageReturn(context.profile.role, context.profile.permissions)) notFound();
+  const raw = await searchParams;
+  const view = returnViewFrom(Array.isArray(raw.view) ? raw.view[0] : raw.view);
+  if (view === "rider") {
+    return <ProtectedPage><ReturnRiderContent /></ProtectedPage>;
+  }
+  if (view === "dashboard") {
+    return (
+      <ProtectedPage>
+        <section className="return-orders-page">
+          <ReturnOrdersSwitcher />
+          <Suspense fallback={<ReturnPivotSkeleton />}>
+            <ReturnDashboardLoader />
+          </Suspense>
+        </section>
+      </ProtectedPage>
+    );
+  }
+  if (view === "pivot") {
+    return (
+      <ProtectedPage>
+        <section className="return-orders-page">
+          <ReturnOrdersSwitcher />
+          <Suspense fallback={<ReturnPivotSkeleton />}>
+            <ReturnPivotLoader />
+          </Suspense>
+        </section>
+      </ProtectedPage>
+    );
+  }
   return (
     <ProtectedPage>
-      <section className="return-orders-page">
-        <ReturnOrdersSwitcher />
-        <Suspense fallback={<ReturnPivotSkeleton />}>
-          <ReturnDashboardLoader />
-        </Suspense>
-      </section>
+      <ReturnOrdersContent searchParams={searchParams} />
     </ProtectedPage>
   );
 }

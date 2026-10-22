@@ -24,7 +24,7 @@ export default async function RidersPage() {
   return (
     <ProtectedPage>
       <RidersView
-        canManageRiders={canManageRiders(context?.profile.role)}
+        canManageRiders={canManageRiders(context?.profile.role, context?.profile.permissions)}
         initialData={initialData}
         initialError={initialError}
       />

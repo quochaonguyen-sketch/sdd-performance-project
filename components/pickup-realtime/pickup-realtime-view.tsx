@@ -11,14 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 
-type Area = "KV1" | "KV2" | "KV3" | "KV4" | "KV5" | "KV6";
+type Area = "KV1" | "KV2" | "KV3" | "KV4" | "KV1" | "KV2" | "KV3" | "KV4" | "KV5";
 type AreaFilter = Area | "all";
 type Metrics = { assigned: number; picked: number; onhold: number };
 type SummaryRow = Metrics & { route: string; ward: string; area: Area | null; routeArea: Area | null };
 type Rider = Metrics & { id: string; name: string; area: Area | null; routes: string[] };
 type Filters = { area: AreaFilter; ward: string; route: string };
 
-const AREAS: readonly Area[] = ["KV1", "KV2", "KV3", "KV4", "KV5", "KV6"];
+const AREAS: readonly Area[] = ["KV1", "KV2", "KV3", "KV4", "KV5"];
 const AREA_SET = new Set<string>(AREAS);
 const KV_LIST = AREAS.join(",");
 const DEFAULT_FILTERS: Filters = { area: "all", ward: "all", route: "all" };
@@ -28,7 +28,6 @@ const AREA_TONE: Record<Area, string> = {
   KV3: "bg-amber-50 text-amber-800 ring-amber-200",
   KV4: "bg-rose-50 text-rose-700 ring-rose-200",
   KV5: "bg-blue-50 text-blue-700 ring-blue-200",
-  KV6: "bg-violet-50 text-violet-700 ring-violet-200",
 };
 
 export function PickupRealtimeView() {
@@ -121,7 +120,7 @@ export function PickupRealtimeView() {
     <div className="dashboard-control mx-auto max-w-[1600px] space-y-6">
       <header className="dashboard-command-header">
         <div className="min-w-0">
-          <div className="dashboard-kicker"><span className="dashboard-live-dot" />Pickup realtime · KV1–KV6</div>
+          <div className="dashboard-kicker"><span className="dashboard-live-dot" />Pickup realtime · KV1–KV5</div>
           <h1>Pickup Realtime</h1>
           <p>Theo dõi đơn lấy theo 6 khu vực, tuyến và phường từ snapshot pickup 48h.</p>
         </div>
@@ -144,7 +143,7 @@ export function PickupRealtimeView() {
       <section className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-4">
         <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Khu vực</span>
           <Select value={filters.area} onChange={(event) => setFilters((current) => ({ ...current, area: toAreaFilter(event.target.value), ward: "all", route: "all" }))}>
-            <option value="all">Tất cả KV1–KV6</option>
+            <option value="all">Tất cả KV1–KV5</option>
             {AREAS.map((area) => <option key={area} value={area}>{area}</option>)}
           </Select>
         </label>
@@ -201,7 +200,7 @@ export function PickupRealtimeView() {
       </div>
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-950">Rider KV1–KV6</h2><p className="text-sm text-slate-500">{riderRows.length}/{riders.length} rider</p></div>
+        <div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-950">Rider KV1–KV5</h2><p className="text-sm text-slate-500">{riderRows.length}/{riders.length} rider</p></div>
         <div className="max-h-[640px] overflow-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">Rider</th><th className="px-4 py-3">Tuyến</th><th className="px-4 py-3 text-right">Gán</th><th className="px-4 py-3 text-right">Lấy</th><th className="px-4 py-3 text-right">Onhold</th><th className="px-4 py-3 text-right">%</th></tr></thead>
@@ -232,8 +231,8 @@ function AreaBadge({ area }: { area: Area | null }) {
 function toArea(value: unknown): Area | null {
   const text = String(value ?? "").replace(/\s+/g, "").toUpperCase();
   if (AREA_SET.has(text)) return text as Area;
-  if (/^[1-6]$/.test(text)) return `KV${text}` as Area;
-  const match = text.match(/^KV?([1-6])$/);
+  if (/^[1-5]$/.test(text)) return `KV${text}` as Area;
+  const match = text.match(/^KV?([1-5])$/);
   return match ? (`KV${match[1]}` as Area) : null;
 }
 function toAreaFilter(value: string): AreaFilter { return AREA_SET.has(value) ? value as Area : "all"; }

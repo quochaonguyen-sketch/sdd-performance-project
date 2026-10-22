@@ -174,7 +174,7 @@ export function OffScheduleView() {
   return (
     <div className="off-schedule-page">
       <section className="off-schedule-command">
-        <div><p><span aria-hidden="true" /> OFF CONTROL / KV1-KV6</p><h1>Xếp lịch OFF rider</h1><span>Duyệt yêu cầu từ trang công khai và đồng bộ trực tiếp vào bảng Attendance.</span></div>
+        <div><p><span aria-hidden="true" /> OFF CONTROL / KV1-KV5</p><h1>Xếp lịch OFF rider</h1><span>Duyệt yêu cầu từ trang công khai và đồng bộ trực tiếp vào bảng Attendance.</span></div>
         <a href="/off-registration" target="_blank" rel="noreferrer">Mở trang đăng ký <ExternalLink size={15} aria-hidden="true" /></a>
       </section>
 

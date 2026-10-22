@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "./operating-areas";
 export type WardDefinition = {
   name: string;
   aliases?: string[];
@@ -182,9 +183,9 @@ export const hcmDistricts: DistrictDefinition[] = [
   { id: "binh-chanh", name: "Huyện Bình Chánh", shortName: "Bình Chánh", aliases: ["binh chanh", "huyen binh chanh", "bc"], wards: [] },
 ];
 
-export const KV_OPTIONS = ["KV1", "KV2", "KV3", "KV4", "KV5", "KV6"];
+export const KV_OPTIONS: string[] = [...OPERATING_AREAS];
 
-// Quan/huyen thuoc tung khu vuc. KV5/KV6 giu nguyen danh sach chung (hcmDistricts).
+// Quan/huyen thuoc tung khu vuc. KV1–KV5 giu nguyen danh sach chung (hcmDistricts).
 export const KV_DISTRICTS: Record<string, string[]> = {
   KV1: ["Quận 5", "Quận 6", "Quận 11", "Huyện Bình Chánh"],
   KV2: ["Quận Tân Bình", "Quận Phú Nhuận", "Thành phố Thủ Đức"],

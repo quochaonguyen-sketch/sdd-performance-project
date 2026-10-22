@@ -1,3 +1,4 @@
+import { normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma/client";
@@ -14,7 +15,7 @@ type PerformanceRow = {
 
 export type DistrictOnHold = {
   district: string;
-  area: "KV5" | "KV6";
+  area: "KV1" | "KV2" | "KV3" | "KV4" | "KV5";
   onHold: number;
   assigned: number;
   delivered: number;
@@ -25,7 +26,7 @@ export type DistrictOnHold = {
 export type DistrictOnHoldDaily = {
   date: string;
   district: string;
-  area: "KV5" | "KV6";
+  area: "KV1" | "KV2" | "KV3" | "KV4" | "KV5";
   onHold: number;
   assigned: number;
 };
@@ -74,12 +75,12 @@ export async function GET(request: Request) {
       sum(coalesce(p.delivery_delivered, 0))::bigint as delivery_delivered
     from public.driver_performance_daily p
     join public.riders r on r.rider_code = p.driver_id
-    where upper(coalesce(r.kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+    where upper(coalesce(r.kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
       and p.report_date between ${start}::date and ${end}::date
     group by p.report_date, p.driver_id
   `;
 
-  const createAccumulator = (district: string, area: "KV5" | "KV6"): DistrictAccumulator => ({
+  const createAccumulator = (district: string, area: "KV1" | "KV2" | "KV3" | "KV4" | "KV5"): DistrictAccumulator => ({
     district,
     area,
     onHold: 0,
@@ -98,14 +99,15 @@ export async function GET(request: Request) {
     const reportDate = row.report_date.toISOString().slice(0, 10);
     const riderCode = row.driver_id.trim().toUpperCase();
     const district = row.district?.trim() || "Chưa xác định";
-    const area = row.kv === "KV6" ? "KV6" : "KV5";
+    const area = normalizeOperatingArea(row.kv);
+    if (!area) continue;
     const assigned = Number(row.delivery_assigned);
     const delivered = Number(row.delivery_delivered);
     const onHold = Math.max(0, assigned - delivered);
     const riderName = row.rider_name ?? riderCode;
 
     const apply = (map: Map<string, DistrictAccumulator>) => {
-      const item = map.get(district) ?? createAccumulator(district, area);
+      const item = map.get(`${area}:${district}`) ?? createAccumulator(district, area);
       item.onHold += onHold;
       item.assigned += assigned;
       item.delivered += delivered;
@@ -113,7 +115,7 @@ export async function GET(request: Request) {
       if (onHold > 0 && (!item.worstRider || onHold > item.worstRider.onHold)) {
         item.worstRider = { riderCode, riderName, onHold };
       }
-      map.set(district, item);
+      map.set(`${area}:${district}`, item);
     };
 
     apply(weekMap);

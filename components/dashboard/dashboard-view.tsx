@@ -1,15 +1,9 @@
-/* Hallmark · macrostructure: Control Ledger · theme: custom (vibe: "đêm ops căng, tín hiệu laser, chính xác" · paper oklch(0.13 0.015 260) dark · accent oklch(0.78 0.15 195) laser cyan · Space Grotesk + JetBrains Mono) · genre: modern-minimal · enrichment: laser grid scanline
- * pre-emit critique: P5 H5 E5 S5 R5 V5 · contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57)
- */
 "use client";
 
+import { OPERATING_AREAS, normalizeOperatingArea, isOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import Link from "next/link";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
-
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-display-custom", weight: ["600", "700"], display: "swap" });
-const jetMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-custom", display: "swap" });
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, ChevronRight, CircleAlert, Clock3, Hourglass, MapPin, PackageCheck, PackageOpen, PackageX, RefreshCcw, TimerOff, Truck, UserRoundX } from "lucide-react";
+import { Activity, ChevronRight, CircleAlert, Clock3, Hourglass, MapPin, PackageOpen, PackageX, RefreshCcw, TimerOff, Truck, UserRoundX } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
@@ -32,11 +26,11 @@ type ReturnOverdueState = { thresholdHours: number; totalOrders: number; missing
 type DashboardState = { riders: Rider[]; activity: ActivityLog[]; delivery: VolumeRow[]; pickup: VolumeRow[]; realtime: RealtimeRow[]; returnOverdue: ReturnOverdueState; failedLeaders: FailedLeaders };
 type FailedLeader = { riderCode: string; riderName: string; district: string; failed: number; assigned: number };
 type FailedLeaders = { day: FailedLeader[]; week: FailedLeader[] };
-type DistrictOnHold = { district: string; area: "KV5" | "KV6"; onHold: number; assigned: number; delivered: number; riders: number; worstRider: { riderCode: string; riderName: string; onHold: number } | null };
-type DistrictOnHoldDaily = { date: string; district: string; area: "KV5" | "KV6"; onHold: number; assigned: number };
+type DistrictOnHold = { district: string; area: "KV1" | "KV2" | "KV3" | "KV4" | "KV5"; onHold: number; assigned: number; delivered: number; riders: number; worstRider: { riderCode: string; riderName: string; onHold: number } | null };
+type DistrictOnHoldDaily = { date: string; district: string; area: "KV1" | "KV2" | "KV3" | "KV4" | "KV5"; onHold: number; assigned: number };
 type DistrictOnHoldState = { day: DistrictOnHold[]; week: DistrictOnHold[]; daily: DistrictOnHoldDaily[] };
 type AreaTotals = { deliveryVolume: number; pickupVolume: number; assigned: number; delivered: number; delivering: number; failed: number };
-type AreaBreakdown = { kv5: AreaTotals; kv6: AreaTotals };
+type AreaBreakdown = Record<OperatingArea, AreaTotals>;
 const emptyReturnOverdue: ReturnOverdueState = { thresholdHours: 48, totalOrders: 0, missingStartedAt: 0, snapshotAt: null, riders: [] };
 const emptyDistrictOnHold: DistrictOnHoldState = { day: [], week: [], daily: [] };
 const emptyState: DashboardState = { riders: [], activity: [], delivery: [], pickup: [], realtime: [], returnOverdue: emptyReturnOverdue, failedLeaders: { day: [], week: [] } };
@@ -58,7 +52,7 @@ export function DashboardView() {
     setError(null);
     const historyStart = monthStartOffset(dateRange.end, -11);
     const [riders, activity, delivery, pickup, realtime, returnOverdue, failedLeaders] = await Promise.all([
-      supabase.from("riders").select("*, zones(id,name,area,hub)").order("updated_at", { ascending: false }),
+      supabase.from("riders").select("*, zones(id,name,area,hub)").in("kv", OPERATING_AREAS).order("updated_at", { ascending: false }),
       supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(10),
       fetchVolumeRows(supabase, "delivery_order", historyStart, dateRange.end),
       fetchVolumeRows(supabase, "pickup_volume", historyStart, dateRange.end),
@@ -98,21 +92,12 @@ export function DashboardView() {
   const areaBreakdown = useMemo(() => buildAreaBreakdown(state, dateRange), [dateRange, state]);
   const alerts = useMemo(() => buildAlerts(state, summary), [state, summary]);
 
-  return <div className={cn("dashboard-control mx-auto max-w-[1600px] space-y-6", spaceGrotesk.variable, jetMono.variable)}>
-    <header className="dashboard-command-header is-custom">
-      <span className="dashboard-laser-grid" aria-hidden="true" />
-      <span className="dashboard-laser-sweep" aria-hidden="true" />
-      <span className="dashboard-laser-glow" aria-hidden="true" />
-      <div className="min-w-0 relative">
-        <div className="dashboard-kicker">
-          <span className="dashboard-live-dot is-laser" />
-          <span>Operations control · KV1-KV6 — đêm ops</span>
-          <span className="dashboard-kicker-laser">laser</span>
-        </div>
-        <h1>Volume & Delivery Control</h1>
-        <p>
-          Volume, delivery status và Failed rider trong đúng phạm vi Khu vực 5–6.<span className="dashboard-kicker-precise"> — chính xác từng tín hiệu</span>
-        </p>
+  return <div className="dashboard-control ops-overview ops-dashboard mx-auto max-w-[1600px] space-y-6">
+    <header className="dashboard-command-header">
+      <div className="min-w-0">
+        <div className="dashboard-kicker">SDD · Tổng quan vận hành</div>
+        <h1>Nhịp vận hành</h1>
+        <p>Sản lượng giao nhận và tiến độ xử lý · dữ liệu Khu vực 1–5.</p>
       </div>
       <div className="dashboard-command-actions">
         <Select value={range} onChange={(event) => setRange(event.target.value as RangeKey)} aria-label="Khoảng thời gian"><option value="today">Hôm nay</option><option value="yesterday">Hôm qua</option><option value="7d">7 ngày gần nhất</option></Select>
@@ -120,54 +105,70 @@ export function DashboardView() {
       </div>
     </header>
 
-    <div className="dashboard-readout-strip"><Clock3 size={14} /><strong>{rangeLabel(range)}</strong><span>KV1-KV6 only</span><span className="dashboard-readout-time">{lastUpdated ? `Updated ${format(lastUpdated, "HH:mm:ss")}` : "Loading data"}</span></div>
-    {error ? <p role="alert" className="dashboard-error">Không thể tải dashboard: {error}</p> : null}
+    <nav className="dash-view-links" aria-label="Màn hình vận hành"><span aria-current="page">Tổng quan</span><Link href="/realtime-dashboard">Realtime<ChevronRight size={14} /></Link><Link href="/inventory-delivery">Tồn delivery<ChevronRight size={14} /></Link><Link href="/lmhub-inventory">Tồn pickup<ChevronRight size={14} /></Link></nav>
+    <div className="dashboard-readout-strip"><Clock3 size={14} /><strong>{rangeLabel(range)}</strong><span>Khu vực 1–5</span><span className="dashboard-readout-time">{lastUpdated ? `Cập nhật ${format(lastUpdated, "HH:mm:ss")}` : "Đang tải dữ liệu"}</span></div>
+    {error ? <div role="status" className="dash-data-notice"><CircleAlert size={15} /><span>Chưa tải đủ dữ liệu.</span><details><summary>Chi tiết</summary><p>{error}</p></details><button type="button" onClick={refresh} disabled={loading}>Thử lại</button></div> : null}
 
-    <section aria-labelledby="current-state" className="space-y-3">
-      <DashboardSectionHeading id="current-state" index="01" title="Volume & current snapshot" description="Volume theo khoảng đã chọn; delivery status lấy snapshot cuối ngày." />
-      <div className="grid grid-cols-12 gap-3">
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/volume/delivery" icon={PackageOpen} label="Total Volume" value={summary.totalVolume} context={`${rangeLabel(range)} · KV1-KV6`} tone="blue" loading={loading} />
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/volume/delivery" icon={Truck} label="Delivery Volume" value={summary.deliveryVolume} context={`${volumeShare(summary.deliveryVolume, summary.totalVolume)} of total`} tone="blue" loading={loading} />
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/volume/pickup" icon={PackageCheck} label="Pickup Volume" value={summary.pickupVolume} context={`${volumeShare(summary.pickupVolume, summary.totalVolume)} of total`} tone="slate" loading={loading} />
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/realtime-dashboard" icon={Activity} label="Delivering" value={summary.delivering} context={`${summary.assigned.toLocaleString("vi-VN")} assigned`} tone="blue" loading={loading} />
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/realtime-dashboard" icon={PackageCheck} label="Delivered" value={summary.delivered} context={`${summary.deliveryRate}% completion`} tone="green" loading={loading} />
-        <KpiCard className="col-span-6 lg:col-span-4 xl:col-span-2" href="/realtime-dashboard" icon={PackageX} label="Failed" value={summary.failed} context="Latest daily snapshot" tone={summary.failed ? "red" : "green"} loading={loading} />
-      </div>
-      <AreaBreakdown breakdown={areaBreakdown} loading={loading} />
+    <section className="dash-summary-grid" aria-label="Sản lượng và tiến độ">
+      <article className="dash-volume-panel">
+        <div className="dash-panel-heading"><span>Sản lượng giao nhận</span><span className="dash-scope">KV1–KV5</span></div>
+        <div className="dash-volume-total"><DashboardNumber value={summary.totalVolume} loading={loading} /><span>đơn trong kỳ</span></div>
+        <div className="dash-volume-split">
+          <Link href="/volume/delivery"><span className="dash-series-label"><i className="is-delivery" />Delivery</span><strong><DashboardNumber value={summary.deliveryVolume} loading={loading} /></strong><span>{volumeShare(summary.deliveryVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
+          <Link href="/volume/pickup"><span className="dash-series-label"><i className="is-pickup" />Pickup</span><strong><DashboardNumber value={summary.pickupVolume} loading={loading} /></strong><span>{volumeShare(summary.pickupVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
+        </div>
+      </article>
+      <article className="dash-progress-panel">
+        <div className="dash-panel-heading"><h2>Tiến độ giao hàng</h2><Link href="/realtime-dashboard" aria-label="Mở tiến độ giao hàng realtime"><ChevronRight size={18} /></Link></div>
+        <div className="dash-progress-lead"><strong>{loading ? <span className="dash-skeleton" /> : summary.deliveryRate + "%"}</strong><span>hoàn tất trên {summary.assigned.toLocaleString("vi-VN")} đơn được gán</span></div>
+        <div className="dash-progress-track" aria-hidden="true"><span style={{ width: Math.min(100, summary.deliveryRate) + "%" }} /></div>
+        <dl className="dash-progress-stats">
+          <div><dt><i className="is-active" />Đang giao</dt><dd><DashboardNumber value={summary.delivering} loading={loading} /></dd></div>
+          <div><dt><i className="is-complete" />Thành công</dt><dd><DashboardNumber value={summary.delivered} loading={loading} /></dd></div>
+          <div><dt><i className={summary.failed ? "is-failed" : "is-neutral"} />Thất bại</dt><dd><DashboardNumber value={summary.failed} loading={loading} /></dd></div>
+        </dl>
+      </article>
     </section>
 
-    <section aria-labelledby="return-overdue" className="space-y-3">
-      <DashboardSectionHeading id="return-overdue" index="02" title="Cảnh báo đơn trả quá 2 ngày" description="Tính đủ 48 giờ từ lúc rider bắt đầu giữ đơn; loại các đơn đã quét bàn giao trả." />
-      <ReturnOverdueCard data={state.returnOverdue} loading={loading} />
+    <section className="dash-area-section" aria-labelledby="area-breakdown">
+      <div className="dash-area-heading"><h2 id="area-breakdown">Nhịp độ 5 khu vực</h2><span>Sản lượng delivery + pickup · {rangeLabel(range).toLowerCase()}</span></div>
+      <div className="dash-area-rail">{OPERATING_AREAS.map((area) => { const data = areaBreakdown[area]; const total = data.deliveryVolume + data.pickupVolume; const rate = data.assigned ? Math.round(data.delivered / data.assigned * 100) : 0; return <article key={area} className="dash-area-cell"><div><span>{area}</span><small>{loading ? "Đang tải" : data.assigned ? rate + "% đã giao" : "Chưa có đơn gán"}</small></div><strong><DashboardNumber value={total} loading={loading} /><span>đơn</span></strong><div className="dash-area-track" aria-hidden="true"><span style={{ width: Math.min(100, rate) + "%" }} /></div></article>; })}</div>
     </section>
 
     <section aria-labelledby="volume-trend" className="space-y-3">
       <div className="dashboard-section-row">
-        <DashboardSectionHeading id="volume-trend" index="03" title="Volume trend" description="Chỉ gồm các dòng có area KV5/KV6 hoặc quận thuộc phạm vi vận hành." />
+        <DashboardSectionHeading id="volume-trend" title="Xu hướng sản lượng" description="Tổng hợp các dòng dữ liệu có KV nguồn từ KV1 đến KV5." />
         <div className="dashboard-chart-filters"><Select value={volumeMode} onChange={(event) => setVolumeMode(event.target.value as VolumeMode)} aria-label="Chế độ volume"><option value="all">Delivery + Pickup</option><option value="delivery">Delivery</option><option value="pickup">Pickup</option></Select><Select value={volumeGrouping} onChange={(event) => setVolumeGrouping(event.target.value as VolumeGrouping)} aria-label="Nhóm volume"><option value="week">Theo tuần</option><option value="month">Theo tháng</option></Select></div>
       </div>
       <div className="grid grid-cols-12 gap-3">
         {volumeGrouping === "week" ? <WeeklyVolumeTrendWithDailyBars className="col-span-12 xl:col-span-8" data={volumeDailyData} defaultWeeksRange={4} loading={loading} /> : <VolumeAnalyticsChart className="col-span-12 xl:col-span-8" analytics={volumeAnalytics} grouping={volumeGrouping} loading={loading} />}
-        <div className="col-span-12 grid gap-3 sm:grid-cols-2 xl:col-span-4 xl:grid-cols-1"><VolumeComparisonCard analytics={volumeAnalytics} /><ProgressChart delivered={summary.delivered} delivering={summary.delivering} failed={summary.failed} /></div>
+        <div className="col-span-12 grid gap-3 sm:grid-cols-2 xl:col-span-4 xl:grid-cols-1"><VolumeComparisonCard analytics={volumeAnalytics} /><DashboardWorkLinks /></div>
       </div>
     </section>
 
+    <div className="dash-risk-section">
+    <section aria-labelledby="return-overdue" className="space-y-3">
+      <DashboardSectionHeading id="return-overdue" title="Cảnh báo đơn trả quá 2 ngày" description="Tính đủ 48 giờ từ lúc rider bắt đầu giữ đơn; loại các đơn đã quét bàn giao trả." />
+      <ReturnOverdueCard data={state.returnOverdue} loading={loading} />
+    </section>
+
+    </div>
     <section aria-labelledby="district-average" className="space-y-3">
-      <DashboardSectionHeading id="district-average" index="04" title="Monthly daily average by district" description="Tổng volume trong tháng chia cho số ngày thực tế có dữ liệu, tách riêng Delivery và Pickup." />
-      <div className="grid gap-3 lg:grid-cols-2"><DistrictDonutCard title="Delivery average" icon={Truck} data={districtAverages.delivery} loading={loading} /><DistrictDonutCard title="Pickup average" icon={PackageOpen} data={districtAverages.pickup} loading={loading} /></div>
+      <DashboardSectionHeading id="district-average" title="Sản lượng trung bình theo quận" description="Tổng volume trong tháng chia cho số ngày thực tế có dữ liệu, tách riêng Delivery và Pickup." />
+      <div className="grid gap-3 lg:grid-cols-2"><DistrictDonutCard title="Delivery · trung bình/ngày" icon={Truck} data={districtAverages.delivery} loading={loading} /><DistrictDonutCard title="Pickup · trung bình/ngày" icon={PackageOpen} data={districtAverages.pickup} loading={loading} /></div>
     </section>
 
     <section aria-labelledby="failed-ranking" className="space-y-3">
-      <DashboardSectionHeading id="failed-ranking" index="05" title="Top rider Failed (On Hold)" description="Xếp hạng rider KV5/KV6 theo đơn chưa giao (assigned − delivered) từ dữ liệu Performance." />
-      <div className="grid gap-3 lg:grid-cols-2"><FailedLeaderboard title="Selected day" subtitle={formatDate(dateRange.end)} rows={state.failedLeaders.day} loading={loading} /><FailedLeaderboard title="Last 7 days" subtitle={`${formatDate(shiftDate(dateRange.end, -6))}–${formatDate(dateRange.end)}`} rows={state.failedLeaders.week} loading={loading} /></div>
+      <DashboardSectionHeading id="failed-ranking" title="Top rider Failed (On Hold)" description="Xếp hạng rider KV1–KV5 theo đơn chưa giao (assigned − delivered) từ dữ liệu Performance." />
+      <div className="grid gap-3 lg:grid-cols-2"><FailedLeaderboard title="Ngày đã chọn" subtitle={formatDate(dateRange.end)} rows={state.failedLeaders.day} loading={loading} /><FailedLeaderboard title="7 ngày gần nhất" subtitle={`${formatDate(shiftDate(dateRange.end, -6))}–${formatDate(dateRange.end)}`} rows={state.failedLeaders.week} loading={loading} /></div>
     </section>
 
     <section aria-labelledby="district-onhold" className="space-y-3">
-      <DashboardSectionHeading id="district-onhold" index="06" title="On Hold theo quận" description="Đơn chưa giao (assigned − delivered) tổng hợp theo quận KV5/KV6; so sánh ngày đã chọn với trung bình 7 ngày." />
+      <DashboardSectionHeading id="district-onhold" title="On Hold theo quận" description="Đơn chưa giao (assigned − delivered) tổng hợp theo quận KV1–KV5; so sánh ngày đã chọn với trung bình 7 ngày." />
       <DistrictOnHoldCard initialEndDate={dateRange.end} />
     </section>
 
-    <section id="alerts" className="grid grid-cols-12 gap-3"><AlertsList className="col-span-12 xl:col-span-7" alerts={alerts} /><SectionCard className="col-span-12 xl:col-span-5" title="Lối tắt vận hành" description="Đi nhanh đến màn hình chuyên sâu" href="/realtime-dashboard" linkLabel="Mở realtime"><div className="grid grid-cols-2 gap-2">{[["Morning Dispatch", "/morning-delivery"], ["Delivery Volume", "/volume/delivery"], ["Pickup Volume", "/volume/pickup"], ["Riders", "/riders"]].map(([label, href]) => <Link key={href} href={href} className="dashboard-shortcut">{label}</Link>)}</div><div className="mt-4 border-t border-slate-100 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cập nhật gần đây</p>{state.activity.slice(0, 3).map((item) => <p key={item.id} className="mt-2 line-clamp-1 text-sm text-slate-600">{item.message}</p>)}</div></SectionCard></section>
+    <section id="alerts" className="grid grid-cols-12 gap-3"><AlertsList className="col-span-12 xl:col-span-7" alerts={alerts} /><SectionCard className="col-span-12 xl:col-span-5" title="Lối tắt vận hành" description="Đi nhanh đến màn hình chuyên sâu" href="/realtime-dashboard" linkLabel="Mở realtime"><div className="grid grid-cols-2 gap-2">{[["Realtime Dashboard", "/realtime-dashboard"], ["Delivery Volume", "/volume/delivery"], ["Pickup Volume", "/volume/pickup"], ["Riders", "/riders"]].map(([label, href]) => <Link key={href} href={href} className="dashboard-shortcut">{label}</Link>)}</div><div className="mt-4 border-t border-slate-100 pt-3"><p className="text-xs font-medium text-slate-500">Cập nhật gần đây</p>{state.activity.slice(0, 3).map((item) => <p key={item.id} className="mt-2 line-clamp-1 text-sm text-slate-600">{item.message}</p>)}</div></SectionCard></section>
   </div>;
 }
 
@@ -264,7 +265,15 @@ async function fetchFailedLeaders(endDate: string): Promise<{ data: FailedLeader
   }
 }
 
-export const KpiCard = memo(function KpiCard({ href, icon: Icon, label, value, context, tone, loading, className }: { href: string; icon: typeof Activity; label: string; value: number | string; context: string; tone: "blue" | "green" | "red" | "slate"; loading: boolean; className?: string }) {
+function DashboardNumber({ value, loading }: { value: number; loading: boolean }) {
+  return loading ? <span className="dash-skeleton" aria-label="Đang tải" /> : <>{value.toLocaleString("vi-VN")}</>;
+}
+
+function DashboardWorkLinks() {
+  return <article className="dash-work-links"><h3>Luồng xử lý</h3><Link href="/inventory-delivery"><Truck size={17} /><span>Tồn delivery<small>Kiểm tra đơn chờ giao</small></span><ChevronRight size={15} /></Link><Link href="/lmhub-inventory"><PackageOpen size={17} /><span>Tồn pickup<small>Theo dõi đơn chờ lấy</small></span><ChevronRight size={15} /></Link><Link href="/return-orders?view=dashboard"><Hourglass size={17} /><span>Hàng trả<small>Xử lý đơn và bàn giao</small></span><ChevronRight size={15} /></Link></article>;
+}
+
+export const KpiCard = memo(function KpiCard({ href, label, value, context, tone, loading, className }: { href: string; icon: typeof Activity; label: string; value: number | string; context: string; tone: "blue" | "green" | "red" | "slate"; loading: boolean; className?: string }) {
   return (
     <Link
       href={href}
@@ -274,9 +283,6 @@ export const KpiCard = memo(function KpiCard({ href, icon: Icon, label, value, c
     >
       <div className="dashboard-kpi-heading">
         <p>{label}</p>
-        <span className={cn("dashboard-kpi-icon", `is-${tone}`)}>
-          <Icon size={17} aria-hidden="true" />
-        </span>
       </div>
       <p className="dashboard-kpi-value" aria-live="polite">
         {loading ? <span className="dashboard-kpi-skeleton" aria-hidden="true" /> : typeof value === "number" ? value.toLocaleString("vi-VN") : value}
@@ -286,49 +292,8 @@ export const KpiCard = memo(function KpiCard({ href, icon: Icon, label, value, c
   );
 });
 
-function AreaBreakdown({ breakdown, loading }: { breakdown: AreaBreakdown; loading: boolean }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <AreaBreakdownColumn label="KV5" data={breakdown.kv5} loading={loading} />
-      <AreaBreakdownColumn label="KV6" data={breakdown.kv6} loading={loading} />
-    </div>
-  );
-}
-
-function AreaBreakdownColumn({ label, data, loading }: { label: string; data: AreaTotals; loading: boolean }) {
-  const rows = [
-    { label: "Delivery volume", value: data.deliveryVolume, tone: "blue" as const },
-    { label: "Pickup volume", value: data.pickupVolume, tone: "slate" as const },
-    { label: "Assigned", value: data.assigned, tone: "slate" as const },
-    { label: "Delivered", value: data.delivered, tone: "green" as const },
-    { label: "Delivering", value: data.delivering, tone: "blue" as const },
-    { label: "Failed", value: data.failed, tone: "red" as const },
-  ];
-  const totalVolume = data.deliveryVolume + data.pickupVolume;
-  return (
-    <article className={cn("rounded-xl border bg-white p-4 transition-colors", loading ? "border-slate-200" : "border-slate-200 hover:border-slate-300")} data-state={loading ? "loading" : "idle"}>
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-black tracking-tight text-slate-950">{label}</h3>
-        <span className={cn("rounded-full px-2.5 py-1 font-mono text-xs font-bold", loading ? "bg-slate-100 text-slate-400" : "bg-slate-900 text-white")}>
-          {loading ? "…" : `${totalVolume.toLocaleString("vi-VN")} volume`}
-        </span>
-      </div>
-      <dl className="mt-4 grid grid-cols-3 gap-3">
-        {rows.map((row) => (
-          <div key={row.label} className={cn("rounded-lg p-2", row.tone === "red" && row.value > 0 ? "bg-red-50" : row.tone === "green" ? "bg-emerald-50/50" : "bg-slate-50")}>
-            <dt className="font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">{row.label}</dt>
-            <dd className={cn("mt-1 font-mono text-sm font-black tabular-nums", row.tone === "red" && row.value > 0 ? "text-red-700" : row.tone === "green" ? "text-emerald-700" : "text-slate-900")}>
-              {loading ? <span className="inline-block h-4 w-12 animate-pulse rounded bg-slate-200" aria-hidden="true" /> : row.value.toLocaleString("vi-VN")}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </article>
-  );
-}
-
-function DashboardSectionHeading({ id, index, title, description }: { id: string; index: string; title: string; description: string }) {
-  return <div className="dashboard-section-heading"><span>{index}</span><div><h2 id={id}>{title}</h2><p>{description}</p></div></div>;
+function DashboardSectionHeading({ id, title, description }: { id: string; title: string; description: string }) {
+  return <div className="dashboard-section-heading"><div><h2 id={id}>{title}</h2><p>{description}</p></div></div>;
 }
 
 function DistrictDonutCard({ title, icon: Icon, data, loading }: { title: string; icon: typeof Truck; data: ReturnType<typeof buildDistrictAverages>; loading: boolean }) {
@@ -453,7 +418,7 @@ function DistrictOnHoldCard({ initialEndDate }: { initialEndDate: string }) {
     <div className="district-onhold-head">
       <div className="dashboard-card-title">
         <span><Hourglass size={17} /></span>
-        <div><h3>Đơn On Hold theo quận</h3><p>Ngày {formatDate(endDate)} · KV1-KV6</p></div>
+        <div><h3>Đơn On Hold theo quận</h3><p>Ngày {formatDate(endDate)} · KV1-KV5</p></div>
       </div>
       <label className="district-onhold-date">
         <span>Ngày</span>
@@ -559,7 +524,7 @@ function ReturnOverdueCard({ data, loading }: { data: ReturnOverdueState; loadin
   </article>;
 }
 
-export function TrendChart({ points, loading, className }: { points: ReturnType<typeof buildVolumeTrend>; loading: boolean; className?: string }) { const max = Math.max(1, ...points.flatMap((point) => [point.delivery, point.pickup])); const delivery = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.delivery / max * 78}`).join(" "); const pickup = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.pickup / max * 78}`).join(" "); const firstDate = points[0]?.date; const lastDate = points[points.length - 1]?.date; return <article className={cn("min-h-72 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-950">Volume theo ngày</h3><p className="mt-1 text-sm text-slate-500">Tổng đơn từ dữ liệu volume đã import.</p></div><div className="flex gap-3 text-xs text-slate-600"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-blue-600" />Delivery</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-violet-500" />Pickup</span></div></div><div className={cn("mt-6 h-44", loading && "animate-pulse rounded bg-slate-50")}><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="Xu hướng volume delivery và pickup"><line x1="0" y1="92" x2="100" y2="92" stroke="var(--color-rule)" /><polyline points={delivery} fill="none" stroke="var(--color-chart-1)" strokeWidth="2" vectorEffect="non-scaling-stroke" /><polyline points={pickup} fill="none" stroke="var(--color-chart-7)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div><div className="flex justify-between text-xs text-slate-400"><span>{firstDate ? formatDate(firstDate) : ""}</span><span>{lastDate ? formatDate(lastDate) : ""}</span></div></article>; }
+export function TrendChart({ points, loading, className }: { points: ReturnType<typeof buildVolumeTrend>; loading: boolean; className?: string }) { const max = Math.max(1, ...points.flatMap((point) => [point.delivery, point.pickup])); const delivery = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.delivery / max * 78}`).join(" "); const pickup = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.pickup / max * 78}`).join(" "); const firstDate = points[0]?.date; const lastDate = points[points.length - 1]?.date; return <article className={cn("min-h-72 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-950">Volume theo ngày</h3><p className="mt-1 text-sm text-slate-500">Tổng đơn từ dữ liệu volume đã import.</p></div><div className="flex gap-3 text-xs text-slate-600"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-chart-1)]" />Delivery</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-chart-7)]" />Pickup</span></div></div><div className={cn("mt-6 h-44", loading && "animate-pulse rounded bg-slate-50")}><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="Xu hướng volume delivery và pickup"><line x1="0" y1="92" x2="100" y2="92" stroke="var(--color-rule)" /><polyline points={delivery} fill="none" stroke="var(--color-chart-1)" strokeWidth="2" vectorEffect="non-scaling-stroke" /><polyline points={pickup} fill="none" stroke="var(--color-chart-7)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div><div className="flex justify-between text-xs text-slate-400"><span>{firstDate ? formatDate(firstDate) : ""}</span><span>{lastDate ? formatDate(lastDate) : ""}</span></div></article>; }
 
 export function WeeklyVolumeTrendWithDailyBars({ data, defaultWeeksRange = 4, loading, className }: { data: DailyVolumeRecord[]; defaultWeeksRange?: number; loading: boolean; className?: string }) {
   const [weeksRange, setWeeksRange] = useState(defaultWeeksRange);
@@ -576,15 +541,15 @@ export function WeeklyVolumeTrendWithDailyBars({ data, defaultWeeksRange = 4, lo
   const plotHeight = plotBottom - plotTop;
   const dayStep = plotWidth / Math.max(1, chart.days.length);
   const barWidth = Math.max(3, dayStep * 0.62);
-  const dailyMax = Math.max(1, ...chart.days.map((day) => day.total));
-  const weeklyMax = Math.max(1, ...chart.weeks.map((week) => week.total));
+  const dailyMax = Math.max(2, ...chart.days.map((day) => day.total));
+  const weeklyMax = Math.max(2, ...chart.weeks.map((week) => week.total));
   const weeklyLine = chart.weeks.map((week, index) => `${plotLeft + (index * 7 + 3.5) * dayStep},${plotBottom - week.total / weeklyMax * plotHeight}`).join(" ");
 
-  return <article className={cn("min-h-[430px] rounded-xl border border-slate-200 bg-white p-4", className)}>
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="font-semibold tracking-tight text-slate-950">Weekly Volume Trend — <span className="text-[var(--color-accent)]">Daily × Weekly</span></h3><p className="mt-1 text-xs text-slate-500">Mỗi cột là một ngày · đường là tổng tuần</p></div><div className="inline-flex self-start rounded-lg bg-slate-100 p-1"><button type="button" aria-pressed={weeksRange === 4} onClick={() => setWeeksRange(4)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold transition", weeksRange === 4 ? "bg-white text-[var(--color-accent)] shadow-sm" : "text-slate-600 hover:text-slate-900")}>4 tuần</button><button type="button" aria-pressed={weeksRange === 8} onClick={() => setWeeksRange(8)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold transition", weeksRange === 8 ? "bg-white text-[var(--color-accent)] shadow-sm" : "text-slate-600 hover:text-slate-900")}>8 tuần</button></div></div>
-    <div className="mt-4 flex flex-wrap items-center gap-2"><button type="button" aria-pressed={showBars} onClick={() => setShowBars((value) => !value)} className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", showBars ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]" : "bg-slate-100 text-slate-500")}><span className="size-2 rounded-sm bg-[var(--color-accent)]" />Daily volume</button><button type="button" aria-pressed={showLine} onClick={() => setShowLine((value) => !value)} className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", showLine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500")}><span className="h-0.5 w-3 bg-current" />Weekly total</button><span className="ml-auto text-xs text-slate-400">Cột: trục trái · Đường: trục phải</span></div>
+  return <article className={cn("dash-trend-panel min-h-[350px] rounded-xl border border-slate-200 bg-white p-4", className)}>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="font-semibold tracking-tight text-slate-950">Sản lượng theo thời gian</h3><p className="mt-1 text-xs text-slate-500">Mỗi cột là một ngày · đường là tổng tuần</p></div><div className="inline-flex self-start rounded-lg bg-slate-100 p-1"><button type="button" aria-pressed={weeksRange === 4} onClick={() => setWeeksRange(4)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold transition", weeksRange === 4 ? "bg-white text-[var(--color-accent)] shadow-sm" : "text-slate-600 hover:text-slate-900")}>4 tuần</button><button type="button" aria-pressed={weeksRange === 8} onClick={() => setWeeksRange(8)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold transition", weeksRange === 8 ? "bg-white text-[var(--color-accent)] shadow-sm" : "text-slate-600 hover:text-slate-900")}>8 tuần</button></div></div>
+    <div className="mt-4 flex flex-wrap items-center gap-2"><button type="button" aria-pressed={showBars} onClick={() => setShowBars((value) => !value)} className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", showBars ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]" : "bg-slate-100 text-slate-500")}><span className="size-2 rounded-sm bg-[var(--color-accent)]" />Theo ngày</button><button type="button" aria-pressed={showLine} onClick={() => setShowLine((value) => !value)} className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", showLine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500")}><span className="h-0.5 w-3 bg-current" />Tổng tuần</button><span className="ml-auto text-xs text-slate-400">Cột: trục trái · Đường: trục phải</span></div>
     <div className={cn("relative mt-4 overflow-hidden", loading && "animate-pulse rounded bg-slate-50")} onMouseLeave={() => setHovered(null)}>
-      <svg viewBox={`0 0 ${width} 300`} className="h-[300px] w-full" role="img" aria-label="Biểu đồ volume ngày và tổng tuần">
+      <svg viewBox={`0 0 ${width} 300`} className="h-[240px] w-full" role="img" aria-label="Biểu đồ volume ngày và tổng tuần">
         {[0, 0.5, 1].map((ratio) => <g key={ratio}><line x1={plotLeft} y1={plotBottom - ratio * plotHeight} x2={plotRight} y2={plotBottom - ratio * plotHeight} stroke="var(--color-rule)" strokeDasharray={ratio === 0 ? undefined : "3 4"} /><text x={plotLeft - 6} y={plotBottom - ratio * plotHeight + 4} textAnchor="end" fontSize="10" fill="var(--color-muted)">{compactVolume(Math.round(dailyMax * ratio))}</text><text x={plotRight + 6} y={plotBottom - ratio * plotHeight + 4} fontSize="10" fill="var(--color-muted)">{compactVolume(Math.round(weeklyMax * ratio))}</text></g>)}
         {chart.weeks.map((week, index) => { const x = plotLeft + index * 7 * dayStep; const highlighted = week.isCurrent || week.isPeak; return <g key={week.key}><rect x={x} y={plotTop} width={dayStep * 7} height={plotHeight} fill={highlighted ? "var(--color-accent-soft)" : index % 2 ? "var(--color-paper-2)" : "transparent"} opacity={highlighted ? 0.9 : 0.65} />{index > 0 ? <line x1={x} y1={plotTop} x2={x} y2={plotBottom + 28} stroke="var(--color-rule-strong)" strokeDasharray="3 4" /> : null}<text x={x + dayStep * 3.5} y={plotBottom + 38} textAnchor="middle" fontSize="11" fontWeight="600" fill={highlighted ? "var(--color-accent)" : "var(--color-muted)"}>{week.label}</text>{week.change !== null ? <text x={x + dayStep * 3.5} y={plotTop + 12} textAnchor="middle" fontSize="9" fontWeight="600" fill={week.change >= 0 ? "var(--color-success)" : "var(--color-error)"}>{week.change >= 0 ? "+" : ""}{week.change.toFixed(0)}%</text> : null}</g>; })}
         {showBars ? chart.days.map((day, index) => { const x = plotLeft + index * dayStep + (dayStep - barWidth) / 2; const deliveryHeight = day.delivery / dailyMax * plotHeight; const pickupHeight = day.pickup / dailyMax * plotHeight; return <g key={day.date} tabIndex={0} role="img" aria-label={`${formatFullDate(day.date)}: ${day.total} đơn`} onFocus={() => setHovered({ kind: "day", x: (x + barWidth / 2) / width * 100, title: formatFullDate(day.date), value: day.total, detail: `${day.weekLabel} · Delivery ${day.delivery.toLocaleString("vi-VN")} · Pickup ${day.pickup.toLocaleString("vi-VN")}` })} onBlur={() => setHovered(null)} onMouseEnter={() => setHovered({ kind: "day", x: (x + barWidth / 2) / width * 100, title: formatFullDate(day.date), value: day.total, detail: `${day.weekLabel} · Delivery ${day.delivery.toLocaleString("vi-VN")} · Pickup ${day.pickup.toLocaleString("vi-VN")}` })}><rect x={x} y={plotBottom - deliveryHeight} width={barWidth} height={deliveryHeight} rx="2" fill="var(--color-chart-1)" /><rect x={x} y={plotBottom - deliveryHeight - pickupHeight} width={barWidth} height={pickupHeight} rx="2" fill="var(--color-chart-7)" /><rect x={x - dayStep * 0.18} y={plotTop} width={dayStep * 1.36} height={plotHeight} fill="transparent" /></g>; }) : null}
@@ -596,18 +561,20 @@ export function WeeklyVolumeTrendWithDailyBars({ data, defaultWeeksRange = 4, lo
   </article>;
 }
 
-function VolumeAnalyticsChart({ analytics, grouping, loading, className }: { analytics: ReturnType<typeof buildVolumeAnalytics>; grouping: VolumeGrouping; loading: boolean; className?: string }) { const points = analytics.points; const max = Math.max(1, ...points.flatMap((point) => [point.delivery, point.pickup])); const delivery = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.delivery / max * 78}`).join(" "); const pickup = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.pickup / max * 78}`).join(" "); return <article className={cn("min-h-80 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-950">Xu hướng theo {grouping === "week" ? "tuần" : "tháng"}</h3><p className="mt-1 text-sm text-slate-500">Tổng volume và cơ cấu theo nguồn đơn.</p></div><div className="flex gap-3 text-xs text-slate-600"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-blue-600" />Delivery</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-violet-500" />Pickup</span></div></div><div className={cn("mt-6 h-52", loading && "animate-pulse rounded bg-slate-50")}><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="Xu hướng volume theo thời gian"><line x1="0" y1="92" x2="100" y2="92" stroke="var(--color-rule)" /><line x1="0" y1="52" x2="100" y2="52" stroke="var(--color-rule)" strokeDasharray="2 2" /><polyline points={delivery} fill="none" stroke="var(--color-chart-1)" strokeWidth="2" vectorEffect="non-scaling-stroke" /><polyline points={pickup} fill="none" stroke="var(--color-chart-7)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div><div className="mt-2 flex justify-between text-xs text-slate-400"><span>{points[0]?.label ?? ""}</span><span>{points[points.length - 1]?.label ?? ""}</span></div></article>; }
+function VolumeAnalyticsChart({ analytics, grouping, loading, className }: { analytics: ReturnType<typeof buildVolumeAnalytics>; grouping: VolumeGrouping; loading: boolean; className?: string }) { const points = analytics.points; const max = Math.max(1, ...points.flatMap((point) => [point.delivery, point.pickup])); const delivery = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.delivery / max * 78}`).join(" "); const pickup = points.map((point, index) => `${points.length > 1 ? index / (points.length - 1) * 100 : 0},${92 - point.pickup / max * 78}`).join(" "); return <article className={cn("min-h-80 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-950">Xu hướng theo {grouping === "week" ? "tuần" : "tháng"}</h3><p className="mt-1 text-sm text-slate-500">Tổng volume và cơ cấu theo nguồn đơn.</p></div><div className="flex gap-3 text-xs text-slate-600"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-chart-1)]" />Delivery</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-chart-7)]" />Pickup</span></div></div><div className={cn("mt-6 h-52", loading && "animate-pulse rounded bg-slate-50")}><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="Xu hướng volume theo thời gian"><line x1="0" y1="92" x2="100" y2="92" stroke="var(--color-rule)" /><line x1="0" y1="52" x2="100" y2="52" stroke="var(--color-rule)" strokeDasharray="2 2" /><polyline points={delivery} fill="none" stroke="var(--color-chart-1)" strokeWidth="2" vectorEffect="non-scaling-stroke" /><polyline points={pickup} fill="none" stroke="var(--color-chart-7)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div><div className="mt-2 flex justify-between text-xs text-slate-400"><span>{points[0]?.label ?? ""}</span><span>{points[points.length - 1]?.label ?? ""}</span></div></article>; }
 
 function VolumeComparisonCard({ analytics }: { analytics: ReturnType<typeof buildVolumeAnalytics> }) {
   const positive = analytics.change >= 0;
+  const comparable = analytics.previous > 0;
+  const unchanged = analytics.change === 0;
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4">
+    <article className="dash-comparison-panel rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-xs font-bold tracking-wide text-slate-500">So với kỳ trước</p>
       <div className="mt-3 flex items-end justify-between gap-3">
-        <p className={cn("text-3xl font-black tabular-nums tracking-tight", positive ? "text-emerald-600" : "text-red-600")}>
-          {positive ? "+" : ""}{analytics.change.toFixed(1)}%
+        <p className={cn("ops-comparison-value", !comparable && "is-missing", !comparable || unchanged ? "text-slate-900" : positive ? "text-emerald-700" : "text-red-700")}>
+          {comparable ? `${positive && !unchanged ? "+" : ""}${analytics.change.toFixed(1)}%` : "Chưa có kỳ so sánh"}
         </p>
-        <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", positive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>{positive ? "Tăng" : "Giảm"}</span>
+        {comparable && !unchanged ? <span className="text-xs text-slate-500">{positive ? "Tăng" : "Giảm"}</span> : null}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
         <div>
@@ -618,34 +585,6 @@ function VolumeComparisonCard({ analytics }: { analytics: ReturnType<typeof buil
           <p className="text-xs text-slate-500">Kỳ trước</p>
           <p className="mt-1 text-sm font-bold tabular-nums text-slate-900">{analytics.previous.toLocaleString("vi-VN")}</p>
         </div>
-      </div>
-    </article>
-  );
-}
-
-function ProgressChart({ delivered, delivering, failed, className }: { delivered: number; delivering: number; failed: number; className?: string }) {
-  const values = [
-    { label: "Delivered", value: delivered, color: "bg-emerald-500" },
-    { label: "Delivering", value: delivering, color: "bg-blue-600" },
-    { label: "Failed", value: failed, color: "bg-red-500" },
-  ];
-  const max = Math.max(1, ...values.map((item) => item.value));
-  return (
-    <article className={cn("min-h-72 rounded-xl border border-slate-200 bg-white p-4", className)}>
-      <h3 className="font-semibold text-slate-900">Delivery status</h3>
-      <p className="mt-1 text-sm text-slate-500">Latest daily snapshot · KV1-KV6</p>
-      <div className="mt-7 space-y-5">
-        {values.map((item) => (
-          <div key={item.label}>
-            <div className="mb-1.5 flex justify-between text-sm">
-              <span className="text-slate-600">{item.label}</span>
-              <strong className="tabular-nums text-slate-900">{item.value.toLocaleString("vi-VN")}</strong>
-            </div>
-            <div className="h-2 rounded-full bg-slate-100">
-              <div className={cn("h-full rounded-full", item.color)} style={{ width: `${(item.value / max) * 100}%` }} />
-            </div>
-          </div>
-        ))}
       </div>
     </article>
   );
@@ -670,7 +609,7 @@ function buildSummary(state: DashboardState, range: { start: string; end: string
 function buildAreaBreakdown(state: DashboardState, range: { start: string; end: string }) {
   const riderByCode = new Map(state.riders.map((rider) => [normalizeRiderCode(rider.rider_code), rider]));
   const zero = (): AreaTotals => ({ deliveryVolume: 0, pickupVolume: 0, assigned: 0, delivered: 0, delivering: 0, failed: 0 });
-  const totals: AreaBreakdown = { kv5: zero(), kv6: zero() };
+  const totals = Object.fromEntries(OPERATING_AREAS.map((area) => [area, zero()])) as AreaBreakdown;
 
   const inRange = (row: VolumeRow) => {
     const date = row.report_date?.slice(0, 10);
@@ -680,19 +619,19 @@ function buildAreaBreakdown(state: DashboardState, range: { start: string; end: 
   for (const row of state.delivery.filter(inRange)) {
     const area = kvAreaOf(row);
     if (!area) continue;
-    (area === 5 ? totals.kv5 : totals.kv6).deliveryVolume += row.total_orders ?? 1;
+    totals[`KV${area}`].deliveryVolume += row.total_orders ?? 1;
   }
   for (const row of state.pickup.filter(inRange)) {
     const area = kvAreaOf(row);
     if (!area) continue;
-    (area === 5 ? totals.kv5 : totals.kv6).pickupVolume += row.total_orders ?? 1;
+    totals[`KV${area}`].pickupVolume += row.total_orders ?? 1;
   }
   for (const row of state.realtime) {
     if (row.work_date.slice(0, 10) !== range.end) continue;
     const rider = riderByCode.get(normalizeRiderCode(row.driver_id));
     const area = kvNumber(rider?.kv);
     if (!area) continue;
-    const target = area === 5 ? totals.kv5 : totals.kv6;
+    const target = totals[`KV${area}`];
     target.assigned += row.total_assigned;
     target.delivered += row.delivered;
     target.delivering += row.delivering;
@@ -725,7 +664,7 @@ function buildDistrictAverages(rows: VolumeRow[], endDate: string) {
   return { rows: rowsByDistrict, dayCount, monthLabel: `Tháng ${endDate.slice(5, 7)}/${endDate.slice(0, 4)}` };
 }
 
-function buildAlerts(state: DashboardState, summary: ReturnType<typeof buildSummary>) { const alerts: Array<{ title: string; description: string; severity: "critical" | "warning"; href: string }> = []; if (state.returnOverdue.totalOrders > 0) alerts.push({ title: `${state.returnOverdue.totalOrders} đơn trả quá 48 giờ`, description: `${state.returnOverdue.riders.length} rider đang giữ đơn nhưng chưa quét bàn giao trả.`, severity: "critical", href: "/return-orders?status=returning&sort=aging_desc&page=1&pageSize=50" }); if (state.returnOverdue.missingStartedAt > 0) alerts.push({ title: `${state.returnOverdue.missingStartedAt} đơn trả thiếu mốc thời gian`, description: "Chưa thể xác định các đơn này có vượt 48 giờ hay không.", severity: "warning", href: "/return-orders?status=returning&page=1&pageSize=50" }); if (summary.failed > 0) alerts.push({ title: `${summary.failed} Failed deliveries`, description: "Kiểm tra rider và quận trong snapshot KV5/KV6 mới nhất.", severity: "critical", href: "/realtime-dashboard" }); if (summary.idleRiders > 0) alerts.push({ title: `${summary.idleRiders} riders idle trên 1 giờ`, description: "Rider vẫn còn đơn Delivering nhưng không có tiến triển.", severity: "critical", href: "/realtime-dashboard" }); return alerts; }
+function buildAlerts(state: DashboardState, summary: ReturnType<typeof buildSummary>) { const alerts: Array<{ title: string; description: string; severity: "critical" | "warning"; href: string }> = []; if (state.returnOverdue.totalOrders > 0) alerts.push({ title: `${state.returnOverdue.totalOrders} đơn trả quá 48 giờ`, description: `${state.returnOverdue.riders.length} rider đang giữ đơn nhưng chưa quét bàn giao trả.`, severity: "critical", href: "/return-orders?status=returning&sort=aging_desc&page=1&pageSize=50" }); if (state.returnOverdue.missingStartedAt > 0) alerts.push({ title: `${state.returnOverdue.missingStartedAt} đơn trả thiếu mốc thời gian`, description: "Chưa thể xác định các đơn này có vượt 48 giờ hay không.", severity: "warning", href: "/return-orders?status=returning&page=1&pageSize=50" }); if (summary.failed > 0) alerts.push({ title: `${summary.failed} Failed deliveries`, description: "Kiểm tra rider và quận trong snapshot KV1–KV5 mới nhất.", severity: "critical", href: "/realtime-dashboard" }); if (summary.idleRiders > 0) alerts.push({ title: `${summary.idleRiders} riders idle trên 1 giờ`, description: "Rider vẫn còn đơn Delivering nhưng không có tiến triển.", severity: "critical", href: "/realtime-dashboard" }); return alerts; }
 
 function shortDistrictLabel(value: string) {
   const mapped = resolveKvDistrict(value);
@@ -733,23 +672,15 @@ function shortDistrictLabel(value: string) {
   return value.replace(/^Thành phố\s+/i, "TP ").replace(/^Quận\s+/i, "Q. ").replace(/^Huyện\s+/i, "H. ");
 }
 function normalizeRiderCode(value: string) { return value.trim().toUpperCase(); }
-function isKv56(value: string | null | undefined) { return /^(?:(?:kv|khu).*?)?[1-6]$/i.test(normalizeText(value ?? "").replace(/\s+/g, " ")); }
-function kvNumber(value: string | null | undefined): 5 | 6 | null {
-  const match = normalizeText(value ?? "").match(/([1-6])\s*$/);
-  if (!match) return null;
-  return match[1] === "6" ? 6 : 5;
+function isKv56(value: string | null | undefined) { return isOperatingArea(value); }
+function kvNumber(value: string | null | undefined): 1 | 2 | 3 | 4 | 5 | null {
+  const area = normalizeOperatingArea(value);
+  return area ? Number(area.slice(2)) as 1 | 2 | 3 | 4 | 5 : null;
 }
-function normalizeText(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); }
 function resolveKvDistrict(value: string | null | undefined) { const key = compactZoneName(value ?? ""); if (!key) return null; return MAP_DISTRICTS.find((district) => [district.name, district.shortName, district.code, ...district.aliases].some((candidate) => compactZoneName(candidate) === key)) ?? null; }
-function volumeDistrictInfo(row: VolumeRow) { const mapped = resolveKvDistrict(row.district); if (mapped) return { name: mapped.name, shortName: mapped.shortName, area: mapped.area }; const key = compactZoneName(row.district ?? ""); if (["thanhphothuduc", "thuduc", "tpthuduc"].includes(key)) return { name: "Thành phố Thủ Đức", shortName: "TP Thủ Đức", area: "KV5" }; const name = row.district?.trim(); return name && isKv56(row.area) ? { name, shortName: name.replace(/^Thành phố\s+/i, "TP ").replace(/^Quận\s+/i, "Q. ").replace(/^Huyện\s+/i, "H. "), area: normalizeText(row.area ?? "").endsWith("6") ? "KV6" : "KV5" } : null; }
-function isKv56VolumeRow(row: VolumeRow) { return isKv56(row.area) || Boolean(resolveKvDistrict(row.district)); }
-function kvAreaOf(row: VolumeRow): 5 | 6 | null {
-  const fromArea = kvNumber(row.area);
-  if (fromArea) return fromArea;
-  const mapped = resolveKvDistrict(row.district);
-  if (mapped) return mapped.area === "KV6" ? 6 : 5;
-  return null;
-}
+function volumeDistrictInfo(row: VolumeRow) { const area = normalizeOperatingArea(row.area); const name = row.district?.trim(); return area && name ? { name, shortName: shortDistrictLabel(name), area } : null; }
+function isKv56VolumeRow(row: VolumeRow) { return isOperatingArea(row.area); }
+function kvAreaOf(row: VolumeRow) { return kvNumber(row.area); }
 function volumeShare(value: number, total: number) { return total ? `${Math.round(value / total * 100)}%` : "0%"; }
 function getDateRange(range: RangeKey) { const today = new Date(); if (range === "yesterday") { const date = format(subDays(today, 1), "yyyy-MM-dd"); return { start: date, end: date }; } if (range === "7d") return { start: format(subDays(today, 6), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") }; const date = format(today, "yyyy-MM-dd"); return { start: date, end: date }; }
 function dateSequence(start: string, end: string) { const dates: string[] = []; const current = new Date(`${start}T00:00:00Z`); const last = new Date(`${end}T00:00:00Z`); while (current <= last) { dates.push(current.toISOString().slice(0, 10)); current.setUTCDate(current.getUTCDate() + 1); } return dates; }

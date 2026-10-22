@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -86,7 +87,7 @@ export async function GET() {
   const riderCodes = [...new Set(activeRows.map((row) =>
     String(assignments.get(row.shipment_id)?.rider_code || row.return_driver_id || "").trim()).filter(Boolean))];
   const profilesResult = riderCodes.length
-    ? await admin.from("riders").select("rider_code,full_name,kv,cot").in("rider_code", riderCodes)
+    ? await admin.from("riders").select("rider_code,full_name,kv,cot").in("kv", OPERATING_AREAS).in("rider_code", riderCodes)
     : { data: [], error: null };
   if (profilesResult.error) return NextResponse.json({ success: false, error: profilesResult.error.message }, { status: 400 });
   const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.rider_code, profile]));

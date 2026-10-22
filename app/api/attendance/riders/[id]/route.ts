@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,7 +47,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { start, end } = monthRange(parsedMonth.data);
   const { data: rider, error: riderError } = await session.admin
     .from("riders")
-    .select("*")
+    .select("*").in("kv", OPERATING_AREAS)
     .eq("id", parsedId.data)
     .maybeSingle();
 

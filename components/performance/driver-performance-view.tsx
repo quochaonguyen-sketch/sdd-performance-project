@@ -1,5 +1,6 @@
 "use client";
 
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, PackageCheck, RefreshCcw, Search, Truck } from "lucide-react";
@@ -145,16 +146,16 @@ function PageHeader() {
           <BarChart3 size={22} />
         </span>
         <div className="perf-header-copy">
-          <p className="perf-kicker">Rider Operations · KV5/KV6</p>
-          <h1 className="perf-title">Performance Deli / Pick KV5/KV6</h1>
+          <p className="perf-kicker">Rider Operations · KV1–KV5</p>
+          <h1 className="perf-title">Performance Deli / Pick KV1–KV5</h1>
           <p className="perf-desc">
-            Xem sản lượng rider khu 5 và 6 theo ngày, tuần hoặc tháng — có phân trang server-side.
+            Xem sản lượng rider KV1–KV5 theo ngày, tuần hoặc tháng — có phân trang server-side.
           </p>
         </div>
       </div>
       <div className="perf-scope">
         <span>Ngữ cảnh</span>
-        <strong>Chỉ tính rider KV5/KV6 · Tổng hợp theo chu kỳ đã chọn</strong>
+        <strong>Chỉ tính rider KV1–KV5 · Tổng hợp theo chu kỳ đã chọn</strong>
       </div>
     </header>
   );
@@ -257,9 +258,8 @@ function PerformanceFilters({
         <label className="block" htmlFor="performance-kv">
           <span className="perf-field-label">Khu</span>
           <Select id="performance-kv" value={filters.kv} onChange={(event) => changeFilter("kv", event.target.value)} aria-label="Lọc theo khu">
-            <option value="all">KV1-KV6</option>
-            <option value="KV5">KV5</option>
-            <option value="KV6">KV6</option>
+            <option value="all">KV1-KV5</option>
+            {OPERATING_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}
           </Select>
         </label>
 
@@ -354,7 +354,7 @@ function PerformanceKpiCards({
       </div>
       <div className="perf-kpi-context" aria-label="Thông tin dữ liệu đang xem">
         <ContextStat label="Dòng dữ liệu" value={formatNumber(summary.groups)} sub={`Trang ${page}/${pageCount} · ${formatNumber(pageSize)} dòng/trang`} />
-        <ContextStat label="Rider có dữ liệu" value={formatNumber(summary.active_riders)} sub="Chỉ tính rider KV5/KV6" />
+        <ContextStat label="Rider có dữ liệu" value={formatNumber(summary.active_riders)} sub="Chỉ tính rider KV1–KV5" />
       </div>
     </section>
   );
@@ -474,7 +474,7 @@ function RiderPerformanceTable({
   const filterText = useMemo(() => {
     const parts = [
       periodScopeLabel(filters),
-      filters.kv === "all" ? "KV5/KV6" : filters.kv,
+      filters.kv === "all" ? "KV1–KV5" : filters.kv,
       filters.district === "all" ? "Tất cả quận giao" : filters.district,
       filters.ward === "all" ? "Tất cả phường" : filters.ward,
       filters.cot === "all" ? "Tất cả COT" : filters.cot,
@@ -508,7 +508,7 @@ function RiderPerformanceTable({
         ) : null}
 
         <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-left text-sm">
-          <caption className="sr-only">Bảng performance Deli Pick rider KV5 KV6</caption>
+          <caption className="sr-only">Bảng performance Deli Pick rider KV1–KV5</caption>
           <thead className="perf-table-thead">
             <tr>
               <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className="w-[24%]" />
@@ -724,7 +724,7 @@ function ProgressBar({ value }: { value: number | null }) {
 
 function EmptyState({ filters }: { filters: PerformanceFilters }) {
   const scope = [
-    filters.kv === "all" ? "KV5/KV6" : filters.kv,
+    filters.kv === "all" ? "KV1–KV5" : filters.kv,
     filters.district === "all" ? "tất cả quận giao" : filters.district,
     filters.ward === "all" ? "tất cả phường" : filters.ward,
     filters.cot === "all" ? "tất cả COT" : filters.cot,

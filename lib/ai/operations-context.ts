@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeSearch } from "@/lib/gpt-actions/server";
 import { resolveWorkDateScope, type WorkDateScope } from "@/lib/ai/work-date";
@@ -84,7 +85,7 @@ export async function loadAiOperationsContext({
   const [riderResult, attendanceResult, offRequestResult, latestRealtimeResult, deliveryVolumeResult, pickupVolumeResult, sheetOffResult] = await Promise.all([
     admin
       .from("riders")
-      .select("id,rider_code,full_name,kv,cot,status,delivery_district,delivery_ward,pickup_district,pickup_ward")
+      .select("id,rider_code,full_name,kv,cot,status,delivery_district,delivery_ward,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
       .order("rider_code")
       .limit(2000),
     admin
@@ -108,10 +109,10 @@ export async function loadAiOperationsContext({
       .limit(1)
       .maybeSingle(),
     includeVolume
-      ? admin.from("delivery_order").select("district,area,total_orders").gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
+      ? admin.from("delivery_order").select("district,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
       : Promise.resolve({ data: [], error: null }),
     includeVolume
-      ? admin.from("pickup_volume").select("district,area,total_orders").gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
+      ? admin.from("pickup_volume").select("district,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
       : Promise.resolve({ data: [], error: null }),
     fetchOffScheduleFromSheet(dateScope.start, dateScope.end),
   ]);
@@ -497,7 +498,7 @@ function countBy<T>(rows: T[], getLabel: (row: T) => string | null | undefined) 
 }
 
 function summarizeVolume(rows: VolumeRow[]) {
-  const scoped = rows.filter((row) => /(?:^|\D)[1-6](?:\D|$)/.test(normalizeSearch(row.area)));
+  const scoped = rows.filter((row) => /(?:^|\D)[1-5](?:\D|$)/.test(normalizeSearch(row.area)));
   const byDistrict = new Map<string, number>();
   for (const row of scoped) {
     const district = row.district?.trim() || "Chưa xác định";

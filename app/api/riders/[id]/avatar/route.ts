@@ -1,18 +1,15 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageRiders } from "@/lib/auth/permissions";
 
 const BUCKET = "rider-avatars";
 const MAX_AVATAR_SIZE = 3 * 1024 * 1024;
 
 export async function POST(request: Request, context: RouteContext<"/api/riders/[id]/avatar">) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const auth = await getCurrentUserContext();
+  if (!auth) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
@@ -31,14 +28,13 @@ export async function POST(request: Request, context: RouteContext<"/api/riders/
   }
 
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (!canManageRiders(profile?.role)) {
+  if (!canManageRiders(auth.profile.role, auth.profile.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền chỉnh sửa avatar rider" }, { status: 403 });
   }
 
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id, rider_code, avatar_url")
+    .select("id, rider_code, avatar_url").in("kv", OPERATING_AREAS)
     .eq("id", id)
     .maybeSingle();
 

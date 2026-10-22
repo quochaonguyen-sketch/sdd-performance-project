@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   const records = [...recordsByKey.values()];
   const admin = createAdminClient();
   const codes = [...new Set(records.map((item) => item.rider_code))];
-  const { data: riders, error: riderError } = await admin.from("riders").select("id,rider_code").in("rider_code", codes);
+  const { data: riders, error: riderError } = await admin.from("riders").select("id,rider_code").in("kv", OPERATING_AREAS).in("rider_code", codes);
   if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 500 });
   const riderIds = new Map((riders ?? []).map((rider) => [rider.rider_code, rider.id]));
   const missingRiderCodes = codes.filter((code) => !riderIds.has(code));

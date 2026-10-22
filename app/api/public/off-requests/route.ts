@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id,rider_code,status")
+    .select("id,rider_code,status").in("kv", OPERATING_AREAS)
     .ilike("rider_code", parsedCode.data)
     .maybeSingle();
   if (riderError) {
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id,rider_code,full_name,status")
+    .select("id,rider_code,full_name,status").in("kv", OPERATING_AREAS)
     .ilike("rider_code", payload.rider_code)
     .maybeSingle();
 

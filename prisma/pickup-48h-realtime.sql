@@ -1,5 +1,5 @@
 -- Pickup Realtime tables used by /pickup-realtime
--- Run once in Supabase SQL Editor of the KV1-KV6 project.
+-- Run once in Supabase SQL Editor of the KV1-KV5 project.
 -- After this, point the pickup48h job at this project so it can REPLACE snapshots.
 
 create table if not exists public.pickup_48h_summary_groups (

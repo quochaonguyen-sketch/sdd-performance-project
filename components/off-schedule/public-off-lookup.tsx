@@ -53,7 +53,7 @@ export function PublicOffLookup() {
   function changeMonth(nextMonth: Date) { setMonth(nextMonth); if (result) void lookup(riderCode, nextMonth); }
 
   return <main className="off-public-page off-lookup-page">
-    <header className="off-public-header"><a href="/off-lookup" className="off-public-brand" aria-label="Rider Operations"><span><CalendarDays size={20} aria-hidden="true" /></span><div><strong>Rider Operations</strong><small>KV1-KV6 · SDD</small></div></a><a className="off-lookup-register-link" href="/off-registration">Đăng ký lịch OFF</a></header>
+    <header className="off-public-header"><a href="/off-lookup" className="off-public-brand" aria-label="Rider Operations"><span><CalendarDays size={20} aria-hidden="true" /></span><div><strong>Rider Operations</strong><small>KV1-KV5 · SDD</small></div></a><a className="off-lookup-register-link" href="/off-registration">Đăng ký lịch OFF</a></header>
     <section className="off-lookup-shell">
       <div className="off-lookup-intro"><p>OFF LOOKUP</p><h1>Tra cứu lịch OFF</h1><span>Nhập mã rider để xem lịch nghỉ theo tháng.</span></div>
       <form className="off-lookup-form" onSubmit={(event) => { event.preventDefault(); void lookup(); }}><label><span>Mã rider</span><div className="off-lookup-input-row"><input required autoComplete="off" value={riderCode} onChange={(event) => setRiderCode(event.target.value.toUpperCase())} placeholder="VD: 196" /><button type="submit" disabled={loading}>{loading ? "Đang tra" : "Tra cứu"}</button></div></label>{error ? <p className="off-public-error" role="alert">{error}</p> : null}</form>

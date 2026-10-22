@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canManageOperations } from "@/lib/auth/permissions";
@@ -169,7 +170,7 @@ async function findConflicts(
   const riderIds = Array.from(new Set(assignments.map((assignment) => assignment.rider_id)));
   const { data: riders, error: ridersError } = await admin
     .from("riders")
-    .select("id,rider_code,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,status")
+    .select("id,rider_code,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,status").in("kv", OPERATING_AREAS)
     .in("id", riderIds);
   if (ridersError) return ridersError.message;
   const ridersById = new Map((riders ?? []).map((rider) => [rider.id, rider]));

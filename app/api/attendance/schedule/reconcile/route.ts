@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
 
   const riderCodes = Array.from(new Set((rows ?? []).map((row) => row.rider_code).filter(Boolean)));
   const { data: riders, error: riderError } = riderCodes.length
-    ? await session.admin.from("riders").select("rider_code, full_name").in("rider_code", riderCodes)
+    ? await session.admin.from("riders").select("rider_code, full_name").in("kv", OPERATING_AREAS).in("rider_code", riderCodes)
     : { data: [], error: null };
 
   if (riderError) {

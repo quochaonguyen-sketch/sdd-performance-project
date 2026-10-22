@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -257,7 +258,7 @@ export async function GET(request: Request) {
   );
   const { data: riders, error } = await session.admin
     .from("riders")
-    .select("rider_code,full_name")
+    .select("rider_code,full_name").in("kv", OPERATING_AREAS)
     .eq("status", "active")
     .order("kv")
     .order("cot")
@@ -352,7 +353,7 @@ export async function POST(request: Request) {
   for (let index = 0; index < uniqueCodes.length; index += 500) {
     const { data, error } = await session.admin
       .from("riders")
-      .select("id,rider_code")
+      .select("id,rider_code").in("kv", OPERATING_AREAS)
       .in("rider_code", uniqueCodes.slice(index, index + 500));
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });

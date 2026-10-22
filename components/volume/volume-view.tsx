@@ -1,5 +1,6 @@
 "use client";
 
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
@@ -73,14 +74,14 @@ export function VolumeView({ kind }: { kind: VolumeKind }) {
         kind === "delivery"
           ? supabase
               .from(table)
-              .select("summary_id,report_date,old_ward,district,area,cot,total_orders")
+              .select("summary_id,report_date,old_ward,district,area,cot,total_orders").in("area", OPERATING_AREAS)
               .gte("report_date", deliveryRange.start)
               .lte("report_date", deliveryRange.end)
               .order("district")
               .range(offset, offset + PAGE_SIZE - 1)
           : supabase
               .from(table)
-              .select("summary_id,report_date,new_ward,district,area,cot,ma_tuyen,total_orders")
+              .select("summary_id,report_date,new_ward,district,area,cot,ma_tuyen,total_orders").in("area", OPERATING_AREAS)
               .eq("report_date", date)
               .order("district")
               .range(offset, offset + PAGE_SIZE - 1);
@@ -108,7 +109,7 @@ export function VolumeView({ kind }: { kind: VolumeKind }) {
       while (true) {
         const { data, error: comparisonError } = await supabase
           .from(table)
-          .select("summary_id,report_date,old_ward,district,area,cot,total_orders")
+          .select("summary_id,report_date,old_ward,district,area,cot,total_orders").in("area", OPERATING_AREAS)
           .gte("report_date", comparisonRange.start)
           .lte("report_date", comparisonRange.end)
           .order("district")

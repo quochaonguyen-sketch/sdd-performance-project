@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canManageOperations } from "@/lib/auth/permissions";
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
 
   const { data: rider, error: riderError } = await session.admin
     .from("riders")
-    .select("id,rider_code,full_name,cot")
+    .select("id,rider_code,full_name,cot").in("kv", OPERATING_AREAS)
     .eq("rider_code", riderCode)
     .eq("status", "active")
     .maybeSingle();

@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type RiderRow = { id: string; rider_code: string; full_name: string | null; delivery_district: string | null; status: string | null };
@@ -9,7 +10,7 @@ const OFF_STATUSES = new Set(["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED"]);
 export async function reconcileDailyViolations(workDate: string) {
   const admin = createAdminClient();
   const [ridersResult, attendanceResult, realtimeResult] = await Promise.all([
-    admin.from("riders").select("id,rider_code,full_name,delivery_district,status").eq("status", "active"),
+    admin.from("riders").select("id,rider_code,full_name,delivery_district,status").in("kv", OPERATING_AREAS).eq("status", "active"),
     admin.from("attendance_logs").select("rider_code,status,shift,note,raw_data").eq("work_date", workDate),
     admin.from("realtime_delivery_riders").select("driver_id,total_assigned,snapshot_id,snapshot_at").eq("work_date", workDate).order("snapshot_at", { ascending: false }),
   ]);

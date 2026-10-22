@@ -188,7 +188,7 @@ export function PublicOffRegistration() {
           </span>
           <div>
             <strong>Rider Operations</strong>
-            <small>KV1-KV6 · SDD</small>
+            <small>KV1-KV5 · SDD</small>
           </div>
         </a>
         <div className="off-public-secure">

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BarChart3, PackageSearch } from "lucide-react";
+import { BarChart3, PackageSearch, Truck, ListChecks } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { returnViewFrom, type ReturnView } from "@/lib/return-orders/return-orders";
 
-// LITE: chỉ giữ Tổng quan, bỏ Tra cứu / Rider trả / Phân công COT.
 const VIEWS: Array<{ id: ReturnView; href: string; label: string; icon: typeof PackageSearch }> = [
-  { id: "dashboard", href: "/return-orders?view=dashboard", label: "Tổng quan", icon: BarChart3 },
+  { id: "dashboard", href: "/return-orders?view=dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "ledger", href: "/return-orders", label: "Tra cứu", icon: PackageSearch },
+  { id: "rider", href: "/return-orders?view=rider", label: "Rider trả", icon: Truck },
+  { id: "pivot", href: "/return-orders?view=pivot", label: "Phân công COT", icon: ListChecks },
 ];
 
 export function ReturnOrdersSwitcher() {

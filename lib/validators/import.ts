@@ -1,7 +1,10 @@
+import { isOperatingArea, normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { z } from "zod";
 
+const operatingAreaSchema = z.string().refine((value) => !value.trim() || isOperatingArea(value), "KV phải từ KV1 đến KV5").transform((value) => normalizeOperatingArea(value)).optional().nullable();
+
 export const riderImportItemSchema = z.object({
-  kv: z.string().optional().nullable(),
+  kv: operatingAreaSchema,
   home_district: z.string().optional().nullable(),
   cot: z.string().optional().nullable(),
   rider_code: z.string().min(1),
@@ -14,7 +17,7 @@ export const riderImportItemSchema = z.object({
   name: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   zone: z.string().optional().nullable(),
-  area: z.string().optional().nullable(),
+  area: operatingAreaSchema,
   hub: z.string().optional().nullable(),
   status: z.enum(["active", "inactive"]).default("active"),
   shift: z.string().optional().nullable(),
@@ -40,7 +43,7 @@ export const deliveryVolumeImportItemSchema = z.object({
   old_ward: z.string().optional().nullable(),
   ward: z.string().optional().nullable(),
   district: z.string().optional().nullable(),
-  area: z.string().optional().nullable(),
+  area: operatingAreaSchema,
   order_type: z.string().optional().nullable(),
   cot_group: z.string().optional().nullable(),
   raw_data: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -51,7 +54,7 @@ export const pickupVolumeImportItemSchema = z.object({
   report_date: z.coerce.date(),
   new_ward: z.string().optional().nullable(),
   district: z.string().optional().nullable(),
-  area: z.string().optional().nullable(),
+  area: operatingAreaSchema,
   cot: z.string().optional().nullable(),
   ma_tuyen: z.string().optional().nullable(),
   total_orders: z.coerce.number().int().nonnegative().default(0),

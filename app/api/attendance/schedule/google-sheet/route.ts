@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { z } from "zod";
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
   });
 
   const codes = Array.from(new Set(Array.from(records.values(), (item) => item.rider_code)));
-  const { data: riders, error: riderError } = codes.length ? await session.admin.from("riders").select("id,rider_code").in("rider_code", codes) : { data: [], error: null };
+  const { data: riders, error: riderError } = codes.length ? await session.admin.from("riders").select("id,rider_code").in("kv", OPERATING_AREAS).in("rider_code", codes) : { data: [], error: null };
   if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 400 });
   const riderMap = new Map((riders ?? []).map((rider) => [rider.rider_code, rider.id]));
   const missing = codes.filter((code) => !riderMap.has(code));

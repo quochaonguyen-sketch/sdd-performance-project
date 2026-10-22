@@ -1357,7 +1357,7 @@ function isOffStatus(status: string | null | undefined) {
 }
 
 function kvSortRank(kv: string | null | undefined) {
-  const match = normalize(kv).match(/^(?:kv|khu vuc)?\s*([1-6])$/);
+  const match = normalize(kv).match(/^(?:kv|khu vuc)?\s*([1-5])$/);
   if (match?.[1] === "5") return 0;
   if (match?.[1] === "6") return 1;
   return 2;

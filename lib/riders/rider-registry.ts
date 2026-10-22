@@ -1,3 +1,4 @@
+import { isOperatingArea } from "@/lib/locations/operating-areas";
 import "server-only";
 
 import type { RiderRegistryData, RiderRegistryItem } from "@/types";
@@ -70,7 +71,7 @@ export async function getRiderRegistryData(query: RiderRegistryQuery): Promise<R
   const { data: riders, cache } = await getCachedRiderRegistry();
   const normalizedQuery = normalizeLocation(query.query);
   const filtered = riders
-    .filter((rider) => matchesRegistryQuery(rider, query, normalizedQuery))
+    .filter((rider) => isOperatingArea(rider.kv) && matchesRegistryQuery(rider, query, normalizedQuery))
     .sort((a, b) => compareRiders(a, b, query.sortKey) * (query.sortDirection === "asc" ? 1 : -1));
   const pageCount = Math.max(1, Math.ceil(filtered.length / query.pageSize));
   const page = Math.min(query.page, pageCount);
@@ -198,7 +199,7 @@ function uniqueOptions(values: Array<string | null | undefined>) {
 }
 
 function canonicalKv(value: string | null) {
-  const match = normalizeLocation(value).match(/^(?:kv|khu vuc)?\s*([1-6])$/);
+  const match = normalizeLocation(value).match(/^(?:kv|khu vuc)?\s*([1-5])$/);
   return match ? `KV${match[1]}` : value?.trim().toUpperCase() ?? "";
 }
 

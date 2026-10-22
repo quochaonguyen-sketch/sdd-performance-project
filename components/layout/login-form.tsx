@@ -27,20 +27,34 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[radial-gradient(circle_at_top,#dbeafe_0,transparent_38%)] bg-slate-50 px-4 py-8">
-      <section className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-7 shadow-[0_24px_70px_rgba(15,23,42,0.1)]">
-        <AppBrand className="mb-3" />
-        <p className="mb-6 pl-14 text-sm leading-5 text-slate-500">Chỉ đăng nhập Google. Email phải nằm trong danh sách thành viên được admin cấp quyền.</p>
-        <div className="space-y-4">
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+    <main className="ops-login">
+      <section className="ops-login-story" aria-label="Rider Operations">
+        <AppBrand />
+        <div className="ops-login-intro">
+          <p className="ops-login-eyebrow">Không gian vận hành SDD</p>
+          <h2>Mỗi tuyến đường.<br />Một nhịp vận hành.</h2>
+          <p>Delivery, pickup và hàng trả trong cùng một không gian làm việc cho đội ngũ Khu vực 1–5.</p>
+          <div className="ops-route-diagram" aria-hidden="true">
+            <div><span>Bắt đầu</span><strong>Điều phối</strong><i /></div>
+            <div><span>Trong ca</span><strong>Theo dõi</strong><i /></div>
+            <div><span>Kết ca</span><strong>Hoàn tất</strong><i /></div>
+          </div>
+        </div>
+        <AppCopyright />
+      </section>
+      <section className="ops-login-access">
+        <div className="ops-login-form">
+          <p className="ops-login-eyebrow">Dành cho thành viên</p>
+          <h1>Vào ca làm việc</h1>
+          <p className="ops-login-description">Đăng nhập bằng tài khoản Google công ty đã được quản trị viên cấp quyền.</p>
+          {error ? <p role="alert" className="ops-login-error">{error}</p> : null}
           <Button type="button" className="w-full" disabled={loading} onClick={() => void signInWithGoogle()}>
-            <GoogleIcon />
-            {loading ? "Đang chuyển đến Google..." : "Đăng nhập với Google"}
+            <GoogleIcon />{loading ? "Đang chuyển đến Google..." : "Đăng nhập với Google"}
           </Button>
-          <p className="text-center text-xs text-slate-500">Không dùng email/mật khẩu. Chỉ tài khoản <strong>@spxexpress.com</strong> đã được thêm.</p>
+          <p className="ops-login-domain">Tài khoản <strong>@spxexpress.com</strong></p>
+          <div className="ops-login-help"><strong>Chưa có quyền truy cập?</strong><p>Liên hệ quản trị viên để thêm email của bạn vào danh sách thành viên.</p></div>
         </div>
       </section>
-      <AppCopyright className="mt-6" />
     </main>
   );
 }

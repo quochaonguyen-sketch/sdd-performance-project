@@ -1,5 +1,6 @@
 "use client";
 
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useState } from "react";
 import { Map, RefreshCcw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -19,7 +20,7 @@ export function ZonesView() {
 
   const load = useCallback(async () => {
     setError(null);
-    const result = await createClient().from("riders").select(ZONE_RIDER_COLUMNS).order("full_name");
+    const result = await createClient().from("riders").select(ZONE_RIDER_COLUMNS).in("kv", OPERATING_AREAS).order("full_name");
     if (result.error) setError(result.error.message);
     else setRiders((result.data ?? []) as ZoneRider[]);
     setLoading(false);

@@ -3,6 +3,7 @@
  */
 "use client";
 
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CircleAlert, MapPin, Plus, RefreshCcw, Search, ShieldAlert, X } from "lucide-react";
 import type { Rider, RiderViolationRecord } from "@/types";
@@ -36,7 +37,7 @@ export function ViolationsView() {
     setError(null);
     const [response, riderResult] = await Promise.all([
       fetch("/api/violations", { cache: "no-store" }),
-      createClient().from("riders").select("*").eq("status", "active").order("full_name"),
+      createClient().from("riders").select("*").in("kv", OPERATING_AREAS).eq("status", "active").order("full_name"),
     ]);
     const result = (await response.json().catch(() => null)) as ApiResponse | null;
     if (!response.ok || !result?.success) setError(result?.error ?? "Không thể tải vi phạm");
@@ -134,7 +135,7 @@ export function ViolationsView() {
         <div className="min-w-0">
           <div className="dashboard-kicker">
             <span className="dashboard-live-dot" style={{ background: "var(--color-error)" }} />
-            Safety & compliance · KV1-KV6
+            Safety & compliance · KV1-KV5
           </div>
           <h1>Quản lý vi phạm rider</h1>
           <p>Theo dõi, thêm mới và xác nhận xử lý vi phạm vận hành — off đột xuất, off nhưng không off, không lên lấy hàng.</p>
@@ -161,7 +162,7 @@ export function ViolationsView() {
       <div className="dashboard-readout-strip">
         <ShieldAlert size={14} />
         <strong>{filtered.length}/{violations.length} vi phạm</strong>
-        <span>KV1-KV6</span>
+        <span>KV1-KV5</span>
         <span className="dashboard-readout-time">{stats.open} chưa xử lý · {stats.high} mức cao</span>
       </div>
 

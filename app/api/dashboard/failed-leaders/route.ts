@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       sum(coalesce(p.delivery_delivered, 0))::bigint as delivery_delivered
     from public.driver_performance_daily p
     join public.riders r on r.rider_code = p.driver_id
-    where upper(coalesce(r.kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5', 'KV6')
+    where upper(coalesce(r.kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
       and p.report_date between ${start}::date and ${end}::date
     group by p.report_date, p.driver_id
   `;

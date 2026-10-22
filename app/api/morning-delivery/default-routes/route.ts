@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,7 +31,7 @@ export async function PATCH(request: Request) {
 
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id,rider_code,pickup_district,pickup_ward")
+    .select("id,rider_code,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
     .eq("id", parsed.data.rider_id)
     .maybeSingle();
   if (riderError || !rider) {

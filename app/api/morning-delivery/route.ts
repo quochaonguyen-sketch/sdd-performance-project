@@ -1,7 +1,8 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageOperations, canManageRiders } from "@/lib/auth/permissions";
 import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
 import { readPickupReplacementsFromGoogleSheet } from "@/lib/google/pickup-replacements";
@@ -31,15 +32,10 @@ const checkInSchema = z.object({
 });
 
 async function getSession() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
+  const context = await getCurrentUserContext();
+  if (!context) return null;
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return { admin, role: profile?.role ?? "viewer" };
+  return { admin, role: context.profile.role, permissions: context.profile.permissions };
 }
 
 function canEdit(role: string) {
@@ -72,7 +68,7 @@ export async function GET(request: Request) {
   const [riderResult, assignmentResult, attendanceResult, absenceNoteResult, latestRealtimeDeliveryResult, realtime10amResult, pickupReplacementResult] = await Promise.all([
     session.admin
       .from("riders")
-      .select("id,rider_code,full_name,kv,cot,pickup_district,pickup_ward,delivery_district,delivery_ward,status")
+      .select("id,rider_code,full_name,kv,cot,pickup_district,pickup_ward,delivery_district,delivery_ward,status").in("kv", OPERATING_AREAS)
       .eq("status", "active")
       .order("rider_code"),
     session.admin
@@ -200,7 +196,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     can_edit: canEdit(session.role),
-    can_manage_riders: canManageRiders(session.role),
+    can_manage_riders: canManageRiders(session.role, session.permissions),
     riders: cot1Riders,
     assignments: assignmentResult.data ?? [],
     attendance: attendanceResult.data ?? [],
@@ -227,7 +223,7 @@ export async function PUT(request: Request) {
 
   const { data: rider, error: riderError } = await session.admin
     .from("riders")
-    .select("id,rider_code,cot")
+    .select("id,rider_code,cot").in("kv", OPERATING_AREAS)
     .eq("id", parsed.data.rider_id)
     .maybeSingle();
 
@@ -291,7 +287,7 @@ export async function POST(request: Request) {
 
   const { data: rider, error: riderError } = await session.admin
     .from("riders")
-    .select("id,rider_code,full_name,cot,pickup_district,pickup_ward")
+    .select("id,rider_code,full_name,cot,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
     .eq("id", parsed.data.rider_id)
     .maybeSingle();
 

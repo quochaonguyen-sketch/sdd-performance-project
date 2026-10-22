@@ -5,11 +5,11 @@ import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-xl border border-transparent bg-clip-padding text-sm font-semibold leading-5 whitespace-nowrap shadow-sm transition-all duration-150 outline-none select-none focus-visible:ring-4 focus-visible:ring-blue-100 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "ops-button group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium leading-5 whitespace-nowrap transition-colors duration-150 outline-none select-none focus-visible:ring-4 focus-visible:ring-[var(--color-accent-soft)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-blue-600 text-white hover:bg-blue-700",
+        default: "bg-[var(--color-ink)] text-[var(--color-paper)] hover:bg-[var(--color-ink-2)]",
         outline:
           "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700",
         secondary:

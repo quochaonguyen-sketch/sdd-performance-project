@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import type { AttendanceLog, Rider, RiderRegistryItem } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -58,7 +59,7 @@ export async function getCachedRiders() {
   const riders = await fetchAll<Rider>((from, to) =>
     createAdminClient()
       .from("riders")
-      .select("*")
+      .select("*").in("kv", OPERATING_AREAS)
       .order("updated_at", { ascending: false })
       .range(from, to),
   );
@@ -77,7 +78,7 @@ export async function getCachedRiderRegistry() {
   const rows = await fetchAll<RiderRegistryRow>((from, to) =>
     createAdminClient()
       .from("riders")
-      .select(RIDER_REGISTRY_SELECT)
+      .select(RIDER_REGISTRY_SELECT).in("kv", OPERATING_AREAS)
       .order("updated_at", { ascending: false })
       .range(from, to)
       .overrideTypes<RiderRegistryRow[], { merge: false }>(),

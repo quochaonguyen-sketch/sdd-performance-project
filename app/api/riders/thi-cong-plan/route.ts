@@ -1,9 +1,11 @@
+import { normalizeOperatingArea } from "@/lib/locations/operating-areas";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { canManageRiders } from "@/lib/auth/permissions";
 import { readRidersFromThiCongPlan, thiCongPlanConfig } from "@/lib/google/thi-cong-plan";
 import { canonicalDistrictName } from "@/lib/locations/hcm";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { invalidateRidersCache } from "@/lib/cache/operations-cache";
 
 function normalizedDistrict(value: string | null) {
@@ -11,18 +13,16 @@ function normalizedDistrict(value: string | null) {
 }
 
 async function managerSession() {
-  const client = await createClient();
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return null;
+  const context = await getCurrentUserContext();
+  if (!context) return null;
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return { admin, role: profile?.role ?? "viewer" };
+  return { admin, role: context.profile.role, permissions: context.profile.permissions };
 }
 
 export async function GET() {
   const session = await managerSession();
   if (!session) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!canManageRiders(session.role)) {
+  if (!canManageRiders(session.role, session.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ rider" }, { status: 403 });
   }
   return NextResponse.json({ success: true, ...thiCongPlanConfig() });
@@ -31,12 +31,15 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await managerSession();
   if (!session) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!canManageRiders(session.role)) {
+  if (!canManageRiders(session.role, session.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ rider" }, { status: 403 });
   }
 
   try {
     const source = await readRidersFromThiCongPlan(request.signal);
+    const previousCount = source.riders.length;
+    source.riders = source.riders.filter((rider) => normalizeOperatingArea(rider.kv)).map((rider) => ({ ...rider, kv: normalizeOperatingArea(rider.kv) }));
+    source.skipped_rows += previousCount - source.riders.length;
     if (source.riders.length === 0) {
       return NextResponse.json({ success: false, error: "Tab Thi Công Plan không có rider hợp lệ để đồng bộ" }, { status: 400 });
     }
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     for (let index = 0; index < riderCodes.length; index += 500) {
       const { data, error } = await session.admin
         .from("riders")
-        .select("rider_code")
+        .select("rider_code").in("kv", OPERATING_AREAS)
         .in("rider_code", riderCodes.slice(index, index + 500));
       if (error) throw error;
       data?.forEach((rider) => existingCodes.add(rider.rider_code));

@@ -5,6 +5,11 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 type RealtimeTable =
+  | "lmhub_inventory_rows"
+  | "lmhub_fetch_jobs"
+  | "pickup_48h_no_api2"
+  | "pickup_48h_summary_groups"
+  | "pickup_48h_realtime_riders"
   | "riders"
   | "attendance_logs"
   | "zones"

@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
   const [riderResult, assignmentResult, attendanceResult, absenceNoteResult, realtime10amResult, realtimeResult, pickupReplacementResult] = await Promise.all([
     admin
       .from("riders")
-      .select("id,rider_code,full_name,kv,cot,pickup_district,pickup_ward,delivery_district,delivery_ward,status")
+      .select("id,rider_code,full_name,kv,cot,pickup_district,pickup_ward,delivery_district,delivery_ward,status").in("kv", OPERATING_AREAS)
       .eq("status", "active")
       .order("rider_code"),
     admin.from("morning_delivery_assignments").select("rider_id,checked_in_at").eq("work_date", workDate),

@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, Bike, ChevronDown, Columns2, ListChecks, LogOut, Menu, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, Bike, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
-import { AppBrand, AppCopyright } from "@/components/layout/app-brand";
+import { AppBrand, AppCopyright, TransitMark } from "@/components/layout/app-brand";
 import { AppLoadingOverlay } from "@/components/layout/app-loading-overlay";
 import { NavigationPendingIndicator } from "@/components/layout/navigation-pending-indicator";
 import { RouteReveal } from "@/components/layout/route-reveal";
+import { OffRequestNotifications } from "@/components/layout/off-request-notifications";
+import { QuickNoteButton } from "@/components/notes/quick-note-button";
+import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
@@ -17,6 +20,14 @@ const navItems = [
   { href: "/riders", label: "Riders", icon: Bike },
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
+  { href: "/lmhub-inventory", label: "Tồn pickup", icon: PackageOpen },
+  { href: "/inventory-delivery", label: "Tồn delivery", icon: Truck },
+  { href: "/notes", label: "Ghi chú", icon: ListChecks },
+  { href: "/off-schedule", label: "Lịch OFF", icon: ListChecks },
+  { href: "/tasks", label: "Công việc", icon: ListChecks },
+  { href: "/violations", label: "Vi phạm", icon: ListChecks },
+  { href: "/route-sheet", label: "Excel / Google Sheet", icon: ListChecks },
+  { href: "/imports", label: "Nhập dữ liệu", icon: PackagePlus },
   { href: "/settings", label: "Thành viên", icon: UsersRound },
 ];
 
@@ -25,14 +36,24 @@ const volumeItems = [
   { href: "/volume/delivery", label: "Delivery", icon: Truck },
   { href: "/volume/pickup", label: "Pickup", icon: PackagePlus },
 ];
-const pickupItems: Array<{ href: string; view: string | null; label: string; icon: typeof ListChecks }> = [];
+const pickupItems = [
+  { href: "/pickup-management", view: null, label: "Quản lý PUP", icon: ListChecks },
+  { href: "/pickup-management?view=replacement", view: "replacement", label: "Thế pick", icon: Truck },
+];
 const returnItems = [
   { href: "/return-orders?view=dashboard", view: "dashboard", label: "Tổng quan", icon: BarChart3 },
+  { href: "/return-orders", view: null, label: "Tra cứu / gán đơn", icon: PackageSearch },
+  { href: "/return-orders?view=rider", view: "rider", label: "Rider trả", icon: Truck },
+  { href: "/return-orders?view=pivot", view: "pivot", label: "Phân công COT", icon: ListChecks },
 ];
-const toolItems: Array<{ href: string; label: string; icon: typeof PencilRuler }> = [];
+const toolItems = [
+  { href: "/zones", label: "Khu vực", icon: PencilRuler },
+  { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
+];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/performance", "/return-orders", "/volume", "/pickup-realtime", "/settings"];
+const morePaths = ["/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/off-schedule", "/tasks", "/violations", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
+type WorkspaceModule = "operations" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
 
 function getTrustedFrameContext() {
@@ -60,34 +81,50 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
   const workspaceItems = navItems.filter((item) => item.href !== "/settings");
+  const teamPaths = ["/riders", "/notes", "/off-schedule", "/tasks", "/violations"];
+  const dataPaths = ["/route-sheet", "/imports"];
   const systemItems = navItems.filter((item) => item.href === "/settings");
   const moreNavItems = [
     ...volumeItems,
     ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
     ...visiblePickupItems,
+    ...visibleToolItems,
     ...visibleReturnItems,
     ...systemItems,
   ];
-  const volumeActive = pathname.startsWith("/volume");
-  const [volumeOpen, setVolumeOpen] = useState(volumeActive);
   const pickupActive = pathname.startsWith("/pickup-management");
-  const [pickupOpen, setPickupOpen] = useState(pickupActive);
   const returnActive = pathname.startsWith("/return-orders");
-  const [returnOpen, setReturnOpen] = useState(returnActive);
-  const toolsActive = visibleToolItems.some((item) => pathname.startsWith(item.href));
-  const [toolsOpen, setToolsOpen] = useState(toolsActive);
+  const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
+    : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
+    : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
+    : pathname.startsWith("/settings") ? "settings" : "operations";
+  const [moduleSelection, setModuleSelection] = useState<{ pathname: string; module: WorkspaceModule } | null>(null);
+  const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
+  const modules = [
+    { id: "operations" as const, label: "Vận hành", icon: LayoutGrid },
+    { id: "team" as const, label: "Đội ngũ", icon: UsersRound },
+    ...(!memberToolRestricted ? [{ id: "routes" as const, label: "Bản đồ & tuyến", icon: Map }] : []),
+    { id: "data" as const, label: "Excel & dữ liệu", icon: Table2 },
+    { id: "settings" as const, label: "Quản trị", icon: Settings2 },
+  ];
+  const moduleItems = selectedModule === "team" ? workspaceItems.filter((item) => teamPaths.includes(item.href))
+    : selectedModule === "routes" ? visibleToolItems
+    : selectedModule === "data" ? workspaceItems.filter((item) => dataPaths.includes(item.href))
+    : selectedModule === "settings" ? systemItems
+    : workspaceItems.filter((item) => !teamPaths.includes(item.href) && !dataPaths.includes(item.href));
   const moreRouteActive = morePaths.some((path) => pathname.startsWith(path));
   const currentPage = returnActive
     ? returnItems.find((item) => item.view === searchParams.get("view")) ?? returnItems[0]
     : pickupActive
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
-      : [...navItems, ...volumeItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+      : [...navItems, ...volumeItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const splitItems = [...navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href)), ...volumeItems]
     .filter((item) => item.href !== pathname);
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {
-    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
+    const initialTheme = window.setTimeout(() => setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light"), 0);
+    return () => window.clearTimeout(initialTheme);
   }, []);
 
   function toggleTheme() {
@@ -120,53 +157,36 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
 
   return (
     <div className={cn("app-shell-technical", !sidebarOpen && "is-sidebar-collapsed")}>
-      <aside id="operations-sidebar" className="app-sidebar">
-        <div className="app-sidebar-brand"><AppBrand inverse /></div>
-        <div className="app-sidebar-context"><span className="app-live-dot" aria-hidden="true" /><span>Operations workspace</span></div>
-        <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
-          <p className="app-nav-eyebrow">Workspace</p>
-          {workspaceItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
-            return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
-          })}
-          <SidebarDisclosure label="Volume" icon={PackageOpen} open={volumeOpen} active={volumeActive} onToggle={() => setVolumeOpen((current) => !current)}>
-            {volumeItems.map((item) => {
-              const active = pathname === item.href;
-              const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-sub-link", active && "is-active")}><Icon size={15} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
-            })}
-          </SidebarDisclosure>
-          {visiblePickupItems.length > 0 ? <SidebarDisclosure label="Pickup" icon={ListChecks} open={pickupOpen} active={pickupActive} onToggle={() => setPickupOpen((current) => !current)}>
-            {visiblePickupItems.map((item) => {
-              const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
-              const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-sub-link", active && "is-active")}><Icon size={15} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
-            })}
-          </SidebarDisclosure> : null}
-          {visibleReturnItems.length > 0 ? <SidebarDisclosure label="Return" icon={PackageSearch} open={returnOpen} active={returnActive} onToggle={() => setReturnOpen((current) => !current)}>
-            {visibleReturnItems.map((item) => {
-              const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
-              const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-sub-link", active && "is-active")}><Icon size={15} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
-            })}
-          </SidebarDisclosure> : null}
-          {visibleToolItems.length > 0 ? <SidebarDisclosure label="Tools" icon={PencilRuler} open={toolsOpen} active={toolsActive} onToggle={() => setToolsOpen((current) => !current)}>
-            {visibleToolItems.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-sub-link", active && "is-active")}><Icon size={15} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
-            })}
-          </SidebarDisclosure> : null}
-          <p className="app-nav-eyebrow app-nav-eyebrow-secondary">System</p>
-          {systemItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
-            return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
+      <div className="app-navigation" id="operations-sidebar">
+        <nav className="app-module-rail" aria-label="Chọn module">
+          <Link href="/dashboard" className="app-rail-brand" aria-label="Rider Operations — Dashboard"><TransitMark /></Link>
+          {modules.map((module) => {
+            const Icon = module.icon;
+            return <button key={module.id} type="button" title={module.label} aria-label={module.label} aria-pressed={selectedModule === module.id} aria-controls="operations-module-panel" className={cn("app-module-button", selectedModule === module.id && "is-active", module.id === "settings" && "is-settings")} onClick={() => setModuleSelection({ pathname, module: module.id })}><Icon size={19} aria-hidden="true" /><span className="app-module-tooltip" aria-hidden="true">{module.label}</span></button>;
           })}
         </nav>
-        <div className="app-sidebar-foot"><span>SDD · KV1–KV6</span><span>Internal operations · Lite</span></div>
-      </aside>
+        <aside className="app-sidebar" id="operations-module-panel" aria-label={modules.find((module) => module.id === selectedModule)?.label}>
+          <Link href="/dashboard" className="app-sidebar-brand" aria-label="Rider Operations — Dashboard"><AppBrand wordmarkOnly /></Link>
+          <div className="app-sidebar-context"><span>Địa bàn</span><strong>Khu vực 1–5</strong></div>
+          <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
+            <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Không gian vận hành" : modules.find((module) => module.id === selectedModule)?.label}</p>
+            {moduleItems.map((item) => {
+              const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
+              const Icon = item.icon;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
+            })}
+            {selectedModule === "operations" ? <>
+              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Sản lượng</p>
+              {volumeItems.map((item) => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={cn("app-nav-link", pathname === item.href && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+              {visiblePickupItems.length ? <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Quản lý pickup</p> : null}
+              {visiblePickupItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Hàng trả</p>
+              {visibleReturnItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+            </> : null}
+          </nav>
+          <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Khu vực 1–5</span></div>
+        </aside>
+      </div>
 
       <div className="app-shell-content">
         <header className="app-header">
@@ -176,20 +196,22 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
               {sidebarOpen ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
             </button>
             <div className="app-header-context">
-              <p className="app-header-kicker">Rider Operations / Workspace</p>
-              <div className="app-header-title-row"><h1>{currentPage?.label ?? "Operations"}</h1><span className="app-header-status"><span className="app-live-dot" aria-hidden="true" />System ready</span></div>
+              <p className="app-header-kicker">Không gian làm việc <span aria-hidden="true">/</span></p>
+              <div className="app-header-title-row"><span>{currentPage?.label ?? "Operations"}</span></div>
             </div>
           </div>
           <div className="app-header-account">
+            <OllamaChatbox />
+            <OffRequestNotifications />
             <button type="button" className={cn("app-split-toggle", splitOpen && "is-active")} aria-pressed={splitOpen} aria-label={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} title={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} onClick={() => setSplitOpen((current) => !current)}>
               <Columns2 size={17} aria-hidden="true" /><span>{splitOpen ? "Đóng chia màn hình" : "Chia màn hình"}</span>
             </button>
             <button type="button" className="app-theme-toggle" aria-label={theme === "dark" ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"} title={theme === "dark" ? "Giao diện sáng" : "Giao diện tối"} onClick={toggleTheme}>
               {theme === "dark" ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
             </button>
-            <div className="app-account-copy"><strong>{user.fullName ?? user.email}</strong><span>{user.role}</span></div>
-            <RoleBadge role={user.role} />
-            <button type="button" className="app-signout" onClick={() => void signOut()}><LogOut size={15} aria-hidden="true" /><span>Sign out</span></button>
+            <div className="app-account-copy"><strong>{user.fullName ?? user.email}</strong><span>{user.role === "admin" ? "Quản trị viên" : user.role}</span></div>
+
+            <button type="button" className="app-signout" onClick={() => void signOut()}><LogOut size={15} aria-hidden="true" /><span>Đăng xuất</span></button>
           </div>
         </header>
         <main className={cn("app-main", splitOpen && "is-quick-split")}>
@@ -202,11 +224,12 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           </aside> : null}
         </main>
         <footer className="app-footer"><AppCopyright /><p>Rider Ops Console · {currentPage?.label ?? "Operations"}</p></footer>
+        <QuickNoteButton />
       </div>
 
       {moreOpen ? <button type="button" aria-label="Đóng menu" className="app-mobile-scrim" onClick={() => setMoreOpen(false)} /> : null}
       <section className={cn("app-more-sheet", moreOpen && "is-open")} aria-label="Menu chức năng khác" aria-hidden={!moreOpen}>
-        <div className="app-more-heading"><div><span>Navigation index</span><h2>Operations menu</h2></div><button type="button" aria-label="Đóng menu" onClick={() => setMoreOpen(false)}><X size={18} /></button></div>
+        <div className="app-more-heading"><div><span>Rider Operations</span><h2>Chức năng vận hành</h2></div><button type="button" aria-label="Đóng menu" onClick={() => setMoreOpen(false)}><X size={18} /></button></div>
         <div className="app-more-grid">
           {moreNavItems.map((item) => {
             const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
@@ -214,7 +237,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             return <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={cn("app-more-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
           })}
         </div>
-        <button type="button" onClick={() => void signOut()} className="app-more-signout"><LogOut size={17} />Sign out</button>
+        <button type="button" onClick={() => void signOut()} className="app-more-signout"><LogOut size={17} />Đăng xuất</button>
       </section>
 
       <nav className="app-taskbar" aria-label="Điều hướng nhanh">
@@ -237,15 +260,4 @@ function isNavigationItemActive(item: { href: string; view?: string | null }, pa
   if (itemPath !== pathname && !pathname.startsWith(`${itemPath}/`)) return false;
   if (itemPath !== "/pickup-management" && itemPath !== "/return-orders") return true;
   return (item.view ?? null) === currentView;
-}
-
-function SidebarDisclosure({ label, icon: Icon, open, active, onToggle, children }: { label: string; icon: typeof PackageOpen; open: boolean; active: boolean; onToggle: () => void; children: React.ReactNode }) {
-  return <div className="app-nav-disclosure">
-    <button type="button" aria-expanded={open} onClick={onToggle} className={cn("app-nav-link app-nav-toggle", active && "has-active-child")}><Icon size={17} aria-hidden="true" /><span>{label}</span><ChevronDown size={14} className={cn("app-nav-chevron", open && "is-open")} aria-hidden="true" /></button>
-    {open ? <div className="app-nav-sublist">{children}</div> : null}
-  </div>;
-}
-
-function RoleBadge({ role }: { role: string }) {
-  return <span className="app-role-badge">{role}</span>;
 }

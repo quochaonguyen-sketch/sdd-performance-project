@@ -2,6 +2,7 @@ import { ProtectedPage } from "@/components/layout/protected-page";
 import { Card } from "@/components/ui/card";
 import { MemberManagement } from "@/components/settings/member-management";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { AiConnectionSettings } from "@/components/settings/ai-connection-settings";
 
 export default async function SettingsPage() {
   const context = await getCurrentUserContext();
@@ -16,6 +17,7 @@ export default async function SettingsPage() {
           <p className="mt-1 text-sm text-slate-500">Thêm email được phép đăng nhập Google và chọn quyền từng chức năng.</p>
         </div>
         {isAdmin ? <MemberManagement /> : <Card className="border-amber-200 bg-amber-50"><h2 className="font-bold text-amber-900">Khu vực dành cho Admin</h2><p className="mt-1 text-sm text-amber-800">Tài khoản của bạn không có quyền quản lý thành viên.</p></Card>}
+        <AiConnectionSettings />
       </div>
     </ProtectedPage>
   );

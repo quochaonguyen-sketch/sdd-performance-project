@@ -484,7 +484,7 @@ export const ReturnPivotBoard = memo(function ReturnPivotBoard({ data }: ReturnP
                         </div>
                       </div>
                     </td>
-                    <td data-label="KV"><span className={cn("return-pivot-kv", rider.kv === "KV5" ? "is-kv5" : rider.kv === "KV6" ? "is-kv6" : "is-none")}>{kvLabel(rider.kv)}</span></td>
+                    <td data-label="KV"><span className={cn("return-pivot-kv", "is-kv5")}>{kvLabel(rider.kv)}</span></td>
                     <td data-label="Zone Pick">
                       <div className="return-pivot-zones">
                         {rider.pickupZones.length ? (

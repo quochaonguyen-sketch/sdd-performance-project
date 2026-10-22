@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -105,7 +106,7 @@ export async function GET(request: Request) {
     const [riderResult, latestSnapshotResult] = await Promise.all([
       admin
         .from("riders")
-        .select("id,rider_code,full_name,kv,cot,status,delivery_district,delivery_ward")
+        .select("id,rider_code,full_name,kv,cot,status,delivery_district,delivery_ward").in("kv", OPERATING_AREAS)
         .order("rider_code")
         .limit(2000),
       admin

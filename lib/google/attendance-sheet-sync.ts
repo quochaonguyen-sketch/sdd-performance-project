@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolveOffScheduleSpreadsheetId,
@@ -68,7 +69,7 @@ export async function processAttendanceSheetSync(
   const riderCodes = [...new Set(latest.map((row) => row.rider_code))];
   const { data: riders, error: riderError } = await admin
     .from("riders")
-    .select("rider_code,full_name")
+    .select("rider_code,full_name").in("kv", OPERATING_AREAS)
     .in("rider_code", riderCodes);
   if (riderError) throw new Error(riderError.message);
   const riderNames = new Map((riders ?? []).map((rider) => [rider.rider_code, rider.full_name ?? ""]));

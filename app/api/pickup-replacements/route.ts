@@ -1,7 +1,8 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
 import {
@@ -64,14 +65,14 @@ async function loadLatestPickupWardVolume(
   try {
     const { data: latest } = await admin
       .from("pickup_volume")
-      .select("report_date")
+      .select("report_date").in("area", OPERATING_AREAS)
       .order("report_date", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!latest?.report_date) return { data: [], error: null };
     return admin
       .from("pickup_volume")
-      .select("district,new_ward,total_orders")
+      .select("district,new_ward,total_orders").in("area", OPERATING_AREAS)
       .eq("report_date", latest.report_date)
       .limit(10_000);
   } catch {
@@ -80,18 +81,16 @@ async function loadLatestPickupWardVolume(
 }
 
 async function session() {
-  const client = await createClient();
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return null;
+  const context = await getCurrentUserContext();
+  if (!context) return null;
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return { user, role: profile?.role ?? "viewer", admin };
+  return { user: context.user, role: context.profile.role, permissions: context.profile.permissions, admin };
 }
 
 export async function GET(request: Request) {
   const auth = await session();
   if (!auth) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  if (!canAccessPickupManagement(auth.role)) {
+  if (!canAccessPickupManagement(auth.role, auth.permissions)) {
     return NextResponse.json({ success: false, error: "Không có quyền xem Pickup Management" }, { status: 403 });
   }
 
@@ -113,7 +112,7 @@ export async function GET(request: Request) {
       .gte("work_date", start)
       .lte("work_date", end)
       .order("work_date"),
-    auth.admin.from("riders").select("id,rider_code,full_name").eq("status", "active"),
+    auth.admin.from("riders").select("id,rider_code,full_name").in("kv", OPERATING_AREAS).eq("status", "active"),
     auth.admin
       .from("pickup_replacements")
       .select("rider_code,replacement_rider_code")
@@ -229,7 +228,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const auth = await session();
   if (!auth) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  if (!canAccessPickupManagement(auth.role)) {
+  if (!canAccessPickupManagement(auth.role, auth.permissions)) {
     return NextResponse.json({ success: false, error: "Không có quyền xem Pickup Management" }, { status: 403 });
   }
   if (auth.role !== "admin" && auth.role !== "leader") {
@@ -246,7 +245,7 @@ export async function PUT(request: Request) {
   );
   const { data: riders, error: riderError } = await auth.admin
     .from("riders")
-    .select("id,rider_code,full_name")
+    .select("id,rider_code,full_name").in("kv", OPERATING_AREAS)
     .in("id", riderIds)
     .eq("status", "active");
   if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 400 });

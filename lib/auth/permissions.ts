@@ -16,7 +16,7 @@ export const PERMISSION_OPTIONS: Array<{ key: PermissionKey; label: string; hint
   { key: "manage_return", label: "Return", hint: "Tổng quan hàng trả" },
   { key: "manage_volume", label: "Volume", hint: "Sản lượng delivery / pickup" },
   { key: "manage_performance", label: "Performance", hint: "Xem và xử lý hiệu suất" },
-  { key: "manage_pickup", label: "Pickup Realtime", hint: "Theo dõi pickup KV1–KV6" },
+  { key: "manage_pickup", label: "Pickup Realtime", hint: "Theo dõi pickup KV1–KV5" },
 ];
 
 const EMPTY_PERMISSIONS = Object.fromEntries(PERMISSION_OPTIONS.map((item) => [item.key, false])) as MemberPermissions;
@@ -55,4 +55,8 @@ export function canManageReturn(role: string | null | undefined, permissions?: M
 export function canAccessPickupManagement(role: string | null | undefined, permissions?: MemberPermissions | null) {
   if (role === "admin") return true;
   return Boolean(permissions?.manage_pickup);
+}
+
+export function canManageOperations(role: string | null | undefined) {
+  return role === "admin" || role === "leader" || role === "member";
 }

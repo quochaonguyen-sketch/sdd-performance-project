@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 /* Hallmark · component: return-dashboard-board · genre: modern-minimal · theme: Cobalt adapted
  * pre-emit critique: P5 H5 E5 S5 R5 V5 · contrast: pass (40-41) · tokens: pass (48)
  * mobile: pass (34, 49–57)
@@ -105,7 +106,7 @@ export function ReturnDashboardBoard({ data }: { data: ReturnDashboardData }) {
           <div>
             <small>Khu vực</small>
             <strong>
-              {data.kv.kv5 + data.kv.kv6 > 0 ? `KV5 ${data.kv.kv5} · KV6 ${data.kv.kv6}` : `${data.districts.length} quận`}
+              {OPERATING_AREAS.map((area) => `${area} ${data.kv[area]}`).join(" · ")}
             </strong>
             <span>{data.zones.length} zone trả · {data.wards.length} phường top</span>
           </div>

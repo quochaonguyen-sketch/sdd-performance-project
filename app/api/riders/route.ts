@@ -1,3 +1,5 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { isOperatingArea, normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canonicalDistrictName } from "@/lib/locations/hcm";
@@ -6,9 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 import { canManageRiders } from "@/lib/auth/permissions";
 import { getCachedRiders, invalidateRidersCache } from "@/lib/cache/operations-cache";
 import { getRiderRegistryData, riderRegistryQueryFromUrl } from "@/lib/riders/rider-registry";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 
 const createRiderSchema = z.object({
-  kv: z.string().trim().optional().nullable(),
+  kv: z.string().trim().refine((value) => !value || isOperatingArea(value), "KV phải từ KV1 đến KV5").transform((value) => normalizeOperatingArea(value)).optional().nullable(),
   home_district: z.string().trim().optional().nullable(),
   cot: z.string().trim().optional().nullable(),
   rider_code: z.string().trim().min(1, "ID is required"),
@@ -39,16 +42,9 @@ async function getSignedInUser() {
 }
 
 async function getRiderManager() {
-  const user = await getSignedInUser();
-  if (!user) return { user: null, allowed: false };
-
-  const { data: profile } = await createAdminClient()
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  return { user, allowed: canManageRiders(profile?.role) };
+  const context = await getCurrentUserContext();
+  if (!context) return { user: null, allowed: false };
+  return { user: context.user, allowed: canManageRiders(context.profile.role, context.profile.permissions) };
 }
 
 export async function GET(request: Request) {
@@ -97,7 +93,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("riders")
-    .select("id")
+    .select("id").in("kv", OPERATING_AREAS)
     .eq("rider_code", rider.rider_code)
     .maybeSingle();
 
@@ -167,7 +163,7 @@ export async function PATCH(request: Request) {
   const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
     .from("riders")
-    .select("id")
+    .select("id").in("kv", OPERATING_AREAS)
     .eq("id", id)
     .maybeSingle();
 
@@ -177,7 +173,7 @@ export async function PATCH(request: Request) {
 
   const { data: duplicate } = await admin
     .from("riders")
-    .select("id")
+    .select("id").in("kv", OPERATING_AREAS)
     .eq("rider_code", rider.rider_code)
     .neq("id", id)
     .maybeSingle();
@@ -235,7 +231,7 @@ export async function DELETE(request: Request) {
   const admin = createAdminClient();
   const parsed = z.object({ id: z.string().uuid() }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Rider không hợp lệ" }, { status: 400 });
-  const { data: rider, error: findError } = await admin.from("riders").select("id,rider_code,full_name").eq("id", parsed.data.id).maybeSingle();
+  const { data: rider, error: findError } = await admin.from("riders").select("id,rider_code,full_name").in("kv", OPERATING_AREAS).eq("id", parsed.data.id).maybeSingle();
   if (findError || !rider) return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
 
   const [attendanceResult, violationResult] = await Promise.all([

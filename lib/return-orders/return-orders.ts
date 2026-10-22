@@ -1,3 +1,4 @@
+import { OPERATING_AREAS, normalizeOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const RETURN_ORDER_DISTRICTS = ["Quận 12", "Quận Gò Vấp", "Quận Bình Thạnh", "Quận 3"] as const;
@@ -150,25 +151,25 @@ async function loadReturnDashboardContext(
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .eq("order_status", 67),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .eq("order_status", 10),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .eq("order_status", 72),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67, 72]),
     supabase
       .from("return_order_snapshots")
@@ -176,7 +177,7 @@ async function loadReturnDashboardContext(
         "shipment_id,shopee_order_sn,return_driver_id,return_driver_name,return_riders_cot1,return_riders_cot2,return_zone,seller_area,seller_district,seller_new_ward,seller_ward,delivering_time",
       )
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .eq("order_status", 72)
       .neq("return_driver_id", ""),
     supabase
@@ -185,24 +186,24 @@ async function loadReturnDashboardContext(
         "shipment_id,shopee_order_sn,return_rider_codes,return_riders_cot1,return_riders_cot2,return_zone,seller_area,seller_district,seller_new_ward,seller_ward",
       )
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67]),
     supabase
       .from("return_order_snapshots")
       .select("seller_district,seller_new_ward,seller_ward")
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67, 72])
       .in("seller_district", [...RETURN_ORDER_DISTRICTS]),
     supabase
       .from("riders")
-      .select("rider_code,full_name,kv,cot"),
+      .select("rider_code,full_name,kv,cot").in("kv", OPERATING_AREAS),
     ...RETURN_ORDER_DISTRICTS.map((district) =>
       supabase
         .from("return_order_snapshots")
         .select("*", { count: "exact", head: true })
         .eq("snapshot_id", snapshotId)
-        .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+        .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
         .in("order_status", [10, 67, 72])
         .eq("seller_district", district),
     ),
@@ -282,7 +283,7 @@ export async function getReturnOrders(filters: ReturnOrderFilters): Promise<Retu
       { count: "exact" },
     )
     .eq("snapshot_id", latest.snapshot_id)
-    .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+    .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
     .in("order_status", [10, 67, 72]);
 
   if (filters.status === "backlog") query = query.in("order_status", [10, 67]);
@@ -610,7 +611,7 @@ export async function getReturnPivotData(): Promise<ReturnPivotData> {
       .from("return_order_snapshots")
       .select("shipment_id,return_driver_id,return_driver_name,return_riders_cot1,return_riders_cot2,create_time,seller_district,seller_ward,seller_new_ward")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67, 72])
       .range(from, from + pageSize - 1);
     if (result.error) throw result.error;
@@ -626,7 +627,7 @@ export async function getReturnPivotData(): Promise<ReturnPivotData> {
 
   const { data: riderProfiles, error: riderError } = await supabase
     .from("riders")
-    .select("rider_code,full_name,kv,cot,delivery_district,delivery_ward,point_name");
+    .select("rider_code,full_name,kv,cot,delivery_district,delivery_ward,point_name").in("kv", OPERATING_AREAS);
   if (riderError) throw riderError;
 
   // Chỉ đếm assignment còn nằm trong snapshot hiện tại (tránh assignment mồ côi)
@@ -753,7 +754,7 @@ export type ReturnAssignData = {
 
 function isKv56Value(value: string | null | undefined) {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim().toUpperCase();
-  return /^(?:(?:KV|KHU)[\s.]*)?[1-6]$/.test(normalized);
+  return /^(?:(?:KV|KHU)[\s.]*)?[1-5]$/.test(normalized);
 }
 
 function splitPickupZones(value: string | null | undefined) {
@@ -777,7 +778,7 @@ export async function getReturnAssignData(): Promise<ReturnAssignData> {
     await Promise.all([
       supabase
         .from("riders")
-        .select("id,rider_code,full_name,cot,kv,zone_id,point_name")
+        .select("id,rider_code,full_name,cot,kv,zone_id,point_name").in("kv", OPERATING_AREAS)
         .eq("status", "active")
         .order("full_name"),
       supabase
@@ -832,7 +833,7 @@ export async function getReturnAssignData(): Promise<ReturnAssignData> {
       .from("return_order_snapshots")
       .select("shipment_id,order_status,seller_district,seller_ward,seller_new_ward,seller_area,return_zone,create_time")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67])
       .order("create_time", { ascending: true, nullsFirst: false })
       .range(from, from + pageSize - 1);
@@ -889,7 +890,7 @@ export type ReturnDashboardData = {
   zones: Array<{ name: string; total: number }>;
   wards: Array<{ district: string; ward: string; total: number }>;
   cot: { cot1: number; cot2: number; unassigned: number };
-  kv: { kv5: number; kv6: number; unknown: number };
+  kv: Record<OperatingArea, number> & { unknown: number };
   aging: { fresh: number; warning: number; danger: number; unknown: number };
   topRiders: Array<{ riderCode: string; riderName: string; kv: string; cot: string; total: number }>;
 };
@@ -915,7 +916,7 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
       zones: [],
       wards: [],
       cot: { cot1: 0, cot2: 0, unassigned: 0 },
-      kv: { kv5: 0, kv6: 0, unknown: 0 },
+      kv: { KV1: 0, KV2: 0, KV3: 0, KV4: 0, KV5: 0, unknown: 0 },
       aging: { fresh: 0, warning: 0, danger: 0, unknown: 0 },
       topRiders: [],
     };
@@ -936,7 +937,7 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
       .from("return_order_snapshots")
       .select("shipment_id,order_status,seller_district,seller_ward,seller_new_ward,return_zone,create_time")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
       .in("order_status", [10, 67, 72])
       .range(from, from + pageSize - 1);
     if (result.error) throw result.error;
@@ -947,7 +948,7 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
 
   const [{ data: assignments, error: assignmentError }, { data: riders, error: riderError }] = await Promise.all([
     supabase.from("return_order_assignments").select("shipment_id,rider_code,cot"),
-    supabase.from("riders").select("rider_code,kv,cot,full_name"),
+    supabase.from("riders").select("rider_code,kv,cot,full_name").in("kv", OPERATING_AREAS),
   ]);
   if (assignmentError) throw assignmentError;
   if (riderError) throw riderError;
@@ -962,7 +963,7 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
   const wardMap = new Map<string, { district: string; ward: string; total: number }>();
   const aging = { fresh: 0, warning: 0, danger: 0, unknown: 0 };
   const cot = { cot1: 0, cot2: 0, unassigned: 0 };
-  const kv = { kv5: 0, kv6: 0, unknown: 0 };
+  const kv = { KV1: 0, KV2: 0, KV3: 0, KV4: 0, KV5: 0, unknown: 0 };
   const riderCounts = new Map<string, { riderCode: string; riderName: string; kv: string; cot: string; total: number }>();
   let assigned = 0;
 
@@ -1000,9 +1001,8 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
       else if (c === "COT2") cot.cot2 += 1;
       else cot.unassigned += 1;
 
-      const k = String(rider?.kv || "").trim().toUpperCase();
-      if (k === "KV5" || k.endsWith("5")) kv.kv5 += 1;
-      else if (k === "KV6" || k.endsWith("6")) kv.kv6 += 1;
+      const k = normalizeOperatingArea(rider?.kv);
+      if (k) kv[k] += 1;
       else kv.unknown += 1;
 
       const key = String(assignment.rider_code).trim();

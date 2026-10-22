@@ -29,7 +29,7 @@ const GUIDE_ROWS = [
   ["1. XÓA 2 dòng mẫu trong sheet Riders, chỉ giữ lại dòng tiêu đề rồi nhập dữ liệu của bạn."],
   ["2. Cột ID là BẮT BUỘC, duy nhất, không được trùng với ID đã có trong hệ thống."],
   ["3. Cột Status chỉ nhận: active hoặc inactive (mặc định active nếu bỏ trống)."],
-  ["4. Cột KV nhận: KV1, KV2, KV3, KV4, KV5, KV6."],
+  ["4. Cột KV nhận: KV1, KV2, KV3, KV4, KV5."],
   ["   KV1: Quận 5, Quận 6, Quận 11, Huyện Bình Chánh."],
   ["   KV2: Quận Tân Bình, Quận Phú Nhuận, Thành phố Thủ Đức."],
   ["   KV3: Quận Bình Tân, Quận Tân Phú, Huyện Bình Chánh."],

@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canManageRiders } from "@/lib/auth/permissions";
@@ -7,7 +8,7 @@ import {
   THI_CONG_PLAN_SHEET_NAME,
 } from "@/lib/google/thi-cong-plan";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { invalidateRidersCache } from "@/lib/cache/operations-cache";
 
 const bodySchema = z.object({
@@ -18,18 +19,16 @@ const bodySchema = z.object({
 });
 
 async function managerSession() {
-  const client = await createClient();
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return null;
+  const context = await getCurrentUserContext();
+  if (!context) return null;
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return { admin, role: profile?.role ?? "viewer" };
+  return { admin, role: context.profile.role, permissions: context.profile.permissions };
 }
 
 export async function PUT(request: Request) {
   const session = await managerSession();
   if (!session) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!canManageRiders(session.role)) {
+  if (!canManageRiders(session.role, session.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ rider" }, { status: 403 });
   }
 
@@ -39,7 +38,7 @@ export async function PUT(request: Request) {
   }
 
   try {
-    let query = session.admin.from("riders").select("kv,home_district,cot,rider_code,full_name,pickup_district,pickup_ward,point_name,delivery_district,delivery_ward,status,updated_at").order("rider_code", { ascending: true });
+    let query = session.admin.from("riders").select("kv,home_district,cot,rider_code,full_name,pickup_district,pickup_ward,point_name,delivery_district,delivery_ward,status,updated_at").in("kv", OPERATING_AREAS).order("rider_code", { ascending: true });
 
     if (parsed.data.kv && parsed.data.kv !== "all") query = query.eq("kv", parsed.data.kv);
     if (parsed.data.cot && parsed.data.cot !== "all") query = query.eq("cot", parsed.data.cot);

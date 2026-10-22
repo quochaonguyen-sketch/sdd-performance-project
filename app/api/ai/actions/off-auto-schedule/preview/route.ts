@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canManageOperations } from "@/lib/auth/permissions";
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
 
   const { data: riders, error: riderError } = await admin
     .from("riders")
-    .select("id,rider_code,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,status")
+    .select("id,rider_code,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward,status").in("kv", OPERATING_AREAS)
     .eq("status", "active")
     .limit(2000);
   if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 500 });

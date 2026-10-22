@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+**/node_modules/
+/.hallmark/route-workbook/
+/.hallmark/build-features.log
 /.pnp
 .pnp.*
 .yarn/*
@@ -40,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local design references and screenshots
+.taste-skill/

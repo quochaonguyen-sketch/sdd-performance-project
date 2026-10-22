@@ -1,3 +1,4 @@
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -101,7 +102,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/off-re
     wardWarning = await findWardOffConflict(admin, offRequest);
   }
 
-  const { data: riderProfile } = await admin.from("riders").select("full_name").eq("id", offRequest.rider_id).maybeSingle();
+  const { data: riderProfile } = await admin.from("riders").select("full_name").in("kv", OPERATING_AREAS).eq("id", offRequest.rider_id).maybeSingle();
   const emailResult: OffRequestEmailResult = offRequest.requester_email
     ? await sendOffRequestDecisionEmail({
         to: offRequest.requester_email,
@@ -138,7 +139,7 @@ async function findWardOffConflict(
 ): Promise<WardConflict | null> {
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id,cot,delivery_district,delivery_ward,pickup_district,pickup_ward")
+    .select("id,cot,delivery_district,delivery_ward,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
     .eq("id", offRequest.rider_id)
     .maybeSingle();
   if (riderError || !rider) return null;
@@ -158,7 +159,7 @@ async function findWardOffConflict(
   const riderIds = Array.from(new Set(sameDate.map((item) => item.rider_id)));
   const { data: riders, error: ridersError } = await admin
     .from("riders")
-    .select("id,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward")
+    .select("id,full_name,cot,delivery_district,delivery_ward,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
     .in("id", riderIds);
   if (ridersError) return null;
   const ridersById = new Map((riders ?? []).map((item) => [item.id, item]));

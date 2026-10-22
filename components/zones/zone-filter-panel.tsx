@@ -1,3 +1,4 @@
+import { OPERATING_AREAS, type OperatingArea } from "@/lib/locations/operating-areas";
 import { ChevronDown, Filter, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -17,8 +18,8 @@ type ZoneFilterPanelProps = {
 };
 
 export function ZoneFilterPanel({ filters, districts, zones, matchingZones, resultCount, open, onOpenChange, onChange, onSelectZone }: ZoneFilterPanelProps) {
-  const districtOptions = districts.filter((district) => filters.area === "all" || district.area === filters.area);
-  const wardOptions = zones.filter((zone) => (filters.area === "all" || zone.area === filters.area) && (filters.districtId === "all" || zone.districtId === filters.districtId));
+  const districtOptions = districts.filter((district) => filters.area === "all" || zones.some((zone) => zone.districtId === district.id && zone.areas.includes(filters.area as OperatingArea)));
+  const wardOptions = zones.filter((zone) => (filters.area === "all" || zone.areas.includes(filters.area)) && (filters.districtId === "all" || zone.districtId === filters.districtId));
   const searchResults = filters.query.trim() ? matchingZones.slice(0, 6) : [];
   const hasFilters = filters.query || filters.area !== "all" || filters.districtId !== "all" || filters.wardId !== "all" || filters.status !== "all";
 
@@ -37,7 +38,7 @@ export function ZoneFilterPanel({ filters, districts, zones, matchingZones, resu
         {searchResults.length > 0 ? <div className="mt-2 space-y-1 rounded-xl border border-slate-100 bg-slate-50 p-1.5">{searchResults.map((zone) => <button key={zone.id} type="button" className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-2 text-left text-xs shadow-sm hover:ring-2 hover:ring-blue-100" onClick={() => onSelectZone(zone.id)}><span className="min-w-0 truncate font-semibold text-slate-800">{zone.name}</span><span className="shrink-0 font-mono text-[10px] text-slate-400">{zone.code}</span></button>)}</div> : null}
 
         <div className="mt-4 space-y-3">
-          <FilterSelect label="Khu" value={filters.area} onChange={(value) => onChange({ ...filters, area: value as ZoneFilters["area"], districtId: "all", wardId: "all" })}><option value="all">Tất cả khu</option><option value="KV5">Khu 5</option><option value="KV6">Khu 6</option></FilterSelect>
+          <FilterSelect label="Khu" value={filters.area} onChange={(value) => onChange({ ...filters, area: value as ZoneFilters["area"], districtId: "all", wardId: "all" })}><option value="all">Tất cả khu</option>{OPERATING_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}</FilterSelect>
           <FilterSelect label="Quận / huyện" value={filters.districtId} onChange={(value) => onChange({ ...filters, districtId: value, wardId: "all" })}><option value="all">Tất cả quận/huyện</option>{districtOptions.map((district) => <option key={district.id} value={district.id}>{district.name}</option>)}</FilterSelect>
           <FilterSelect label="Phường / xã" value={filters.wardId} onChange={(value) => onChange({ ...filters, wardId: value })}><option value="all">Tất cả phường/xã</option>{wardOptions.map((zone) => <option key={zone.id} value={zone.id}>{zone.ward} · {zone.districtName}</option>)}</FilterSelect>
           <FilterSelect label="Trạng thái" value={filters.status} onChange={(value) => onChange({ ...filters, status: value as ZoneFilters["status"] })}><option value="all">Tất cả trạng thái</option><option value="active">Đang hoạt động</option><option value="inactive">Không hoạt động</option><option value="full">Đầy tải</option></FilterSelect>
