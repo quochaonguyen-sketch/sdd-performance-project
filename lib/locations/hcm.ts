@@ -173,6 +173,7 @@ export const hcmDistricts: DistrictDefinition[] = [
   { id: "quan-5", name: "Quận 5", shortName: "Quận 5", aliases: ["5", "quan 5", "q5", "district 5"], wards: [] },
   { id: "quan-6", name: "Quận 6", shortName: "Quận 6", aliases: ["6", "quan 6", "q6", "district 6"], wards: [] },
   { id: "quan-7", name: "Quận 7", shortName: "Quận 7", aliases: ["7", "quan 7", "q7", "district 7"], wards: [] },
+  { id: "quan-8", name: "Quận 8", shortName: "Quận 8", aliases: ["8", "quan 8", "q8", "district 8"], wards: [] },
   { id: "quan-10", name: "Quận 10", shortName: "Quận 10", aliases: ["10", "quan 10", "q10", "district 10"], wards: [] },
   { id: "quan-11", name: "Quận 11", shortName: "Quận 11", aliases: ["11", "quan 11", "q11", "district 11"], wards: [] },
   { id: "tan-binh", name: "Quận Tân Bình", shortName: "Tân Bình", aliases: ["tan binh", "quan tan binh", "q tan binh"], wards: [] },
@@ -185,12 +186,14 @@ export const hcmDistricts: DistrictDefinition[] = [
 
 export const KV_OPTIONS: string[] = [...OPERATING_AREAS];
 
-// Quan/huyen thuoc tung khu vuc. KV1–KV5 giu nguyen danh sach chung (hcmDistricts).
+// District choices follow the approved five-area plan. Bình Chánh and Thủ Đức
+// span areas; volume assignment additionally uses the former ward in the data pipeline.
 export const KV_DISTRICTS: Record<string, string[]> = {
-  KV1: ["Quận 5", "Quận 6", "Quận 11", "Huyện Bình Chánh"],
-  KV2: ["Quận Tân Bình", "Quận Phú Nhuận", "Thành phố Thủ Đức"],
+  KV1: ["Huyện Bình Chánh", "Quận 10", "Quận 11", "Quận 5", "Quận 6", "Quận 8"],
+  KV2: ["Quận 4", "Quận 7", "Quận Bình Thạnh", "Quận 2", "Quận 9", "Thành phố Thủ Đức"],
   KV3: ["Quận Bình Tân", "Quận Tân Phú", "Huyện Bình Chánh"],
-  KV4: ["Quận 1", "Quận 4", "Quận 7", "Quận 10"],
+  KV4: ["Quận 1", "Quận 3", "Quận Tân Bình", "Quận Phú Nhuận"],
+  KV5: ["Huyện Hóc Môn", "Quận 12", "Quận Gò Vấp", "Thành phố Thủ Đức"],
 };
 
 export function districtsForKv(

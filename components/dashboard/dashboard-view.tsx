@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 import { compactZoneName, MAP_DISTRICTS } from "@/components/zones/zone-map-types";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
+import { averageChartRows, buildDistrictAverages, type AverageAreaSelection } from "@/lib/dashboard/volume-averages";
 
 type RangeKey = "today" | "yesterday" | "7d";
 type VolumeMode = "delivery" | "pickup" | "all";
@@ -40,6 +41,7 @@ export function DashboardView() {
   const [range, setRange] = useState<RangeKey>("today");
   const [volumeMode, setVolumeMode] = useState<VolumeMode>("all");
   const [volumeGrouping, setVolumeGrouping] = useState<VolumeGrouping>("week");
+  const [averageArea, setAverageArea] = useState<AverageAreaSelection>("all");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   useReportInitialDataLoading("dashboard", loading);
@@ -88,7 +90,7 @@ export function DashboardView() {
   const summary = useMemo(() => buildSummary({ ...state, delivery: kv56Delivery, pickup: kv56Pickup }, dateRange), [dateRange, kv56Delivery, kv56Pickup, state]);
   const volumeAnalytics = useMemo(() => buildVolumeAnalytics(kv56Delivery, kv56Pickup, volumeMode, volumeGrouping), [kv56Delivery, kv56Pickup, volumeGrouping, volumeMode]);
   const volumeDailyData = useMemo(() => buildDailyVolumeRecords(kv56Delivery, kv56Pickup, volumeMode), [kv56Delivery, kv56Pickup, volumeMode]);
-  const districtAverages = useMemo(() => ({ delivery: buildDistrictAverages(kv56Delivery, dateRange.end), pickup: buildDistrictAverages(kv56Pickup, dateRange.end) }), [dateRange.end, kv56Delivery, kv56Pickup]);
+  const districtAverages = useMemo(() => ({ delivery: buildDistrictAverages(kv56Delivery, dateRange.end, shortDistrictLabel), pickup: buildDistrictAverages(kv56Pickup, dateRange.end, shortDistrictLabel) }), [dateRange.end, kv56Delivery, kv56Pickup]);
   const areaBreakdown = useMemo(() => buildAreaBreakdown(state, dateRange), [dateRange, state]);
   const alerts = useMemo(() => buildAlerts(state, summary), [state, summary]);
 
@@ -154,8 +156,11 @@ export function DashboardView() {
 
     </div>
     <section aria-labelledby="district-average" className="space-y-3">
-      <DashboardSectionHeading id="district-average" title="Sản lượng trung bình theo quận" description="Tổng volume trong tháng chia cho số ngày thực tế có dữ liệu, tách riêng Delivery và Pickup." />
-      <div className="grid gap-3 lg:grid-cols-2"><DistrictDonutCard title="Delivery · trung bình/ngày" icon={Truck} data={districtAverages.delivery} loading={loading} /><DistrictDonutCard title="Pickup · trung bình/ngày" icon={PackageOpen} data={districtAverages.pickup} loading={loading} /></div>
+      <div className="dashboard-average-heading">
+        <DashboardSectionHeading id="district-average" title="Sản lượng trung bình theo khu vực" description="Xem tổng quan KV1–KV5 hoặc chọn một khu vực để xem các quận. Trung bình tính trên số ngày có dữ liệu trong tháng." />
+        <label className="dashboard-average-filter"><span>Khu vực</span><Select value={averageArea} onChange={(event) => setAverageArea(event.target.value as AverageAreaSelection)} aria-label="Khu vực xem sản lượng trung bình"><option value="all">Tất cả khu vực</option>{OPERATING_AREAS.map((area) => <option key={area} value={area}>Khu vực {area.slice(2)}</option>)}</Select></label>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2"><DistrictDonutCard title="Delivery · trung bình/ngày" icon={Truck} data={districtAverages.delivery} loading={loading} selectedArea={averageArea} onSelectArea={setAverageArea} /><DistrictDonutCard title="Pickup · trung bình/ngày" icon={PackageOpen} data={districtAverages.pickup} loading={loading} selectedArea={averageArea} onSelectArea={setAverageArea} /></div>
     </section>
 
     <section aria-labelledby="failed-ranking" className="space-y-3">
@@ -296,27 +301,29 @@ function DashboardSectionHeading({ id, title, description }: { id: string; title
   return <div className="dashboard-section-heading"><div><h2 id={id}>{title}</h2><p>{description}</p></div></div>;
 }
 
-function DistrictDonutCard({ title, icon: Icon, data, loading }: { title: string; icon: typeof Truck; data: ReturnType<typeof buildDistrictAverages>; loading: boolean }) {
-  const total = data.rows.reduce((sum, item) => sum + item.average, 0);
+function DistrictDonutCard({ title, icon: Icon, data, loading, selectedArea, onSelectArea }: { title: string; icon: typeof Truck; data: ReturnType<typeof buildDistrictAverages>; loading: boolean; selectedArea: AverageAreaSelection; onSelectArea: (area: AverageAreaSelection) => void }) {
+  const rows = averageChartRows(data, selectedArea);
+  const total = rows.reduce((sum, item) => sum + item.average, 0);
+  const scope = selectedArea === "all" ? "Theo khu vực" : `${selectedArea} · Theo quận`;
   const circumference = 263.89;
   let offset = 0;
 
   return <article className="dashboard-donut-card">
-    <div className="dashboard-card-title"><span><Icon size={17} /></span><div><h3>{title}</h3><p>{data.monthLabel} · {data.dayCount} ngày có dữ liệu</p></div></div>
+    <div className="dashboard-card-title"><span><Icon size={17} /></span><div><h3>{title}</h3><p>{data.monthLabel} · {data.dayCount} ngày có dữ liệu · {scope}</p></div></div>
     <div className={cn("dashboard-donut-layout", loading && "is-loading")}>
       <div className="dashboard-donut-figure">
-        <svg viewBox="0 0 120 120" role="img" aria-label={`${title}: ${Math.round(total)} đơn trung bình mỗi ngày`}>
+        <svg viewBox="0 0 120 120" role="img" aria-label={`${title}, ${scope}: ${loading ? "đang tải" : Math.round(total) + " đơn trung bình mỗi ngày"}`}>
           <circle cx="60" cy="60" r="42" className="dashboard-donut-track" />
-          {total > 0 ? data.rows.map((item, index) => {
+          {total > 0 ? rows.map((item, index) => {
             const length = item.average / total * circumference;
             const currentOffset = offset;
             offset += length;
-            return <circle key={item.district} cx="60" cy="60" r="42" className="dashboard-donut-segment" style={{ stroke: `var(--color-chart-${index % 7 + 1})`, strokeDasharray: `${length} ${circumference - length}`, strokeDashoffset: -currentOffset }} />;
+            return <circle key={item.key} cx="60" cy="60" r="42" className="dashboard-donut-segment" style={{ stroke: `var(--color-chart-${index % 7 + 1})`, strokeDasharray: `${length} ${circumference - length}`, strokeDashoffset: -currentOffset }}><title>{item.label}: {Math.round(item.average).toLocaleString("vi-VN")} đơn/ngày</title></circle>;
           }) : null}
         </svg>
         <div><strong>{loading ? "—" : Math.round(total).toLocaleString("vi-VN")}</strong><span>avg/day</span></div>
       </div>
-      <div className="dashboard-donut-legend">{data.rows.map((item, index) => <div key={item.district}><span className="dashboard-legend-dot" style={{ background: `var(--color-chart-${index % 7 + 1})` }} /><p>{item.shortName}</p><strong>{loading ? "—" : Math.round(item.average).toLocaleString("vi-VN")}</strong></div>)}</div>
+      <div className="dashboard-donut-legend" aria-live="polite">{!loading && (data.dayCount === 0 || rows.length === 0) ? <p className="dashboard-average-empty">Chưa có dữ liệu{selectedArea === "all" ? "" : ` cho ${selectedArea}`} trong tháng này.</p> : rows.map((item, index) => <div key={item.key}><span className="dashboard-legend-dot" style={{ background: `var(--color-chart-${index % 7 + 1})` }} /><p>{selectedArea === "all" ? <button type="button" className="dashboard-average-area-link" onClick={() => onSelectArea(item.area)} aria-label={`Xem các quận thuộc ${item.label}`}>{item.label}<ChevronRight size={13} /></button> : item.label}</p><strong>{loading ? "—" : Math.round(item.average).toLocaleString("vi-VN")}</strong></div>)}</div>
     </div>
   </article>;
 }
@@ -646,24 +653,6 @@ function buildVolumeTrend(delivery: VolumeRow[], pickup: VolumeRow[], range: { s
 function buildVolumeAnalytics(delivery: VolumeRow[], pickup: VolumeRow[], mode: VolumeMode, grouping: VolumeGrouping) { const groups = new Map<string, { delivery: number; pickup: number }>(); const addRows = (rows: VolumeRow[], source: "delivery" | "pickup") => { if (mode !== "all" && mode !== source) return; for (const row of rows) { const date = row.report_date?.slice(0, 10); if (!date) continue; const key = grouping === "month" ? date.slice(0, 7) : isoWeekKey(date); const item = groups.get(key) ?? { delivery: 0, pickup: 0 }; item[source] += row.total_orders ?? 1; groups.set(key, item); } }; addRows(delivery, "delivery"); addRows(pickup, "pickup"); const points = Array.from(groups, ([key, values]) => ({ key, label: grouping === "month" ? `T${Number(key.slice(5))}/${key.slice(0, 4)}` : key, ...values, total: values.delivery + values.pickup })).sort((a, b) => a.key.localeCompare(b.key)); const current = points[points.length - 1]?.total ?? 0; const previous = points[points.length - 2]?.total ?? 0; return { points, current, previous, change: previous ? (current - previous) / previous * 100 : 0 }; }
 function buildDailyVolumeRecords(delivery: VolumeRow[], pickup: VolumeRow[], mode: VolumeMode): DailyVolumeRecord[] { const records: DailyVolumeRecord[] = []; const add = (rows: VolumeRow[], type: "delivery" | "pickup") => { if (mode !== "all" && mode !== type) return; for (const row of rows) { const date = row.report_date?.slice(0, 10); if (date) records.push({ date, volume: row.total_orders ?? 1, type }); } }; add(delivery, "delivery"); add(pickup, "pickup"); return records; }
 function aggregateDailyWeeks(data: DailyVolumeRecord[], weeksRange: number) { const dailyMap = new Map<string, { delivery: number; pickup: number }>(); for (const record of data) { const item = dailyMap.get(record.date) ?? { delivery: 0, pickup: 0 }; item[record.type] += record.volume; dailyMap.set(record.date, item); } const latestDataDate = [...dailyMap.keys()].sort().at(-1) ?? todayInVietnamDate(); const latestMonday = startOfIsoWeek(latestDataDate); const start = shiftDate(latestMonday, -(weeksRange - 1) * 7); const days = Array.from({ length: weeksRange * 7 }, (_, index) => { const date = shiftDate(start, index); const values = dailyMap.get(date) ?? { delivery: 0, pickup: 0 }; return { date, ...values, total: values.delivery + values.pickup, weekKey: isoWeekKey(date), weekLabel: isoWeekKey(date).replace(/^\d{4}-/, "") }; }); const todayWeek = isoWeekKey(todayInVietnamDate()); const rawWeeks = Array.from({ length: weeksRange }, (_, index) => { const weekDays = days.slice(index * 7, index * 7 + 7); const total = weekDays.reduce((sum, day) => sum + day.total, 0); return { key: weekDays[0]?.weekKey ?? "", label: weekDays[0]?.weekLabel ?? "", total, isCurrent: weekDays[0]?.weekKey === todayWeek, isPeak: false, change: null as number | null }; }); const peak = Math.max(...rawWeeks.map((week) => week.total)); const weeks = rawWeeks.map((week, index) => ({ ...week, isPeak: week.total > 0 && week.total === peak, change: index > 0 && rawWeeks[index - 1]!.total > 0 ? (week.total - rawWeeks[index - 1]!.total) / rawWeeks[index - 1]!.total * 100 : null })); return { days, weeks }; }
-function buildDistrictAverages(rows: VolumeRow[], endDate: string) {
-  const monthStart = `${endDate.slice(0, 7)}-01`;
-  const dataDates = new Set<string>();
-  const totals = new Map<string, { shortName: string; area: string; total: number }>();
-  for (const row of rows) {
-    const date = row.report_date?.slice(0, 10);
-    const district = volumeDistrictInfo(row);
-    if (!date || date < monthStart || date > endDate || !district) continue;
-    dataDates.add(date);
-    const current = totals.get(district.name) ?? { shortName: district.shortName, area: district.area, total: 0 };
-    current.total += row.total_orders ?? 1;
-    totals.set(district.name, current);
-  }
-  const dayCount = dataDates.size;
-  const rowsByDistrict = Array.from(totals, ([district, value]) => ({ district, shortName: value.shortName, area: value.area, average: dayCount ? value.total / dayCount : 0 })).sort((a, b) => a.area.localeCompare(b.area) || b.average - a.average || a.district.localeCompare(b.district, "vi"));
-  return { rows: rowsByDistrict, dayCount, monthLabel: `Tháng ${endDate.slice(5, 7)}/${endDate.slice(0, 4)}` };
-}
-
 function buildAlerts(state: DashboardState, summary: ReturnType<typeof buildSummary>) { const alerts: Array<{ title: string; description: string; severity: "critical" | "warning"; href: string }> = []; if (state.returnOverdue.totalOrders > 0) alerts.push({ title: `${state.returnOverdue.totalOrders} đơn trả quá 48 giờ`, description: `${state.returnOverdue.riders.length} rider đang giữ đơn nhưng chưa quét bàn giao trả.`, severity: "critical", href: "/return-orders?status=returning&sort=aging_desc&page=1&pageSize=50" }); if (state.returnOverdue.missingStartedAt > 0) alerts.push({ title: `${state.returnOverdue.missingStartedAt} đơn trả thiếu mốc thời gian`, description: "Chưa thể xác định các đơn này có vượt 48 giờ hay không.", severity: "warning", href: "/return-orders?status=returning&page=1&pageSize=50" }); if (summary.failed > 0) alerts.push({ title: `${summary.failed} Failed deliveries`, description: "Kiểm tra rider và quận trong snapshot KV1–KV5 mới nhất.", severity: "critical", href: "/realtime-dashboard" }); if (summary.idleRiders > 0) alerts.push({ title: `${summary.idleRiders} riders idle trên 1 giờ`, description: "Rider vẫn còn đơn Delivering nhưng không có tiến triển.", severity: "critical", href: "/realtime-dashboard" }); return alerts; }
 
 function shortDistrictLabel(value: string) {
@@ -678,7 +667,6 @@ function kvNumber(value: string | null | undefined): 1 | 2 | 3 | 4 | 5 | null {
   return area ? Number(area.slice(2)) as 1 | 2 | 3 | 4 | 5 : null;
 }
 function resolveKvDistrict(value: string | null | undefined) { const key = compactZoneName(value ?? ""); if (!key) return null; return MAP_DISTRICTS.find((district) => [district.name, district.shortName, district.code, ...district.aliases].some((candidate) => compactZoneName(candidate) === key)) ?? null; }
-function volumeDistrictInfo(row: VolumeRow) { const area = normalizeOperatingArea(row.area); const name = row.district?.trim(); return area && name ? { name, shortName: shortDistrictLabel(name), area } : null; }
 function isKv56VolumeRow(row: VolumeRow) { return isOperatingArea(row.area); }
 function kvAreaOf(row: VolumeRow) { return kvNumber(row.area); }
 function volumeShare(value: number, total: number) { return total ? `${Math.round(value / total * 100)}%` : "0%"; }

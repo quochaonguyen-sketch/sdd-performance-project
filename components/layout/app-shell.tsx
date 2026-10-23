@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Activity, BarChart3, Bike, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
-import { AppBrand, AppCopyright, TransitMark } from "@/components/layout/app-brand";
+import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/app-brand";
 import { AppLoadingOverlay } from "@/components/layout/app-loading-overlay";
 import { NavigationPendingIndicator } from "@/components/layout/navigation-pending-indicator";
 import { RouteReveal } from "@/components/layout/route-reveal";
@@ -159,14 +159,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     <div className={cn("app-shell-technical", !sidebarOpen && "is-sidebar-collapsed")}>
       <div className="app-navigation" id="operations-sidebar">
         <nav className="app-module-rail" aria-label="Chọn module">
-          <Link href="/dashboard" className="app-rail-brand" aria-label="Rider Operations — Dashboard"><TransitMark /></Link>
+          <Link href="/dashboard" className="app-rail-brand" aria-label={`${APP_NAME} — Dashboard`}><SddMark /></Link>
           {modules.map((module) => {
             const Icon = module.icon;
             return <button key={module.id} type="button" title={module.label} aria-label={module.label} aria-pressed={selectedModule === module.id} aria-controls="operations-module-panel" className={cn("app-module-button", selectedModule === module.id && "is-active", module.id === "settings" && "is-settings")} onClick={() => setModuleSelection({ pathname, module: module.id })}><Icon size={19} aria-hidden="true" /><span className="app-module-tooltip" aria-hidden="true">{module.label}</span></button>;
           })}
         </nav>
         <aside className="app-sidebar" id="operations-module-panel" aria-label={modules.find((module) => module.id === selectedModule)?.label}>
-          <Link href="/dashboard" className="app-sidebar-brand" aria-label="Rider Operations — Dashboard"><AppBrand wordmarkOnly /></Link>
+          <Link href="/dashboard" className="app-sidebar-brand" aria-label={`${APP_NAME} — Dashboard`}><AppBrand inverse /></Link>
           <div className="app-sidebar-context"><span>Địa bàn</span><strong>Khu vực 1–5</strong></div>
           <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
             <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Không gian vận hành" : modules.find((module) => module.id === selectedModule)?.label}</p>

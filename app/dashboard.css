@@ -108,6 +108,12 @@
 .ops-dashboard .dash-comparison-panel .ops-comparison-value { color: var(--color-accent); }
 .ops-dashboard .dashboard-card-title { border: 0; padding-bottom: 12px; }
 .ops-dashboard .dashboard-donut-layout { padding-top: 0; }
+.dashboard-average-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.dashboard-average-filter { display: grid; gap: 6px; width: min(100%, 210px); color: var(--color-ink-2); font-size: var(--text-xs); }
+.dashboard-average-area-link { display: inline-flex; align-items: center; gap: 6px; color: inherit; cursor: pointer; text-align: left; }
+.dashboard-average-area-link:hover { color: var(--color-accent); }
+.dashboard-average-area-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 2px; }
+.dashboard-average-empty { padding-block: 16px; color: var(--color-muted); font-size: var(--text-xs); }
 .ops-dashboard .dashboard-donut-figure { max-width: 140px; }
 .ops-dashboard .dashboard-return-overdue { border-left: 3px solid #b78d42; }
 .ops-dashboard .dashboard-shortcut { border-color: var(--color-rule); background: var(--color-paper-2); }

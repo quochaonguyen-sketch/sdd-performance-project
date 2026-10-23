@@ -81,7 +81,7 @@ export function VolumeView({ kind }: { kind: VolumeKind }) {
               .range(offset, offset + PAGE_SIZE - 1)
           : supabase
               .from(table)
-              .select("summary_id,report_date,new_ward,district,area,cot,ma_tuyen,total_orders").in("area", OPERATING_AREAS)
+              .select("summary_id,report_date,new_ward,district,area,cot,ma_tuyen,total_orders").in("area", [...OPERATING_AREAS, "UNRESOLVED"])
               .eq("report_date", date)
               .order("district")
               .range(offset, offset + PAGE_SIZE - 1);
@@ -326,7 +326,7 @@ function summarizePickupDistrictRoutes(rows: VolumeRow[]): PickupDistrict[] {
 
 function countPickupRoutes(districts: PickupDistrict[]) {
   return new Set(
-    districts.flatMap((district) => district.wards.flatMap((ward) => ward.routes.map((route) => route.route))),
+    districts.flatMap((district) => district.wards.flatMap((ward) => ward.routes.map((route) => route.route))).filter((route) => route !== "Chưa có mã tuyến"),
   ).size;
 }
 

@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="8" fill="#e8f1eb"/><g fill="none" stroke="#28775f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8v16a8 8 0 0 0 8 8h16M32 8H16a8 8 0 0 0 0 16h16"/></g><g fill="#28775f"><circle cx="8" cy="8" r="3"/><circle cx="32" cy="24" r="3"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <title>SDD Operations</title>
+  <rect width="96" height="96" rx="22" fill="#1E344D"/>
+  <g transform="translate(13 5) scale(.84)">
+    <path fill="#F4F8FF" d="M30 12h54L69 30H39L27 44h35l16 16-28 32H0l16-18h26l12-14H20L6 44l24-32Z"/>
+    <path fill="#A7C1DB" d="m20 60 7-16h35l16 16H20Z"/>
+  </g>
+</svg>

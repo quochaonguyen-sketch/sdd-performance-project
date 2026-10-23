@@ -1,7 +1,3 @@
-/* Hallmark · macrostructure: Bento Grid · theme: Cobalt adapted · genre: modern-minimal · enrichment: none
- * pre-emit critique: P5 H4 E5 S5 R5 V5 · contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57)
- * nav: existing app side rail · footer: existing mobile dock · slop: pass (46) · honest: pass
- */
 "use client";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
@@ -31,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
+import { summarizeDeliveryProgress } from "@/lib/dashboard/delivery-progress";
 
 type RealtimeRider = { id: string; driver_id: string; driver_name: string | null; total_assigned: number; delivered: number; delivering: number; failed: number; zone_id: string | null; first_delivery_at: string | null; idle_delivery_seconds: number; snapshot_id: string; snapshot_at: string };
 type RiderProfile = { rider_code: string; full_name: string | null; kv: string | null; delivery_district: string | null; delivery_ward: string | null; cot: string | null };
@@ -56,16 +53,6 @@ const PAGE_SIZE = 15;
 const STATUS_ORDER: Record<RiderStatus, number> = { warning: 0, delivering: 1, completed: 2 };
 const HIGH_FAILURE_RATE = 0.2;
 const BACKUP_DISTRICT = "Backup";
-type KvTone = "blue" | "violet" | "emerald";
-// 3 cot doc: KV1-2 | KV3-4 | KV5, moi cap 1 mau.
-const KV_PAIR_TONE: Record<string, KvTone> = { "KV1-2": "blue", "KV3-4": "violet", "KV5": "emerald" };
-function kvPairOf(kv: string) {
-  const n = Number(kv.replace(/^KV/i, ""));
-  if (n === 1 || n === 2) return "KV1-2";
-  if (n === 3 || n === 4) return "KV3-4";
-  return "KV5";
-}
-
 export function RealtimeDashboardView() {
   const [rows, setRows] = useState<RealtimeRider[]>([]);
   const [profiles, setProfiles] = useState<RiderProfile[]>([]);
@@ -164,7 +151,7 @@ export function RealtimeDashboardView() {
     });
   }, [profiles, rows]);
 
-  const zones = useMemo(() => [...new Set(riders.map((rider) => rider.district))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders]);
+  const zones = useMemo(() => [...new Set(riders.filter((rider) => kvFilter === "all" || rider.kv === kvFilter).map((rider) => rider.district))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders, kvFilter]);
   const kvOptions = useMemo(() => {
     const order = ["KV1", "KV2", "KV3", "KV4", "KV5"];
     const present = new Set(riders.map((rider) => rider.kv));
@@ -181,6 +168,7 @@ export function RealtimeDashboardView() {
 
   const toggleKv = useCallback((kv: string) => {
     setKvFilter((current) => (current === kv ? "all" : kv));
+    setZone("all");
     setActiveDistrict(null);
     setPage(1);
   }, []);
@@ -221,20 +209,19 @@ export function RealtimeDashboardView() {
   const activeDistrictDetail = activeDistrict ? districtDetails.find((d) => d.name === activeDistrict) ?? null : null;
 
   return (
-    <div className="dashboard-control mx-auto max-w-[1600px] space-y-6">
-      {/* Command header - graphite */}
-      <header className="dashboard-command-header">
-        <div className="min-w-0">
-          <div className="dashboard-kicker"><span className="dashboard-live-dot" />Realtime operations · KV1-KV5 · per-district</div>
-          <h1>Realtime Delivery — Theo quận</h1>
-          <p>Mỗi ô là một quận. Màu, thanh tiến độ và cảnh báo cho biết quận nào cần can thiệp ngay.</p>
+    <div className="dashboard-control realtime-premium mx-auto max-w-[1600px] space-y-6">
+      <header className="rt-command">
+        <div className="rt-command-main">
+          <div className="rt-eyebrow"><Activity size={14} />SDD OPERATIONS<span>DELIVERY</span></div>
+          <h1>Toàn cảnh giao hàng<span>.</span></h1>
+          <p>Theo sát tiến độ. Nhận diện điểm nghẽn. Điều phối kịp thời.</p>
+          <div className="rt-command-meta"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span>KV1–KV5</span>{workDate ? <span>Ngày {workDate.split("-").reverse().join("/")}</span> : null}</div>
         </div>
-        <div className="dashboard-command-actions">
-          <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} className={loading ? "animate-spin" : undefined} /><span>Làm mới</span></Button>
+        <div className="rt-command-side">
+          <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : undefined} />Làm mới dữ liệu</Button>
+          <div className="rt-hero-progress"><div><span>Tiến độ toàn đội</span><strong>{loading ? "—" : `${totals.assigned ? Math.round(totals.delivered / totals.assigned * 100) : 0}%`}</strong></div><p>{loading ? "Đang tải dữ liệu" : `${totals.delivered.toLocaleString("vi-VN")} / ${totals.assigned.toLocaleString("vi-VN")} đơn đã giao`}</p></div>
         </div>
       </header>
-
-      <div className="dashboard-readout-strip"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span className="hidden sm:inline">KV1–KV5{workDate ? ` · snapshot ${workDate}` : ""}</span>{activeDistrict ? <button type="button" onClick={() => setActiveDistrict(null)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-bold text-[var(--color-accent)]">Đang lọc: {activeDistrict} <X size={12} /></button> : <span className="ml-auto hidden items-center gap-1.5 text-xs text-[var(--color-muted)] sm:inline-flex"><MapPin size={12} />{districtDetails.length} quận có rider</span>}</div>
       {error ? <div role="alert" className="dashboard-error">{error}</div> : null}
 
       {/* KPI */}
@@ -243,19 +230,19 @@ export function RealtimeDashboardView() {
         <div className="grid grid-cols-12 gap-3">
           <KpiCard className="col-span-6 lg:col-span-3" icon={UsersRound} label="Rider hoạt động" value={activeRiders} helper={`${riders.length} rider · ${warningRiders} cảnh báo`} tone={warningRiders ? "red" : "blue"} loading={loading} />
           <KpiCard className="col-span-6 lg:col-span-3" icon={Activity} label="Đơn đang giao" value={totals.delivering} helper={`${totals.assigned.toLocaleString("vi-VN")} đã gán`} tone="blue" loading={loading} />
-          <KpiCard className="col-span-6 lg:col-span-3" icon={CheckCircle2} label="Đúng hạn" value={`${onTimeRate}%`} helper={`${totals.delivered.toLocaleString("vi-VN")} đã giao`} tone="green" loading={loading} />
+          <KpiCard className="col-span-6 lg:col-span-3" icon={CheckCircle2} label="Giao thành công" value={`${onTimeRate}%`} helper="Tỷ lệ thành công trên đơn đã xử lý" tone="green" loading={loading} />
           <KpiCard className="col-span-6 lg:col-span-3" icon={CircleAlert} label="Cần can thiệp" value={warningRiders} helper={zeroProgressRiders ? `${zeroProgressRiders} đứng yên · ${totals.failed} lỗi` : `${totals.failed} lỗi`} tone={warningRiders ? "red" : "green"} loading={loading} />
         </div>
-        <PerformanceChart totals={totals} />
+        <PerformanceChart totals={totals} loading={loading} />
       </section>
 
       {/* BENTO GRID — per-district */}
       <section aria-labelledby="district-bento-heading" className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2"><span className="font-mono text-xs font-bold tracking-[0.12em] text-[var(--color-accent)]">02 — BENTO</span><span className="h-px w-8 bg-[var(--color-rule-strong)]" aria-hidden="true" /></div>
+            <div className="flex items-center gap-2"><span className="font-mono text-xs font-bold tracking-[0.12em] text-[var(--color-accent)]">PHÂN VÙNG VẬN HÀNH</span><span className="h-px w-8 bg-[var(--color-rule-strong)]" aria-hidden="true" /></div>
             <h2 id="district-bento-heading" className="mt-1 text-base font-bold tracking-tight text-[var(--color-ink)]">Vận hành theo khu vực</h2>
-            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">Chạm một khu vực để sổ các quận bên trong ra. Chạm quận để lọc bảng rider bên dưới.</p>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">Chọn khu vực để xem các quận, chọn quận để theo dõi đội rider.</p>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-error)]" />Cảnh báo</span>
@@ -271,25 +258,21 @@ export function RealtimeDashboardView() {
         ) : districtDetails.length === 0 && kvAggregates.kvs.every(({ detail }) => !detail) ? (
           <p className="rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-8 text-center text-sm text-[var(--color-muted)]">Chưa có dữ liệu realtime.</p>
         ) : (
-          <div className="grid auto-rows-[minmax(168px,auto)] grid-cols-12 gap-3">
-            {/* KV theo 3 cot doc: KV1-2 | KV3-4 | KV5, cham de loc */}
-            {(Object.entries(KV_PAIR_TONE) as Array<[string, KvTone]>).map(([pairKey, tone]) => (
-              <div key={pairKey} className="col-span-12 flex flex-col gap-3 md:col-span-4">
-                {kvAggregates.kvs
-                  .filter(({ kv }) => kvPairOf(kv) === pairKey)
-                  .map(({ kv, detail }) => (
-                    <KvBentoTile key={kv} kv={kv} detail={detail} tone={tone} active={kvFilter === kv} onSelect={() => toggleKv(kv)} />
-                  ))}
-              </div>
-            ))}
+          <div className="rt-area-layout">
+            <div className="rt-area-grid">
+              {kvAggregates.kvs.map(({ kv, detail }) => <KvBentoTile key={kv} kv={kv} detail={detail} active={kvFilter === kv} onSelect={() => toggleKv(kv)} />)}
+            </div>
+            {kvFilter !== "all" ? <div className="rt-district-heading"><span><MapPin size={15} />Các quận thuộc {kvFilter}</span><button type="button" onClick={() => toggleKv(kvFilter)}>Tất cả khu vực<ChevronRight size={14} /></button></div> : null}
+            <div className="grid grid-cols-12 gap-3">
             {/* District tiles — chi hien khi da loc KV */}
             {kvFilter !== "all" && visibleDistricts.length === 0 ? (
               <p className="col-span-12 rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-6 text-center text-sm text-[var(--color-muted)]">Không có quận nào trong {kvFilter}.</p>
             ) : null}
             {visibleDistricts.map((d, idx) => {
               const isLarge = idx < 2;
-              return <DistrictBentoCard key={d.name} district={d} large={isLarge} active={activeDistrict === d.name} onSelect={() => setActiveDistrict((cur) => cur === d.name ? null : d.name)} />;
+              return <DistrictBentoCard key={d.name} district={d} large={isLarge} active={activeDistrict === d.name} onSelect={() => { setActiveDistrict((cur) => cur === d.name ? null : d.name); setZone("all"); setPage(1); }} />;
             })}
+            </div>
           </div>
         )}
 
@@ -303,8 +286,8 @@ export function RealtimeDashboardView() {
 
       <FilterBar
         zone={zone} kvFilter={kvFilter} kvOptions={kvOptions} status={status} cot={cot} zones={zones} cotOptions={cotOptions}
-        onKvChange={(value) => { setKvFilter(value); setActiveDistrict(null); setPage(1); }}
-        onZoneChange={(value) => { setZone(value); setPage(1); }}
+        onKvChange={(value) => { setKvFilter(value); setZone("all"); setActiveDistrict(null); setPage(1); }}
+        onZoneChange={(value) => { setZone(value); setActiveDistrict(null); setPage(1); }}
         onStatusChange={(value) => { setStatus(value); setPage(1); }}
         onCotChange={(value) => { setCot(value); setPage(1); }}
       />
@@ -327,47 +310,20 @@ export function RealtimeDashboardView() {
 
 export const KpiCard = memo(function KpiCard({ icon: Icon, label, value, helper, tone, className, loading }: { icon: typeof Bike; label: string; value: number | string; helper: string; tone: "blue" | "green" | "red"; className?: string; loading?: boolean }) {
   const colors = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", red: "bg-red-50 text-red-700" };
-  return <article className={cn("min-h-36 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-slate-600">{label}</p><p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-950">{loading ? "—" : typeof value === "number" ? value.toLocaleString("vi-VN") : value}</p></div><span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", colors[tone])}><Icon size={18} /></span></div><p className="mt-4 text-xs text-slate-500">{helper}</p></article>;
+  return <article className={cn("rt-kpi min-h-36 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-slate-600">{label}</p><p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-950">{loading ? "—" : typeof value === "number" ? value.toLocaleString("vi-VN") : value}</p></div><span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", colors[tone])}><Icon size={18} /></span></div><p className="mt-4 text-xs text-slate-500">{helper}</p></article>;
 });
 
-function KvBentoTile({ kv, detail, tone, active, onSelect }: { kv: string; detail: DistrictDetail | null; tone: KvTone; active: boolean; onSelect: () => void }) {
-  // Nen tint + diem nhan dam theo cap KV: KV1-2 xanh duong, KV3-4 tim, KV5 xanh la.
-  const tones: Record<KvTone, { tile: string; badge: string; area: string; chip: string; track: string; bar: string }> = {
-    blue: { tile: "border-blue-300 bg-blue-50", badge: "bg-blue-600 text-white", area: "text-blue-800", chip: "bg-white text-blue-700 ring-1 ring-blue-200", track: "bg-blue-100", bar: "bg-blue-600" },
-    violet: { tile: "border-violet-300 bg-violet-50", badge: "bg-violet-600 text-white", area: "text-violet-800", chip: "bg-white text-violet-700 ring-1 ring-violet-200", track: "bg-violet-100", bar: "bg-violet-600" },
-    emerald: { tile: "border-emerald-300 bg-emerald-50", badge: "bg-emerald-600 text-white", area: "text-emerald-800", chip: "bg-white text-emerald-700 ring-1 ring-emerald-200", track: "bg-emerald-100", bar: "bg-emerald-600" },
-  };
-  const t = tones[tone];
-  if (!detail) return <article className="flex min-h-[168px] w-full flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-white p-5"><p className="font-mono text-xs font-bold tracking-[0.12em] text-slate-400">{kv}</p><p className="mt-2 text-sm font-semibold text-slate-500">Chưa có rider</p></article>;
-  const pct = detail.totalAssigned ? Math.round((detail.delivered / detail.totalAssigned) * 100) : 0;
-  return (
-    <article
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      aria-pressed={active}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      className={cn("flex min-h-[180px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border-2 p-5 pt-0 transition-all hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500", t.tile, active ? "shadow-lg ring-2 ring-blue-500" : "shadow-sm")}>
-      <span aria-hidden="true" className={cn("-mx-5 mb-4 h-2", t.bar)} />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-2">
-            <span className={cn("rounded-md px-2 py-0.5 font-mono text-xs font-extrabold tracking-[0.14em]", t.badge)}>{kv}</span>
-            <span className={cn("text-xs font-bold uppercase tracking-wide", t.area)}>{detail.area}</span>
-          </p>
-          <h3 className="mt-2 text-xl font-extrabold tracking-tight text-slate-950">{/^KV[1-5]$/.test(kv) ? `Khu vực ${kv.slice(-1)}` : detail.name}</h3>
-          <p className="mt-1 text-xs font-medium text-slate-600">{detail.riders.length} rider · {detail.totalAssigned} đơn · {detail.warning} cảnh báo</p>
-        </div>
-        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl shadow-sm", t.chip)}><UsersRound size={18} /></span>
-      </div>
-      <div className="mt-auto grid grid-cols-3 gap-3 pt-4">
-        <div><p className="font-mono text-xs font-semibold text-slate-500">Đã gán</p><p className="text-base font-extrabold tabular-nums text-slate-950">{detail.totalAssigned}</p></div>
-        <div><p className="font-mono text-xs font-semibold text-slate-500">Tiến độ</p><p className="text-base font-extrabold tabular-nums text-slate-950">{pct}%</p></div>
-        <div><p className="font-mono text-xs font-semibold text-slate-500">Đang giao</p><p className="text-base font-extrabold tabular-nums text-slate-950">{detail.delivering}</p></div>
-      </div>
-      <div className={cn("mt-3 h-2 overflow-hidden rounded-full", t.track)}><div className={cn("h-full rounded-full transition-all", t.bar)} style={{ width: `${pct}%` }} /></div>
-    </article>
-  );
+function KvBentoTile({ kv, detail, active, onSelect }: { kv: string; detail: DistrictDetail | null; active: boolean; onSelect: () => void }) {
+  const pct = detail ? Math.min(100, detail.rate) : 0;
+  return <button type="button" onClick={onSelect} aria-pressed={active} data-area={kv} className={cn("rt-area-card", active && "is-selected")}>
+    <div className="rt-area-top"><span className="rt-area-code">{kv}</span><ChevronRight size={16} /></div>
+    <h3>Khu vực {kv.slice(-1)}</h3>
+    <p className="rt-area-riders"><UsersRound size={13} />{detail ? `${detail.riders.length.toLocaleString("vi-VN")} rider` : "Chưa có rider"}</p>
+    <div className="rt-area-progress"><strong>{pct}<small>%</small></strong><span>đã giao</span></div>
+    <div className="rt-area-track" role="progressbar" aria-label={`Tiến độ ${kv}`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
+    <div className="rt-area-stats"><span>Đang giao<strong>{(detail?.delivering ?? 0).toLocaleString("vi-VN")}</strong></span><span>Đã gán<strong>{(detail?.totalAssigned ?? 0).toLocaleString("vi-VN")}</strong></span></div>
+    <div className={cn("rt-area-footer", detail?.warning && "has-warning")}>{detail?.warning ? <><CircleAlert size={13} />{detail.warning} rider cần chú ý</> : <><CheckCircle2 size={13} />{detail ? "Không có cảnh báo" : "Chưa có dữ liệu"}</>}</div>
+  </button>;
 }
 
 function DistrictBentoCard({ district, large, active, onSelect }: { district: DistrictDetail; large: boolean; active: boolean; onSelect: () => void }) {
@@ -438,7 +394,7 @@ function DistrictBentoCard({ district, large, active, onSelect }: { district: Di
 }
 
 export function FilterBar({ zone, kvFilter, kvOptions, status, cot, zones, cotOptions, onKvChange, onZoneChange, onStatusChange, onCotChange }: { zone: string; kvFilter: string; kvOptions: string[]; status: RiderStatus | "all"; cot: string; zones: string[]; cotOptions: string[]; onKvChange: (value: string) => void; onZoneChange: (value: string) => void; onStatusChange: (value: RiderStatus | "all") => void; onCotChange: (value: string) => void }) {
-  return <section aria-label="Bộ lọc toàn cục" className="rounded-xl border border-slate-200 bg-white p-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><FilterField label="Khu vực"><Select value={kvFilter} onChange={(event) => onKvChange(event.target.value)}><option value="all">Tất cả khu vực (KV1–KV5)</option>{kvOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Quận"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả quận</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{kvFilter === "all" ? "Mọi khu vực" : kvFilter}</FilterChip><FilterChip>{zone === "all" ? "Mọi quận" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
+  return <section aria-label="Bộ lọc toàn cục" className="rt-filter-panel rounded-xl border border-slate-200 bg-white p-4"><div className="rt-filter-heading"><span><Search size={15} />Bộ lọc đội giao hàng</span><small>Thu hẹp danh sách rider cần theo dõi</small></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><FilterField label="Khu vực"><Select value={kvFilter} onChange={(event) => onKvChange(event.target.value)}><option value="all">Tất cả khu vực (KV1–KV5)</option>{kvOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Quận"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả quận</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{kvFilter === "all" ? "Mọi khu vực" : kvFilter}</FilterChip><FilterChip>{zone === "all" ? "Mọi quận" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
 }
 
 export function StatusBadge({ status }: { status: RiderStatus }) {
@@ -462,13 +418,13 @@ function CotBadge({ cot }: { cot: string }) {
 }
 
 export const RiderTable = memo(function RiderTable({ rows, total, allTotal, query, loading, sort, page, pageCount, onQueryChange, onSort, onSelect, onPrevious, onNext }: { rows: DisplayRider[]; total: number; allTotal: number; query: string; loading: boolean; sort: { key: SortKey; direction: "asc" | "desc" }; page: number; pageCount: number; onQueryChange: (value: string) => void; onSort: (key: SortKey) => void; onSelect: (rider: DisplayRider) => void; onPrevious: () => void; onNext: () => void }) {
-  return <div className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="flex flex-col gap-4 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between"><div><h2 id="rider-status-heading" className="text-base font-bold text-slate-950">Trạng thái rider</h2><p className="mt-0.5 text-sm text-slate-500">Hiển thị {total}/{allTotal} rider · Chọn một dòng để xem chi tiết</p></div><label className="relative block w-full lg:w-80"><span className="sr-only">Tìm rider</span><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><Input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Tìm tên, mã, COT hoặc khu vực" className="pl-9" /></label></div><div className="max-h-[560px] min-h-[360px] overflow-auto"><table className="w-full min-w-[900px] table-fixed text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr><SortableHeader label="Rider" sortKey="name" current={sort} onSort={onSort} className="w-[24%]" /><SortableHeader label="Trạng thái" sortKey="status" current={sort} onSort={onSort} className="w-[14%]" /><th className="px-4 py-3 font-semibold">Khu vực</th><SortableHeader label="COT" sortKey="cot" current={sort} onSort={onSort} className="w-[12%]" /><SortableHeader label="Đã giao" sortKey="delivered" current={sort} onSort={onSort} align="right" /><SortableHeader label="Thời gian chờ" sortKey="eta" current={sort} onSort={onSort} align="right" /></tr></thead><tbody className="divide-y divide-slate-100">{loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-15 animate-pulse"><td colSpan={6} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : rows.map((rider) => <tr key={rider.id} tabIndex={0} onClick={() => onSelect(rider)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelect(rider); }} className="h-16 cursor-pointer bg-white transition-colors hover:bg-blue-50/50 focus:bg-blue-50 focus:outline-none"><td className="px-4"><div className="font-semibold text-slate-900">{rider.name}</div><div className="font-mono text-xs text-slate-500">{rider.driver_id}</div></td><td className="px-4"><StatusBadge status={rider.status} /></td><td className="px-4"><div className="font-medium text-slate-700">{rider.district}</div><div className="text-xs text-slate-500">{rider.ward}</div></td><td className="px-4"><CotBadge cot={rider.cot} /></td><td className="px-4 text-right tabular-nums"><span className="font-semibold text-slate-900">{rider.delivered}</span><span className="text-slate-500">/{rider.total_assigned}</span><div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${rider.progress}%` }} /></div></td><td className="px-4 text-right tabular-nums text-slate-600">{rider.delivering > 0 ? formatDuration(rider.idle_delivery_seconds) : "—"}</td></tr>)}</tbody></table></div><div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm"><span className="text-slate-500">Trang {page}/{pageCount} · {total} rider</span><div className="flex gap-2"><Button type="button" variant="secondary" disabled={page <= 1} onClick={onPrevious}><ChevronLeft size={16} /> Trước</Button><Button type="button" variant="secondary" disabled={page >= pageCount} onClick={onNext}>Sau <ChevronRight size={16} /></Button></div></div></div>;
+  return <div className="rt-rider-table overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="flex flex-col gap-4 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between"><div><h2 id="rider-status-heading" className="text-base font-bold text-slate-950">Trạng thái rider</h2><p className="mt-0.5 text-sm text-slate-500">Hiển thị {total}/{allTotal} rider · Chọn một dòng để xem chi tiết</p></div><label className="relative block w-full lg:w-80"><span className="sr-only">Tìm rider</span><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><Input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Tìm tên, mã, COT hoặc khu vực" className="pl-9" /></label></div><div className="max-h-[560px] min-h-[360px] overflow-auto"><table className="w-full min-w-[900px] table-fixed text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr><SortableHeader label="Rider" sortKey="name" current={sort} onSort={onSort} className="w-[24%]" /><SortableHeader label="Trạng thái" sortKey="status" current={sort} onSort={onSort} className="w-[14%]" /><th className="px-4 py-3 font-semibold">Khu vực</th><SortableHeader label="COT" sortKey="cot" current={sort} onSort={onSort} className="w-[12%]" /><SortableHeader label="Đã giao" sortKey="delivered" current={sort} onSort={onSort} align="right" /><SortableHeader label="Thời gian chờ" sortKey="eta" current={sort} onSort={onSort} align="right" /></tr></thead><tbody className="divide-y divide-slate-100">{!loading && rows.length === 0 ? <tr><td colSpan={6} className="rt-table-empty"><Search size={24} /><strong>Không tìm thấy rider phù hợp</strong><span>Thử đổi khu vực, trạng thái hoặc từ khóa tìm kiếm.</span></td></tr> : loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-15 animate-pulse"><td colSpan={6} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : rows.map((rider) => <tr key={rider.id} tabIndex={0} onClick={() => onSelect(rider)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelect(rider); }} className="rt-rider-row h-16 cursor-pointer bg-white transition-colors hover:bg-blue-50/50 focus:bg-blue-50 focus:outline-none"><td className="px-4"><div className="rt-rider-name font-semibold text-slate-900"><span className="rt-avatar" aria-hidden="true">{rider.name.split(" ").filter(Boolean).slice(-2).map((part) => part[0]).join("")}</span>{rider.name}</div><div className="font-mono text-xs text-slate-500">{rider.driver_id}</div></td><td className="px-4"><StatusBadge status={rider.status} /></td><td className="px-4"><div className="font-medium text-slate-700">{rider.district}</div><div className="text-xs text-slate-500">{rider.ward}</div></td><td className="px-4"><CotBadge cot={rider.cot} /></td><td className="px-4 text-right tabular-nums"><span className="font-semibold text-slate-900">{rider.delivered}</span><span className="text-slate-500">/{rider.total_assigned}</span><div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${rider.progress}%` }} /></div></td><td className="px-4 text-right tabular-nums text-slate-600">{rider.delivering > 0 ? formatDuration(rider.idle_delivery_seconds) : "—"}</td></tr>)}</tbody></table></div><div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm"><span className="text-slate-500">Trang {page}/{pageCount} · {total} rider</span><div className="flex gap-2"><Button type="button" variant="secondary" disabled={page <= 1} onClick={onPrevious}><ChevronLeft size={16} /> Trước</Button><Button type="button" variant="secondary" disabled={page >= pageCount} onClick={onNext}>Sau <ChevronRight size={16} /></Button></div></div></div>;
 });
 
-function PerformanceChart({ totals, className }: { totals: { assigned: number; delivered: number; delivering: number; failed: number }; className?: string }) {
-  const segments = [{ label: "Đã giao", value: totals.delivered, color: "bg-emerald-500" }, { label: "Đang giao", value: totals.delivering, color: "bg-blue-600" }, { label: "Giao lỗi", value: totals.failed, color: "bg-red-500" }];
-  const max = Math.max(1, ...segments.map((segment) => segment.value));
-  return <article className={cn("rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2"><TrendingUp size={18} className="text-blue-700" /><h3 className="font-bold text-slate-950">Luồng xử lý đơn</h3></div><p className="mt-1 text-sm text-slate-500">So sánh các trạng thái đơn trong snapshot hiện tại</p></div><div className="flex flex-wrap gap-3">{segments.map((segment) => <span key={segment.label} className="flex items-center gap-1.5 text-xs text-slate-600"><span className={cn("size-2 rounded-sm", segment.color)} />{segment.label}</span>)}</div></div><div className="mt-5 grid h-28 grid-cols-3 items-end gap-4 border-b border-slate-200 px-2 sm:gap-8 sm:px-8">{segments.map((segment) => <div key={segment.label} className="flex h-full flex-col justify-end"><p className="mb-1 text-center text-xs font-semibold tabular-nums text-slate-700">{segment.value.toLocaleString("vi-VN")}</p><div className={cn("mx-auto w-full max-w-32 rounded-t", segment.color)} style={{ height: `${Math.max(4, segment.value / max * 78)}%` }} /></div>)}</div><div className="grid grid-cols-3 gap-4 px-2 pt-2 text-center text-xs text-slate-500 sm:gap-8 sm:px-8">{segments.map((segment) => <span key={segment.label}>{segment.label}</span>)}</div></article>;
+function PerformanceChart({ totals, loading }: { totals: { assigned: number; delivered: number; delivering: number; failed: number }; loading: boolean }) {
+  const segments = [{ label: "Đã giao", value: totals.delivered, tone: "complete", icon: CheckCircle2 }, { label: "Đang giao", value: totals.delivering, tone: "delivery", icon: Bike }, { label: "Giao lỗi", value: totals.failed, tone: "failed", icon: CircleAlert }];
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+  return <article className="rt-flow"><div className="rt-flow-heading"><span><TrendingUp size={16} />Luồng xử lý đơn</span><small>Snapshot gần nhất · {loading ? "—" : totals.assigned.toLocaleString("vi-VN")} đơn đã gán</small></div><div className="rt-flow-track" aria-hidden="true">{segments.map((segment) => <span key={segment.tone} className={`is-${segment.tone}`} style={{ width: `${total ? segment.value / total * 100 : 0}%` }} />)}</div><div className="rt-flow-stats">{segments.map(({ icon: Icon, ...segment }) => <div key={segment.tone} className={`is-${segment.tone}`}><span className="rt-flow-icon"><Icon size={17} /></span><div><span>{segment.label}</span><strong>{loading ? "—" : segment.value.toLocaleString("vi-VN")}</strong></div><small>{loading ? "—" : `${total ? Math.round(segment.value / total * 100) : 0}%`}</small></div>)}</div></article>;
 }
 
 function RiderDetails({ rider, onClose }: { rider: DisplayRider; onClose: () => void }) {
@@ -529,13 +485,11 @@ function buildKvAggregates(details: DistrictDetail[]): { kvs: Array<{ kv: string
     const riders = list.flatMap((d) => d.riders);
     return {
       name: kv, kv, area,
-      riders, totalAssigned: riders.reduce((s, r) => s + r.total_assigned, 0),
-      delivered: riders.reduce((s, r) => s + r.delivered, 0),
+      riders, ...summarizeDeliveryProgress(riders),
       delivering: riders.reduce((s, r) => s + r.delivering, 0),
       failed: riders.reduce((s, r) => s + r.failed, 0),
       warning: riders.filter((r) => r.status === "warning").length,
       completed: riders.filter((r) => r.status === "completed").length,
-      rate: 0, avgProgress: 0,
     };
   };
   const order = ["KV1", "KV2", "KV3", "KV4", "KV5"];

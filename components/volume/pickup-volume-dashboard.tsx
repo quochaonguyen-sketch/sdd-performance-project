@@ -63,7 +63,7 @@ export function PickupVolumeDashboard({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Volume theo địa bàn</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">Pickup Volume</h1>
-          <p className="mt-1 text-sm text-slate-500">Theo dõi tổng đơn theo mã tuyến, COT và địa bàn phục vụ.</p>
+          <p className="mt-1 text-sm text-slate-500">Sản lượng theo địa chỉ seller/người gửi, COT và địa bàn lấy hàng.</p>
         </div>
         <VolumeNavigation />
       </header>
@@ -239,7 +239,7 @@ function PickupAreaExplorer({
       <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <h2 className="font-bold text-slate-950">Pickup theo địa bàn ngày {formatVietnameseDate(date)}</h2>
-          <p className="mt-0.5 text-sm text-slate-500">Chọn quận → phường/xã → xem mã tuyến và sản lượng COT.</p>
+          <p className="mt-0.5 text-sm text-slate-500">Chọn quận → phường/xã của seller → xem sản lượng COT. Đơn chưa xác định được địa bàn nằm trong nhóm “Chưa rõ địa bàn seller” để đối chiếu, fetch lại.</p>
         </div>
         <div className="flex gap-2 text-xs font-bold">
           <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600">{totalRoutes} tuyến</span>
@@ -291,7 +291,7 @@ function DistrictList({
 }) {
   return (
     <div className="border-b border-slate-200 xl:border-b-0 xl:border-r">
-      <ColumnHeader step="1" title="Chọn quận" count={districts.length} />
+      <ColumnHeader step="1" title="Quận / nhóm chờ xác định" count={districts.length} />
       <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto xl:max-h-[720px]">
         {!loading && districts.length === 0 ? <EmptyState text="Chưa có dữ liệu quận/huyện." /> : null}
         {districts.map((district) => (
@@ -307,6 +307,7 @@ function DistrictList({
             )}
           >
             <ListItemHeader name={district.district} value={district.count} />
+            {district.district === "Chưa rõ địa bàn seller" ? <span className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Cần đối chiếu / fetch lại</span> : null}
             <p className="mt-1 text-xs text-slate-500">
               {district.wards.length} phường/xã · {countDistrictRoutes(district)} tuyến
             </p>
@@ -345,7 +346,7 @@ function WardList({
             )}
           >
             <ListItemHeader name={ward.ward} value={ward.count} />
-            <p className="mt-1 text-xs text-slate-500">{ward.routes.length} mã tuyến</p>
+            <p className="mt-1 text-xs text-slate-500">{ward.routes.filter((route) => route.route !== "Chưa có mã tuyến").length} mã tuyến seller</p>
             <CotMetadata cots={ward.cots} />
           </button>
         ))}
@@ -389,7 +390,7 @@ function RouteTable({
         </div>
         {ward ? (
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600">{ward.routes.length} tuyến</span>
+            <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600">{ward.routes.filter((route) => route.route !== "Chưa có mã tuyến").length} tuyến seller</span>
             <span className="rounded-md bg-orange-50 px-2.5 py-1.5 text-orange-700">{formatNumber(ward.count)} đơn</span>
             <span className="rounded-md bg-blue-50 px-2.5 py-1.5 text-blue-700">COT 1: {formatNumber(cotValue(ward.cots, "COT 1"))}</span>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-700">COT 2: {formatNumber(cotValue(ward.cots, "COT 2"))}</span>
@@ -457,7 +458,7 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function countDistrictRoutes(district: PickupDistrict) {
-  return new Set(district.wards.flatMap((ward) => ward.routes.map((route) => route.route))).size;
+  return new Set(district.wards.flatMap((ward) => ward.routes.map((route) => route.route)).filter((route) => route !== "Chưa có mã tuyến")).size;
 }
 
 function cotValue(cots: PickupCotSummary[], name: string) {

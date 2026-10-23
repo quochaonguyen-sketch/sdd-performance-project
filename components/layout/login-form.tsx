@@ -31,9 +31,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       <section className="ops-login-story" aria-label="Rider Operations">
         <AppBrand />
         <div className="ops-login-intro">
-          <p className="ops-login-eyebrow">Không gian vận hành SDD</p>
-          <h2>Mỗi tuyến đường.<br />Một nhịp vận hành.</h2>
-          <p>Delivery, pickup và hàng trả trong cùng một không gian làm việc cho đội ngũ Khu vực 1–5.</p>
+          <p className="ops-login-eyebrow">Nền tảng vận hành SDD</p>
+          <h2>Điều phối chính xác.<br />Vận hành hiệu quả.</h2>
+          <p>Quản lý tập trung hoạt động giao hàng, lấy hàng và hoàn trả tại Khu vực 1–5.</p>
           <div className="ops-route-diagram" aria-hidden="true">
             <div><span>Bắt đầu</span><strong>Điều phối</strong><i /></div>
             <div><span>Trong ca</span><strong>Theo dõi</strong><i /></div>

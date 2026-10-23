@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import "./workspace.css";
 import "./dashboard.css";
+import "./realtime.css";
 import { IBM_Plex_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +12,7 @@ const plex = IBM_Plex_Sans({ subsets: ["latin", "vietnamese"], weight: ["400", "
 const themeBootScript = `(()=>{try{const saved=localStorage.getItem("rider-ops-theme");const dark=saved? saved==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",dark);document.documentElement.dataset.theme=dark?"dark":"light"}catch{}})()`;
 
 export const metadata: Metadata = {
-  title: "Rider Operations | Khu vực 1-5 SDD",
+  title: "SDD Operations | Khu vực 1–5",
   description: "Hệ thống quản lý và điều phối đội ngũ giao nhận Khu vực 1-5 SDD",
 };
 
