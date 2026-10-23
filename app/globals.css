@@ -128,29 +128,6 @@ textarea {
   font: inherit;
 }
 
-.rider-loader-track {
-  mask-image: linear-gradient(to right, transparent, black 9%, black 91%, transparent);
-}
-
-.rider-loader-bike {
-  animation: rider-travel 2s ease-in-out infinite;
-  left: -8rem;
-  opacity: 0.86;
-}
-
-.rider-loader-body {
-  animation: rider-bob 0.55s ease-in-out infinite alternate;
-  transform-origin: center;
-}
-
-.rider-loader-wheel {
-  animation: rider-wheel-spin 0.72s linear infinite;
-}
-
-.rider-loader-road {
-  animation: rider-road-slide 1.8s ease-in-out infinite;
-}
-
 /* Hallmark · component: route reveal · genre: modern-minimal · theme: Cobalt adapted
  * states: loading · ready · reduced-motion
  * pre-emit critique: P5 H5 E5 S5 R5 V4
@@ -222,8 +199,8 @@ textarea {
   overflow: hidden;
   place-items: center;
   padding: var(--space-md);
-  background: color-mix(in oklch, var(--color-paper-2) 34%, transparent);
-  backdrop-filter: blur(2px);
+  background: color-mix(in oklch, var(--color-paper-2) 62%, transparent);
+  backdrop-filter: blur(4px);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -253,60 +230,77 @@ textarea {
 
 .rider-loader-surface {
   display: grid;
-  width: min(100%, 36rem);
-  padding: var(--space-lg) var(--space-md);
-  border: var(--rule-hairline) solid color-mix(in oklch, var(--color-rule) 68%, transparent);
-  border-radius: var(--radius-modal);
-  background: color-mix(in oklch, var(--color-paper) 52%, transparent);
-  box-shadow: var(--shadow-panel);
-  color: var(--color-ink-2);
+  justify-items: center;
+  width: min(100%, 23.75rem);
+  padding: 32px 24px 26px;
+  border: var(--rule-hairline) solid var(--color-rule);
+  border-radius: 16px;
+  background: var(--color-paper);
+  box-shadow: 0 12px 40px color-mix(in oklch, var(--color-graphite) 10%, transparent);
+  color: var(--color-ink);
   text-align: center;
-  backdrop-filter: blur(2px);
 }
 
 .rider-loader-surface.is-compact {
-  width: min(100%, 32rem);
-  padding: var(--space-md);
-  box-shadow: none;
+  width: min(100%, 22rem);
+  padding: 28px 24px 24px;
 }
 
-.rider-loader-surface .rider-loader-track {
+.rider-loader-flow {
+  display: flex;
+  align-items: center;
+  width: min(100%, 278px);
+  min-height: 124px;
+}
+
+.rider-loader-station {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-rule);
+  border-radius: 13px;
+  background: var(--color-paper);
+  color: var(--color-focus);
+}
+
+.rider-loader-station.is-dispatch {
   position: relative;
-  display: block;
-  height: 7rem;
+  z-index: 1;
+  width: 54px;
+  height: 54px;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  box-shadow: 0 0 0 7px var(--color-accent-soft);
+  animation: rider-loader-heartbeat 2.4s ease-in-out infinite;
+}
+
+.rider-loader-connector {
+  position: relative;
+  flex: 1;
+  height: 2px;
   overflow: hidden;
+  background: var(--color-paper-3);
 }
 
-.rider-loader-surface .rider-loader-bike {
+.rider-loader-connector::before {
   position: absolute;
-  bottom: var(--space-md);
-  display: block;
-  width: 8rem;
+  inset: 0 auto 0 0;
+  width: 19px;
+  content: "";
+  background: linear-gradient(90deg, var(--color-focus), var(--color-accent));
+  animation: rider-loader-packet 2.4s cubic-bezier(.45, 0, .25, 1) infinite;
 }
 
-.rider-loader-surface .rider-loader-bike svg {
-  display: block;
-  width: 100%;
-  overflow: visible;
-  filter: drop-shadow(0 0.4rem 0.4rem color-mix(in oklch, var(--color-ink) 10%, transparent));
+.rider-loader-connector.is-outbound::before {
+  animation-delay: -1.2s;
 }
 
-.rider-loader-road-track {
-  position: absolute;
-  inset: auto var(--space-md) 0;
-  display: block;
-  height: 0.25rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--color-rule) 70%, transparent);
-}
-
-.rider-loader-road {
-  display: block;
-  width: 33.333%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(to right, transparent, var(--color-note-accent), transparent);
+.app-loading-overlay:not(.is-pending) .rider-loader-station.is-dispatch,
+.app-loading-overlay:not(.is-pending) .rider-loader-connector::before {
+  animation-play-state: paused;
 }
 
 .rider-loader-title,
@@ -315,10 +309,10 @@ textarea {
 }
 
 .rider-loader-title {
-  margin-block-start: var(--space-sm);
-  color: var(--color-ink-2);
+  margin-block-start: 17px;
+  color: var(--color-ink);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
@@ -342,7 +336,7 @@ textarea {
 
 @media (min-width: 64rem) {
   .app-navigation-scrim {
-    inset: 4.75rem 0 0 16rem;
+    inset: 56px 0 0 300px;
     padding: var(--space-xl);
   }
 
@@ -367,24 +361,15 @@ textarea {
 
 }
 
-@keyframes rider-travel {
-  0% { left: -8rem; }
-  85%, 100% { left: 100%; }
+@keyframes rider-loader-heartbeat {
+  0%, 100% { box-shadow: 0 0 0 5px var(--color-accent-soft); }
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-accent-soft) 50%, transparent); }
 }
 
-@keyframes rider-bob {
-  from { transform: translateY(0) rotate(-0.5deg); }
-  to { transform: translateY(-2px) rotate(0.5deg); }
-}
-
-@keyframes rider-wheel-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes rider-road-slide {
-  0% { opacity: 0; transform: translateX(-110%); }
-  20%, 80% { opacity: 0.8; }
-  100% { opacity: 0; transform: translateX(300%); }
+@keyframes rider-loader-packet {
+  0%, 8% { left: -22px; opacity: 0; }
+  18%, 70% { opacity: 1; }
+  90%, 100% { left: 100%; opacity: 0; }
 }
 
 @keyframes route-content-reveal {
@@ -398,13 +383,11 @@ textarea {
   .aurora-background__lights {
     animation: none;
   }
-  .rider-loader-bike,
-  .rider-loader-body,
-  .rider-loader-wheel,
-  .rider-loader-road {
+  .rider-loader-station.is-dispatch,
+  .rider-loader-connector::before {
     animation: none;
   }
-  .rider-loader-bike { left: calc(50% - 4rem); opacity: 0.86; }
+  .rider-loader-connector::before { left: calc(50% - 9.5px); }
   .route-reveal-content.is-ready {
     animation: none;
     opacity: 1;

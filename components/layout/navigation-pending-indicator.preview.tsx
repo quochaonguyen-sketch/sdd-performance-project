@@ -10,7 +10,7 @@ export function NavigationPendingIndicatorPreview() {
   return (
     <div className="app-navigation-preview">
       <p>Trạng thái nghỉ: không che nội dung.</p>
-      <p>Trạng thái chờ: thanh tiến trình và rider SPX xuất hiện sau 120 ms.</p>
+      <p>Trạng thái chờ: thanh tiến trình và dòng chảy điều phối xuất hiện sau 120 ms.</p>
       <Link href="/dashboard">
         Mở Dashboard
         <NavigationPendingIndicator />
