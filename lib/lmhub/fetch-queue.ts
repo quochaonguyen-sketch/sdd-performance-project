@@ -33,6 +33,20 @@ export function normalizeLmhubKind(raw?: string | null): LmhubJobKind {
 
 export async function readLmhubQueueStatus(): Promise<LmhubQueueStatus> {
   const admin = createAdminClient();
+
+  // Tu dong danh dau ERROR cho cac job RUNNING bi treo do worker tat giua chung (mat heartbeat > 3 phut)
+  const staleCutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+  await admin
+    .from("lmhub_fetch_jobs")
+    .update({
+      status: "ERROR",
+      error_message: "Worker mất kết nối / bị tắt giữa chừng (quá 3 phút không có heartbeat)",
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "RUNNING")
+    .lt("updated_at", staleCutoff);
+
   const { data: openRows, error: openError } = await admin
     .from("lmhub_fetch_jobs")
     .select("id,status,params")
