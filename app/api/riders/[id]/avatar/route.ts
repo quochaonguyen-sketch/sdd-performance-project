@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageRiders } from "@/lib/auth/permissions";
+import { canEditRiderArea } from "@/lib/auth/rider-scope";
 
 const BUCKET = "rider-avatars";
 const MAX_AVATAR_SIZE = 3 * 1024 * 1024;
@@ -34,13 +35,14 @@ export async function POST(request: Request, context: RouteContext<"/api/riders/
 
   const { data: rider, error: riderError } = await admin
     .from("riders")
-    .select("id, rider_code, avatar_url").in("kv", OPERATING_AREAS)
+    .select("id, rider_code, avatar_url,kv").in("kv", OPERATING_AREAS)
     .eq("id", id)
     .maybeSingle();
 
   if (riderError || !rider) {
     return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
   }
+  if (!canEditRiderArea(auth.profile.role, auth.profile.permissions.manage_riders, auth.profile.rider_edit_areas, rider.kv)) return NextResponse.json({ success: false, error: "Rider nằm ngoài KV được cấp quyền" }, { status: 403 });
 
   const { data: buckets, error: bucketListError } = await admin.storage.listBuckets();
   if (bucketListError) {

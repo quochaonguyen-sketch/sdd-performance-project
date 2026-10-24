@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { UserActivityTracker } from "@/components/layout/user-activity-tracker";
 
 export async function ProtectedPage({ children }: { children: React.ReactNode }) {
   const context = await getCurrentUserContext();
@@ -19,6 +20,7 @@ export async function ProtectedPage({ children }: { children: React.ReactNode })
           role: context.profile.role,
         }}
       >
+        <UserActivityTracker />
         {children}
       </AppShell>
     </Suspense>

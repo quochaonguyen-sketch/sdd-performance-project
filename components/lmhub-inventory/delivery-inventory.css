@@ -1,0 +1,131 @@
+/* Area identity follows the operations dashboard palette. */
+.delivery-inventory-page,
+.delivery-inventory-page [data-area="all"] {
+  --area-color: #475569;
+  --area-deep: #334155;
+  --area-soft: #f1f5f9;
+  --area-rule: #cbd5e1;
+}
+.delivery-inventory-page[data-area="KV1"], .delivery-inventory-page [data-area="KV1"] {
+  --area-color: #2563eb; --area-deep: #1e40af; --area-soft: #eff6ff; --area-rule: #bfdbfe;
+}
+.delivery-inventory-page[data-area="KV2"], .delivery-inventory-page [data-area="KV2"] {
+  --area-color: #0f8468; --area-deep: #065f46; --area-soft: #ecfdf5; --area-rule: #a7f3d0;
+}
+.delivery-inventory-page[data-area="KV3"], .delivery-inventory-page [data-area="KV3"] {
+  --area-color: #8b45cc; --area-deep: #6b21a8; --area-soft: #faf5ff; --area-rule: #e9d5ff;
+}
+.delivery-inventory-page[data-area="KV4"], .delivery-inventory-page [data-area="KV4"] {
+  --area-color: #b76a0b; --area-deep: #92400e; --area-soft: #fffbeb; --area-rule: #fde68a;
+}
+.delivery-inventory-page[data-area="KV5"], .delivery-inventory-page [data-area="KV5"] {
+  --area-color: #d03d76; --area-deep: #9d174d; --area-soft: #fdf2f8; --area-rule: #fbcfe8;
+}
+.delivery-inventory-page .delivery-page-header {
+  border-top: 3px solid var(--area-color);
+  background: linear-gradient(115deg, white 45%, var(--area-soft));
+  box-shadow: 0 4px 18px #0f172a06;
+}
+.delivery-inventory-page .delivery-scope { box-shadow: 0 6px 24px #0f172a06; }
+.delivery-inventory-page .delivery-area-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: var(--area-rule);
+  border-top: 3px solid var(--area-color);
+  color: var(--area-deep);
+  background: linear-gradient(145deg, white, var(--area-soft));
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.delivery-inventory-page .delivery-area-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 76px;
+  height: 76px;
+  border: 14px solid var(--area-color);
+  border-radius: 50%;
+  opacity: .06;
+  right: -24px;
+  bottom: -24px;
+  pointer-events: none;
+}
+.delivery-inventory-page .delivery-area-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--area-color);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--area-color) 16%, transparent);
+}
+.delivery-inventory-page .delivery-area-card[aria-pressed="true"] {
+  border-color: var(--area-color);
+  box-shadow: 0 0 0 2px var(--area-color), 0 6px 18px color-mix(in srgb, var(--area-color) 15%, transparent);
+}
+.delivery-inventory-page .delivery-area-label,
+.delivery-inventory-page .delivery-area-value { color: var(--area-deep); }
+.delivery-inventory-page .delivery-area-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--area-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--area-color) 10%, transparent);
+}
+.delivery-inventory-page .delivery-area-indicator {
+  display: grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--area-soft); color: var(--area-color);
+}
+.delivery-inventory-page .delivery-area-card[aria-pressed="true"] .delivery-area-indicator {
+  background: var(--area-color); color: white;
+}
+.delivery-inventory-page .delivery-scope-summary {
+  background: var(--area-soft); border-color: var(--area-rule); color: var(--area-deep);
+}
+.delivery-inventory-page .delivery-district-card {
+  border-color: var(--area-rule);
+  border-top: 3px solid var(--area-color);
+  box-shadow: 0 2px 8px #0f172a05;
+  transition: box-shadow 180ms ease;
+}
+.delivery-inventory-page .delivery-district-card:hover { box-shadow: 0 6px 20px color-mix(in srgb, var(--area-color) 12%, transparent); }
+.delivery-inventory-page .delivery-district-header {
+  background: linear-gradient(110deg, var(--area-soft), white);
+  border-color: var(--area-rule);
+}
+.delivery-inventory-page .delivery-district-header button { color: var(--area-deep); }
+.delivery-inventory-page .delivery-district-header button:hover { background: var(--area-soft); }
+.delivery-inventory-page .delivery-ward-row { transition: background-color 140ms ease; }
+.delivery-inventory-page .delivery-ward-row:hover,
+.delivery-inventory-page .delivery-ward-row[data-selected="true"] { background: var(--area-soft); }
+.delivery-inventory-page .delivery-ward-row[data-selected="true"] { box-shadow: inset 3px 0 var(--area-color); }
+.delivery-inventory-page .delivery-ward-row th button:hover { color: var(--area-deep); }
+.delivery-inventory-page .delivery-order-panel { border-top: 3px solid var(--area-color); }
+.delivery-inventory-page .delivery-order-panel > div:first-child { background: var(--area-soft); }
+.delivery-inventory-page .delivery-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+.delivery-inventory-page .delivery-order-list { scrollbar-gutter: stable; }
+@media (min-width: 1280px) {
+  .delivery-inventory-page .delivery-command-grid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  .delivery-inventory-page .delivery-command-detail {
+    position: sticky;
+    top: 20px;
+  }
+}
+.delivery-inventory-page .delivery-stat {
+  border-top: 3px solid var(--area-color);
+  background: linear-gradient(135deg, white 45%, var(--area-soft));
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+.delivery-inventory-page .delivery-stat[data-accent="blue"] { --area-color: #2563eb; --area-soft: #eff6ff; }
+.delivery-inventory-page .delivery-stat[data-accent="teal"],
+.delivery-inventory-page .delivery-stat[data-accent="green"] { --area-color: #0f8468; --area-soft: #ecfdf5; }
+.delivery-inventory-page .delivery-stat[data-accent="red"] { --area-color: #dc2626; --area-soft: #fef2f2; }
+.delivery-inventory-page .delivery-stat:hover { transform: translateY(-2px); box-shadow: 0 5px 16px #0f172a0a; }
+@media (prefers-reduced-motion: reduce) {
+  .delivery-inventory-page .delivery-area-card,
+  .delivery-inventory-page .delivery-district-card,
+  .delivery-inventory-page .delivery-ward-row,
+  .delivery-inventory-page .delivery-stat { transition: none; }
+  .delivery-inventory-page .delivery-area-card:hover,
+  .delivery-inventory-page .delivery-stat:hover { transform: none; }
+}

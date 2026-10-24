@@ -2,6 +2,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
+import { normalizeRiderEditAreas } from "@/lib/auth/rider-scope";
 
 export type CurrentUserContext = {
   user: {
@@ -12,6 +13,7 @@ export type CurrentUserContext = {
     full_name: string | null;
     role: string;
     permissions: MemberPermissions;
+    rider_edit_areas: string[];
   };
 };
 
@@ -44,7 +46,8 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
 
   if (!byEmail) return null;
 
-  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId);
+  if (authError || !authUser.user) throw new Error("Không tải được quyền hiện tại của tài khoản.");
   const permissions = normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
 
   return {
@@ -53,6 +56,7 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
       full_name: byEmail.full_name,
       role: byEmail.role,
       permissions,
+      rider_edit_areas: normalizeRiderEditAreas(authUser.user.app_metadata?.rider_edit_areas),
     },
   };
 });

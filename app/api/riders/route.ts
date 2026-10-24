@@ -9,6 +9,7 @@ import { canManageRiders } from "@/lib/auth/permissions";
 import { getCachedRiders, invalidateRidersCache } from "@/lib/cache/operations-cache";
 import { getRiderRegistryData, riderRegistryQueryFromUrl } from "@/lib/riders/rider-registry";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { canEditRiderArea } from "@/lib/auth/rider-scope";
 
 const createRiderSchema = z.object({
   kv: z.string().trim().refine((value) => !value || isOperatingArea(value), "KV phải từ KV1 đến KV5").transform((value) => normalizeOperatingArea(value)).optional().nullable(),
@@ -43,8 +44,8 @@ async function getSignedInUser() {
 
 async function getRiderManager() {
   const context = await getCurrentUserContext();
-  if (!context) return { user: null, allowed: false };
-  return { user: context.user, allowed: canManageRiders(context.profile.role, context.profile.permissions) };
+  if (!context) return { user: null, allowed: false, context: null };
+  return { user: context.user, allowed: canManageRiders(context.profile.role, context.profile.permissions), context };
 }
 
 export async function GET(request: Request) {
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, allowed } = await getRiderManager();
+  const { user, allowed, context } = await getRiderManager();
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -90,6 +91,9 @@ export async function POST(request: Request) {
   }
 
   const rider = parsed.data;
+  if (!context || !canEditRiderArea(context.profile.role, allowed, context.profile.rider_edit_areas, rider.kv)) {
+    return NextResponse.json({ success: false, error: "Bạn không được thêm rider ngoài KV được cấp quyền" }, { status: 403 });
+  }
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("riders")
@@ -141,7 +145,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { user, allowed } = await getRiderManager();
+  const { user, allowed, context } = await getRiderManager();
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -163,12 +167,15 @@ export async function PATCH(request: Request) {
   const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
     .from("riders")
-    .select("id").in("kv", OPERATING_AREAS)
+    .select("id,kv").in("kv", OPERATING_AREAS)
     .eq("id", id)
     .maybeSingle();
 
   if (existingError || !existing) {
     return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
+  }
+  if (!context || !canEditRiderArea(context.profile.role, allowed, context.profile.rider_edit_areas, existing.kv) || !canEditRiderArea(context.profile.role, allowed, context.profile.rider_edit_areas, rider.kv)) {
+    return NextResponse.json({ success: false, error: "Bạn không được sửa/chuyển rider ngoài KV được cấp quyền" }, { status: 403 });
   }
 
   const { data: duplicate } = await admin
@@ -223,7 +230,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, allowed } = await getRiderManager();
+  const { user, allowed, context } = await getRiderManager();
   if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   if (!allowed) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền xóa rider" }, { status: 403 });
@@ -231,17 +238,13 @@ export async function DELETE(request: Request) {
   const admin = createAdminClient();
   const parsed = z.object({ id: z.string().uuid() }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Rider không hợp lệ" }, { status: 400 });
-  const { data: rider, error: findError } = await admin.from("riders").select("id,rider_code,full_name").in("kv", OPERATING_AREAS).eq("id", parsed.data.id).maybeSingle();
+  const { data: rider, error: findError } = await admin.from("riders").select("id,rider_code,full_name,kv").in("kv", OPERATING_AREAS).eq("id", parsed.data.id).maybeSingle();
   if (findError || !rider) return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
+  if (!context || !canEditRiderArea(context.profile.role, allowed, context.profile.rider_edit_areas, rider.kv)) return NextResponse.json({ success: false, error: "Rider nằm ngoài KV được cấp quyền" }, { status: 403 });
 
-  const [attendanceResult, violationResult] = await Promise.all([
-    admin.from("attendance_logs").update({ rider_id: null }).eq("rider_id", rider.id),
-    admin.from("rider_violations").update({ rider_id: null }).eq("rider_id", rider.id),
-  ]);
-  const unlinkError = attendanceResult.error ?? violationResult.error;
-  if (unlinkError) return NextResponse.json({ success: false, error: unlinkError.message }, { status: 400 });
-  const { error } = await admin.from("riders").delete().eq("id", rider.id);
-  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  const { data: deleted, error } = await admin.rpc("delete_rider_with_history", { target_id: rider.id });
+  if (error) return NextResponse.json({ success: false, error: error.message }, { status: error.code === "42501" ? 403 : 400 });
+  if (!deleted) return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
   await admin.from("activity_logs").insert({ entity_type: "rider", entity_id: null, action: "deleted", message: `Deleted rider ${rider.rider_code}`, raw_data: rider });
   invalidateRidersCache();
   return NextResponse.json({ success: true, id: rider.id });

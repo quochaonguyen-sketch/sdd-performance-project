@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { PERMISSION_OPTIONS, defaultPermissionsForRole, selectedPermissionKeys, type MemberPermissions, type PermissionKey } from "@/lib/auth/permissions";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 
 type MemberRole = "admin" | "leader" | "viewer" | "member";
 type Member = {
@@ -21,6 +22,7 @@ type Member = {
   is_current_user: boolean;
   is_super_admin: boolean;
   permissions: MemberPermissions;
+  rider_edit_areas: string[];
 };
 type MembersResponse = { success: boolean; members?: Member[]; error?: string; message?: string };
 
@@ -29,6 +31,7 @@ const initialForm = {
   email: "",
   role: "member" as MemberRole,
   permissions: defaultPermissionsForRole("member"),
+  rider_edit_areas: [] as string[],
 };
 
 export function MemberManagement() {
@@ -51,6 +54,8 @@ export function MemberManagement() {
   }, []);
 
   useEffect(() => {
+    // Initial network load also sets the request loading indicator.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadMembers();
   }, [loadMembers]);
 
@@ -75,7 +80,7 @@ export function MemberManagement() {
     await loadMembers();
   }
 
-  async function updateMember(member: Member, patch: { role?: MemberRole; permissions?: MemberPermissions }) {
+  async function updateMember(member: Member, patch: { role?: MemberRole; permissions?: MemberPermissions; rider_edit_areas?: string[] }) {
     if (member.is_super_admin) {
       setError("Không thể sửa Super Admin");
       return;
@@ -88,7 +93,7 @@ export function MemberManagement() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: member.id, ...patch }),
     });
-    const result = await response.json().catch(() => null) as MembersResponse & { permissions?: MemberPermissions } | null;
+    const result = await response.json().catch(() => null) as MembersResponse & { permissions?: MemberPermissions; rider_edit_areas?: string[] } | null;
     setUpdatingId(null);
     if (!response.ok || !result?.success) {
       setError(result?.error ?? "Không thể cập nhật thành viên");
@@ -98,6 +103,7 @@ export function MemberManagement() {
       ...item,
       role: patch.role ?? item.role,
       permissions: result.permissions ?? patch.permissions ?? item.permissions,
+      rider_edit_areas: result.rider_edit_areas ?? patch.rider_edit_areas ?? item.rider_edit_areas,
     } : item));
     setSuccess(`Đã cập nhật ${member.full_name ?? member.email}.`);
   }
@@ -142,6 +148,8 @@ export function MemberManagement() {
             <Field label="Quyền chức năng">
               <PermissionMultiSelect value={form.permissions} onChange={(permissions) => setForm((current) => ({ ...current, permissions }))} />
             </Field>
+            <Field label="KV được sửa rider"><AreaPermissions areas={form.rider_edit_areas} disabled={form.role === "admin"} onChange={(rider_edit_areas) => setForm((current) => ({ ...current, rider_edit_areas }))} /></Field>
+            <p className="text-xs text-slate-500">Member/FTE cần quyền sửa rider và ít nhất một KV. Admin có quyền tất cả KV.</p>
             <Button type="submit" className="w-full" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" size={17} /> : <UserPlus size={17} />}{saving ? "Đang thêm..." : "Cho phép đăng nhập"}</Button>
           </form>
         </Card>
@@ -180,6 +188,7 @@ export function MemberManagement() {
                     </td>
                     <td className="px-4 py-3 min-w-[240px]">
                       <PermissionMultiSelect value={member.permissions} disabled={updatingId === member.id || member.role === "admin" || member.is_super_admin} onChange={(permissions) => void updateMember(member, { permissions })} />
+                      <div className="mt-3"><p className="mb-1 text-xs font-semibold text-slate-500">KV được sửa rider</p>{member.role === "admin" ? <p className="text-xs text-blue-700">Tất cả KV</p> : <AreaPermissions areas={member.rider_edit_areas} disabled={updatingId === member.id || member.is_super_admin} onChange={(rider_edit_areas) => void updateMember(member, { rider_edit_areas })} />}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(member.last_sign_in_at)}</td>
                     <td className="px-4 py-3">
@@ -202,6 +211,10 @@ export function MemberManagement() {
       <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><ShieldCheck className="mt-0.5 shrink-0" size={18} /><p><strong>Super Admin</strong> là email trong <code>BOOTSTRAP_ADMIN_EMAIL</code>. Tài khoản này luôn đăng nhập được, không hạ quyền và không xóa được.</p></div>
     </div>
   );
+}
+
+function AreaPermissions({ areas, onChange, disabled }: { areas: string[]; onChange: (areas: string[]) => void; disabled?: boolean }) {
+  return <div className="flex flex-wrap gap-2">{OPERATING_AREAS.map((area) => <label key={area} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs"><input type="checkbox" checked={areas.includes(area)} disabled={disabled} onChange={() => onChange(areas.includes(area) ? areas.filter((item) => item !== area) : [...areas, area])} />{area}</label>)}</div>;
 }
 
 function PermissionMultiSelect({ value, onChange, disabled }: { value: MemberPermissions; onChange: (value: MemberPermissions) => void; disabled?: boolean }) {

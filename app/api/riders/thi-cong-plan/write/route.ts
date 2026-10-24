@@ -22,7 +22,7 @@ async function managerSession() {
   const context = await getCurrentUserContext();
   if (!context) return null;
   const admin = createAdminClient();
-  return { admin, role: context.profile.role, permissions: context.profile.permissions };
+  return { admin, role: context.profile.role, permissions: context.profile.permissions, areas: context.profile.rider_edit_areas };
 }
 
 export async function PUT(request: Request) {
@@ -31,6 +31,7 @@ export async function PUT(request: Request) {
   if (!canManageRiders(session.role, session.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ rider" }, { status: 403 });
   }
+  if (session.role !== "admin" && session.areas.length !== OPERATING_AREAS.length) return NextResponse.json({ success: false, error: "Ghi lại toàn bộ tab Thi Công Plan cần quyền tất cả KV" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

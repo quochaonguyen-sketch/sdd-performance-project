@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { BarChart, ChartHead, RiskStrip } from "@/components/lmhub-inventory/lmhub-inventory-charts";
 import { HeatLegend, Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
 import { DeliveryInventoryBoard } from "@/components/lmhub-inventory/delivery-inventory-board";
+import "./delivery-inventory.css";
 import {
   COLUMNS,
   PAGE_ROWS,
@@ -25,10 +26,12 @@ import {
   cotBucket,
   deliveryInventoryRows,
   deliveryDistrictLabel,
+  districtKey,
+  focusKey,
+  scopeDeliveryBoards,
   filterBoard,
   formatDateTime,
   formatRelative,
-  normalize,
   normalizeRow,
   toTime,
   visibleTotal,
@@ -48,6 +51,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const [heat, setHeat] = useState<HeatFilter>("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [districtFilter, setDistrictFilter] = useState("all");
+  const [wardFilter, setWardFilter] = useState("all");
   const [selected, setSelected] = useState<InventoryFocus | null>(null);
   const [page, setPage] = useState(1);
   const [queueing, setQueueing] = useState(false);
@@ -159,26 +163,34 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
     }
   }, [waitingSnapshot, snapshotAt]);
 
-  const districtBoards = useMemo(() => buildDeliveryDistrictBoards(rows.filter((row) => areaFilter === "all" || row.area === areaFilter)), [rows, areaFilter]);
-
-  const filtered = useMemo(() => filterBoard(districtBoards.filter((district) => districtFilter === "all" || district.district === districtFilter), query, cot, heat), [districtBoards, districtFilter, query, cot, heat]);
-  const analytics = useMemo(() => buildAnalytics(districtBoards, [], cot), [districtBoards, cot]);
+  const allBoards = useMemo(() => buildDeliveryDistrictBoards(rows), [rows]);
+  const districtBoards = useMemo(() => scopeDeliveryBoards(allBoards, areaFilter, "all", "all"), [allBoards, areaFilter]);
+  const wardBoards = useMemo(() => scopeDeliveryBoards(allBoards, areaFilter, districtFilter, "all"), [allBoards, areaFilter, districtFilter]);
+  const filtered = useMemo(() => filterBoard(scopeDeliveryBoards(allBoards, areaFilter, districtFilter, wardFilter), query, cot, heat), [allBoards, areaFilter, districtFilter, wardFilter, query, cot, heat]);
+  const analytics = useMemo(() => buildAnalytics(filtered, [], cot), [filtered, cot]);
+  const visibleWards = useMemo(() => new Set(filtered.flatMap((district) => district.wards.map(focusKey))), [filtered]);
+  const scopedDistrict = districtBoards.find((item) => districtKey(item.area, item.district) === districtFilter);
+  const scopedWard = wardBoards.flatMap((item) => item.wards).find((item) => focusKey(item) === wardFilter);
+  const scopeLabel = [scopedWard?.area ?? scopedDistrict?.area ?? (areaFilter === "all" ? "Tất cả khu vực" : areaFilter), scopedDistrict ? deliveryDistrictLabel(scopedDistrict.district) : scopedWard ? deliveryDistrictLabel(scopedWard.district) : null, scopedWard?.ward].filter(Boolean).join(" / ");
+  const changeArea = (value: string) => {
+    setAreaFilter(value); setDistrictFilter("all"); setWardFilter("all"); setSelected(null); setPage(1);
+  };
+  const clearFilters = () => {
+    changeArea("all"); setQuery(""); setCot("all"); setHeat("all");
+  };
   const selectedOrders = useMemo(() => {
     if (!selected) return [];
-    const q = normalize(query);
     return rows
       .filter((row) => {
         if (row.area !== selected.area) return false;
-        if (areaFilter !== "all" && row.area !== areaFilter) return false;
-        if (districtFilter !== "all" && row.district !== districtFilter) return false;
         if ((row.district || UNKNOWN_DISTRICT) !== selected.district) return false;
         if (selected.ward && (row.ward || UNKNOWN_WARD) !== selected.ward) return false;
+        if (!visibleWards.has(focusKey({ area: selected.area, district: row.district || UNKNOWN_DISTRICT, ward: row.ward || UNKNOWN_WARD }))) return false;
         if (cot !== "all" && cotBucket(row.cot_group) !== cot) return false;
-        if (q && !normalize(`${row.shipment_id} ${row.zone_id} ${row.cot_group} ${row.order_type} ${row.ward} ${row.district}`).includes(q)) return false;
         return true;
       })
       .sort((a, b) => toTime(b.received_time) - toTime(a.received_time));
-  }, [rows, selected, query, cot, districtFilter, areaFilter]);
+  }, [rows, selected, cot, visibleWards]);
 
   const pageCount = Math.max(1, Math.ceil(selectedOrders.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -188,17 +200,21 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const selectFocus = (focus: InventoryFocus) => {
     setSelected(focus);
     setPage(1);
-    requestAnimationFrame(() => orderPanelRef.current?.scrollIntoView({
+    requestAnimationFrame(() => {
+      if (window.matchMedia("(min-width: 1280px)").matches) return;
+      orderPanelRef.current?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start",
-      }));
+      });
+    });
   };
 
   return (
-    <div className="dashboard-control mx-auto max-w-[1680px] space-y-2">
-      <header className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div className="dashboard-control delivery-inventory-page mx-auto max-w-[1680px] space-y-4" data-area={areaFilter}>
+      <header className="delivery-page-header flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
         <div className="min-w-0">
-          <h1 className="text-base font-bold text-slate-900">Tồn Delivery</h1>
-          <p className="text-[11px] text-slate-500">Bấm tên phường hoặc số tổng để xem đơn.</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-600">Trung tâm điều hành · Giao hàng</p>
+          <h1 className="text-xl font-bold text-slate-900">Tồn Delivery</h1>
+          <p className="mt-1 text-xs text-slate-500">Theo dõi tồn theo địa bàn, xác định phường cần ưu tiên xử lý.</p>
         </div>
         <div className="dashboard-command-actions">
           <div className="min-w-[150px] px-1">
@@ -232,31 +248,58 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatTile label="Tổng tồn trong phạm vi" value={analytics.visible} hint="KV1–KV5 · theo KV của dữ liệu nguồn" accent="ink" />
-        <StatTile label="COT 1" value={analytics.cot1} hint="Tổng đơn thuộc COT 1" accent="blue" />
-        <StatTile label="COT 2" value={analytics.cot2} hint="Tổng đơn thuộc COT 2" accent="teal" />
-        <StatTile label="Phường cần ưu tiên" value={analytics.hotWards} hint="Từ 36 đơn tồn / phường" accent={analytics.hotWards ? "red" : "green"} />
+      <section aria-label="Phạm vi địa bàn" className="delivery-scope overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div><div className="flex items-center gap-2"><MapPin size={17} className="text-blue-600" /><h2 className="text-sm font-bold text-slate-900">Phạm vi địa bàn</h2></div><p className="mt-1 text-[11px] text-slate-500">Tổng quan các KV theo COT đang chọn. Chọn KV để thu hẹp địa bàn.</p></div>
+          <button type="button" onClick={clearFilters} className="min-h-8 rounded-md px-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Đặt lại bộ lọc</button>
+        </div>
+        <nav aria-label="Chọn khu vực tồn Delivery" className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3 xl:grid-cols-6">
+          {["all", ...OPERATING_AREAS].map((area) => {
+            const boards = area === "all" ? allBoards : allBoards.filter((item) => item.area === area);
+            const total = boards.reduce((sum, item) => sum + visibleTotal(item.totals, cot), 0);
+            return <button key={area} type="button" data-area={area} aria-pressed={areaFilter === area} onClick={() => changeArea(area)} className="delivery-area-card rounded-xl border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-4">
+              <span className="delivery-area-label flex items-center justify-between gap-2 text-xs font-semibold"><span className="flex items-center gap-1.5"><span aria-hidden="true" className="delivery-area-dot" />{area === "all" ? "Tất cả khu vực" : area}</span><span aria-hidden="true" className="delivery-area-indicator">{areaFilter === area ? "✓" : "↗"}</span></span>
+              <span className="delivery-area-value mt-2 block text-2xl font-bold tabular-nums">{total.toLocaleString("vi-VN")} <span className="text-[10px] font-normal text-slate-500">đơn</span></span>
+              <span className="mt-1 block text-[10px] text-slate-500">{boards.length} địa bàn quận/huyện</span>
+            </button>;
+          })}
+        </nav>
+        <div className="grid gap-3 px-4 pb-4 md:grid-cols-3">
+          <label className="space-y-1 text-xs font-semibold text-slate-600">Khu vực
+            <Select aria-label="Lọc KV tồn Delivery" value={areaFilter} onChange={(event) => changeArea(event.target.value)}><option value="all">Tất cả KV1–KV5</option>{OPERATING_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}</Select>
+          </label>
+          <label className="space-y-1 text-xs font-semibold text-slate-600">Quận / huyện
+            <Select aria-label="Lọc quận huyện tồn Delivery" value={districtFilter} onChange={(event) => { setDistrictFilter(event.target.value); setWardFilter("all"); setSelected(null); setPage(1); }}>
+              <option value="all">Tất cả quận / huyện</option>
+              {districtBoards.map((item) => <option key={districtKey(item.area, item.district)} value={districtKey(item.area, item.district)}>{item.area} · {deliveryDistrictLabel(item.district)}</option>)}
+            </Select>
+          </label>
+          <label className="space-y-1 text-xs font-semibold text-slate-600">Phường / xã
+            <Select aria-label="Lọc phường xã tồn Delivery" value={wardFilter} onChange={(event) => { setWardFilter(event.target.value); setSelected(null); setPage(1); }}>
+              <option value="all">Tất cả phường / xã</option>
+              {wardBoards.flatMap((item) => item.wards).sort((a, b) => a.ward.localeCompare(b.ward, "vi")).map((item) => <option key={focusKey(item)} value={focusKey(item)}>{item.ward} · {deliveryDistrictLabel(item.district)} · {item.area}</option>)}
+            </Select>
+          </label>
+        </div>
+        <div className="delivery-scope-summary flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs">
+          <p><span className="font-semibold">Đang xem:</span> {scopeLabel}</p>
+          <p>{analytics.districts} địa bàn quận/huyện · {analytics.wards} phường/xã</p>
+        </div>
       </section>
-      <div className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] leading-4 text-blue-900">
-        <strong>Phạm vi:</strong> KV1–KV5 theo dữ liệu nguồn; xem riêng từng KV bằng bộ lọc bên dưới.
-      </div>
-      <nav aria-label="Lọc quận tồn Delivery" className="flex flex-wrap gap-1">
-        <Select aria-label="Lọc KV tồn Delivery" className="w-auto" value={areaFilter} onChange={(event) => { setAreaFilter(event.target.value); setDistrictFilter("all"); setSelected(null); setPage(1); }}><option value="all">Tất cả KV1–KV5</option>{OPERATING_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}</Select>
-        {[{ district: "all", label: "Tất cả quận", total: analytics.visible }, ...districtBoards.map((district) => ({ district: district.district, label: deliveryDistrictLabel(district.district), total: visibleTotal(district.totals, cot) }))].map((item) => (
-          <button key={`${item.district}:${item.total}`} type="button" aria-pressed={districtFilter === item.district} onClick={() => { setDistrictFilter(item.district); setSelected(null); setPage(1); }} className={districtFilter === item.district ? "flex min-h-7 items-center gap-2 rounded-md border border-blue-600 bg-blue-600 px-2 text-[11px] font-semibold text-white" : "flex min-h-7 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-700"}>
-            {item.label}<span className="rounded-md bg-black/5 px-2 py-0.5 text-xs tabular-nums">{item.total.toLocaleString("vi-VN")}</span>
-          </button>
-        ))}
-      </nav>
 
+      <section aria-label="Số liệu trong phạm vi đang hiển thị" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile label="Tổng tồn đang hiển thị" value={analytics.visible} hint="Theo địa bàn và bộ lọc bên dưới" accent="ink" />
+        <StatTile label="COT 1" value={analytics.cot1} hint={cot === "cot2" ? "Đang ẩn bởi bộ lọc COT" : "Đơn COT 1 trong kết quả"} accent="blue" />
+        <StatTile label="COT 2" value={analytics.cot2} hint={cot === "cot1" ? "Đang ẩn bởi bộ lọc COT" : "Đơn COT 2 trong kết quả"} accent="teal" />
+        <StatTile label="Phường cần ưu tiên" value={analytics.hotWards} hint="Từ 36 đơn theo COT đang chọn" accent={analytics.hotWards ? "red" : "green"} />
+      </section>
       <div className="flex flex-wrap items-center gap-2">
         <span className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
           <Input value={query} onChange={(e) => { setQuery(e.target.value); setSelected(null); setPage(1); }} placeholder="Tìm quận hoặc phường..." aria-label="Tìm quận hoặc phường tồn Delivery" className="h-8 pl-9 text-xs" />
         </span>
-        <Seg compact value={cot} onChange={setCot} options={[{ id: "all", label: "Cả COT" }, { id: "cot1", label: "COT 1" }, { id: "cot2", label: "COT 2" }]} />
-        <Seg compact value={heat} onChange={setHeat} options={[{ id: "all", label: "Tất cả phường" }, { id: "hot", label: "Chỉ phường đỏ" }]} />
+        <Seg compact value={cot} onChange={(value) => { setCot(value); setSelected(null); setPage(1); }} options={[{ id: "all", label: "Cả COT" }, { id: "cot1", label: "COT 1" }, { id: "cot2", label: "COT 2" }]} />
+        <Seg compact value={heat} onChange={(value) => { setHeat(value); setSelected(null); setPage(1); }} options={[{ id: "all", label: "Tất cả phường" }, { id: "hot", label: "Chỉ phường đỏ" }]} />
         <details className="relative text-[11px] text-slate-500"><summary className="cursor-pointer py-1">Chú thích màu</summary><div className="absolute right-0 z-20 mt-1 min-w-60 rounded-lg border border-slate-200 bg-white p-2 shadow-sm"><HeatLegend /></div></details>
       </div>
 
@@ -267,29 +310,29 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
           <div className="h-[36rem] animate-pulse rounded-2xl bg-[var(--color-paper-3)] xl:col-span-6" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-12">
+        <div className="delivery-command-grid">
+          <div className="min-w-0">
             <DeliveryInventoryBoard districts={filtered} cot={cot} selected={selected} onSelect={selectFocus} forceExpanded={!!query || heat === "hot"} />
           </div>
-          {selected ? <aside ref={orderPanelRef} className="scroll-mt-4 xl:col-span-12">
-
+          <aside ref={orderPanelRef} aria-label="Chi tiết đơn theo địa bàn" className="delivery-command-detail min-w-0 scroll-mt-4">
             <OrderPanel
               selected={selected}
               orders={pageOrders}
               total={selectedOrders.length}
+              cot1={selectedOrders.filter((row) => cotBucket(row.cot_group) === "cot1").length}
               page={safePage}
               pageCount={pageCount}
               onPrev={() => setPage((value) => Math.max(1, value - 1))}
               onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
               onClose={() => setSelected(null)}
             />
-          </aside> : null}
+          </aside>
         </div>
       )}
       <details className="rounded-2xl border border-slate-200 bg-white">
         <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-700">Biểu đồ phân tích tồn</summary>
         <div className="grid gap-4 p-4 lg:grid-cols-2">
-          <article><ChartHead title="Tồn theo quận" caption="Chỉ tính địa bàn trong phạm vi" /><div className="px-5 pb-5"><BarChart rows={analytics.topDistricts.map((district) => ({ ...district, label: deliveryDistrictLabel(district.label) }))} /></div></article>
+          <article><ChartHead title="Tồn theo quận" caption="Theo phạm vi và bộ lọc đang chọn" /><div className="px-5 pb-5"><BarChart rows={analytics.topDistricts.map((district) => ({ ...district, label: `${district.area} · ${deliveryDistrictLabel(district.label)}` }))} /></div></article>
           <article><ChartHead title="Mức tồn theo phường" caption="Phân bố mức độ ưu tiên xử lý" /><div className="px-5 pb-5"><RiskStrip bins={analytics.heatBins} /></div></article>
         </div>
       </details>
@@ -301,6 +344,7 @@ function OrderPanel({
   selected,
   orders,
   total,
+  cot1,
   page,
   pageCount,
   onPrev,
@@ -310,6 +354,7 @@ function OrderPanel({
   selected: InventoryFocus | null;
   orders: InventoryRow[];
   total: number;
+  cot1: number;
   page: number;
   pageCount: number;
   onPrev: () => void;
@@ -318,60 +363,63 @@ function OrderPanel({
 }) {
   if (!selected) {
     return (
-      <section className="flex min-h-[28rem] items-center justify-center rounded-2xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] px-6 text-center">
+      <section className="flex min-h-72 items-center justify-center rounded-2xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] px-6 py-10 text-center">
         <div>
-          <p className="text-sm font-bold text-[var(--color-ink)]">Chưa chọn địa bàn</p>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">Bấm một quận hoặc phường bên trái để hiện danh sách đơn ở đây.</p>
+          <MapPin size={28} className="mx-auto mb-4 text-[var(--color-muted)]" aria-hidden="true" />
+          <h2 className="text-sm font-bold text-[var(--color-ink)]">Chi tiết đơn theo địa bàn</h2>
+          <p className="mt-2 text-xs leading-5 text-[var(--color-muted)]">Chọn tên phường hoặc số tổng trong bảng quận để xem tồn COT và danh sách vận đơn tại đây.</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--color-rule)] bg-[var(--color-paper)]">
+    <section data-area={selected.area} className="delivery-order-panel overflow-hidden rounded-2xl border border-[var(--color-rule)] bg-[var(--color-paper)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-rule)] px-4 py-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{selected.area} · {deliveryDistrictLabel(selected.district)}</p>
           <h2 className="text-base font-bold text-[var(--color-ink)]">{selected.ward ?? "Tất cả phường trong quận"}</h2>
           <p className="text-sm text-[var(--color-muted)]">{total.toLocaleString("vi-VN")} đơn khớp lọc</p>
         </div>
-        <Button type="button" variant="secondary" onClick={onClose}><X size={16} /> Đóng</Button>
+        <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={onClose}><X size={16} /> Đóng</Button>
       </div>
-      <div className="max-h-[min(70vh,40rem)] overflow-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="sticky top-0 bg-[var(--color-paper-2)] text-xs text-[var(--color-muted)]">
-            <tr>
-              <th className="px-4 py-3">Mã vận đơn</th>
-              <th className="px-4 py-3">Phường</th>
-              <th className="px-4 py-3">Zone</th>
-              <th className="px-4 py-3">Loại</th>
-              <th className="px-4 py-3">COT</th>
-              <th className="px-4 py-3">Trạng thái</th>
-              <th className="px-4 py-3 text-right">Về hub</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!orders.length ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-[var(--color-muted)]">Không có đơn khớp bộ lọc trong dữ liệu cập nhật gần nhất.</td></tr>
-            ) : orders.map((row) => (
-              <tr key={row.shipment_id} className="border-t border-[var(--color-rule)]">
-                <td className="px-4 py-3 font-mono text-[13px] font-semibold text-[var(--color-ink)]">{row.shipment_id}</td>
-                <td className="px-4 py-3 text-[var(--color-ink-2)]">{row.ward || "—"}</td>
-                <td className="px-4 py-3 text-[var(--color-ink-2)]">{row.zone_id || "—"}</td>
-                <td className="px-4 py-3">{row.order_type || "—"}</td>
-                <td className="px-4 py-3 text-[var(--color-ink-2)]">{row.cot_group || "—"}</td>
-                <td className="px-4 py-3">{row.status || "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-xs">{formatDateTime(row.received_time)}</td>
-              </tr>
+      <div className="border-b border-[var(--color-rule)] px-4 py-4">
+        <p className="text-[11px] text-[var(--color-muted)]">Tồn trong địa bàn đang chọn</p>
+        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-[var(--color-ink)]">{total.toLocaleString("vi-VN")} <span className="text-xs font-normal text-[var(--color-muted)]">đơn</span></p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-lg bg-blue-50 px-3 py-2 text-blue-800">COT 1 <strong className="float-right tabular-nums">{cot1.toLocaleString("vi-VN")}</strong></div>
+          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800">COT 2 <strong className="float-right tabular-nums">{(total - cot1).toLocaleString("vi-VN")}</strong></div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 text-[11px] text-[var(--color-muted)]">
+        <h3 className="font-semibold text-[var(--color-ink)]">Danh sách vận đơn</h3>
+        <span>Mới về hub trước</span>
+      </div>
+      <div className="delivery-order-list max-h-[min(55vh,36rem)] overflow-y-auto px-4">
+        {!orders.length ? <p className="py-8 text-center text-xs text-[var(--color-muted)]">Không có đơn khớp bộ lọc trong dữ liệu cập nhật gần nhất.</p> : (
+          <ul className="divide-y divide-[var(--color-rule)]">
+            {orders.map((row) => (
+              <li key={row.shipment_id} className="py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 break-all font-mono text-xs font-semibold text-[var(--color-ink)]">{row.shipment_id}</p>
+                  <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold " + (cotBucket(row.cot_group) === "cot1" ? "bg-blue-50 text-blue-800" : "bg-emerald-50 text-emerald-800")}>{row.cot_group || "—"}</span>
+                </div>
+                <p className="mt-1 break-words text-xs text-[var(--color-ink-2)]">{row.ward || "Chưa xác định phường"}</p>
+                <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
+                  <dt className="text-[var(--color-muted)]">Zone · Loại</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.zone_id || "—"} · {row.order_type || "—"}</dd>
+                  <dt className="text-[var(--color-muted)]">Trạng thái</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.status || "—"}</dd>
+                  <dt className="text-[var(--color-muted)]">Về hub</dt><dd className="text-right tabular-nums text-[var(--color-ink-2)]">{formatDateTime(row.received_time)}</dd>
+                </dl>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        )}
       </div>
-      <div className="flex items-center justify-between border-t border-[var(--color-rule)] px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-rule)] px-4 py-3 text-xs">
         <span className="text-[var(--color-muted)]">Trang {page}/{pageCount}</span>
         <div className="flex gap-2">
-          <Button type="button" variant="secondary" disabled={page <= 1} onClick={onPrev}><ChevronLeft size={16} /> Trước</Button>
-          <Button type="button" variant="secondary" disabled={page >= pageCount} onClick={onNext}>Sau <ChevronRight size={16} /></Button>
+          <Button type="button" variant="secondary" className="h-8 px-2 text-xs" disabled={page <= 1} onClick={onPrev}><ChevronLeft size={16} /> Trước</Button>
+          <Button type="button" variant="secondary" className="h-8 px-2 text-xs" disabled={page >= pageCount} onClick={onNext}>Sau <ChevronRight size={16} /></Button>
         </div>
       </div>
     </section>
@@ -381,7 +429,7 @@ function OrderPanel({
 function StatTile({ label, value, hint, accent }: { label: string; value: number; hint: string; accent: "ink" | "blue" | "teal" | "red" | "green" }) {
   const tone = { ink: "text-[var(--color-ink)]", blue: "text-[var(--color-accent)]", teal: "text-[var(--color-success)]", red: "text-[var(--color-error)]", green: "text-[var(--color-success)]" }[accent];
   return (
-    <article className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper)] px-3 py-2">
+    <article data-accent={accent} className="delivery-stat rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] px-4 py-3">
       <div className="flex items-center justify-between gap-1">
         <p className="text-[10px] font-semibold text-[var(--color-muted)]">{label}</p>
         {accent === "blue" ? <Truck size={15} className="text-[var(--color-accent)]" /> : accent === "red" ? <MapPin size={15} className="text-[var(--color-error)]" /> : <PackageCheck size={15} className="text-[var(--color-muted)]" />}

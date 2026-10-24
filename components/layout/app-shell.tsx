@@ -29,6 +29,7 @@ const navItems = [
   { href: "/route-sheet", label: "Excel / Google Sheet", icon: ListChecks },
   { href: "/imports", label: "Nhập dữ liệu", icon: PackagePlus },
   { href: "/settings", label: "Thành viên", icon: UsersRound },
+  { href: "/user-activity", label: "Nhật ký người dùng", icon: Activity },
 ];
 
 const mobileNavItems = navItems.slice(0, 4);
@@ -80,10 +81,10 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleToolItems = memberToolRestricted ? [] : toolItems;
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
-  const workspaceItems = navItems.filter((item) => item.href !== "/settings");
+  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity"].includes(item.href));
   const teamPaths = ["/riders", "/notes", "/off-schedule", "/tasks", "/violations"];
   const dataPaths = ["/route-sheet", "/imports"];
-  const systemItems = navItems.filter((item) => item.href === "/settings");
+  const systemItems = navItems.filter((item) => item.href === "/settings" || item.href === "/user-activity" && user.role === "admin");
   const moreNavItems = [
     ...volumeItems,
     ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
@@ -97,7 +98,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
     : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
     : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
-    : pathname.startsWith("/settings") ? "settings" : "operations";
+    : pathname.startsWith("/settings") || pathname.startsWith("/user-activity") ? "settings" : "operations";
   const [moduleSelection, setModuleSelection] = useState<{ pathname: string; module: WorkspaceModule } | null>(null);
   const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
   const modules = [
@@ -119,7 +120,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
       : [...navItems, ...volumeItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const splitItems = [...navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href)), ...volumeItems]
-    .filter((item) => item.href !== pathname);
+    .filter((item) => item.href !== pathname && (item.href !== "/user-activity" || user.role === "admin"));
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   }
 
   async function signOut() {
+    await fetch("/api/activity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: crypto.randomUUID(), event_type: "logout", path: pathname }), keepalive: true }).catch(() => null);
     await createClient().auth.signOut();
     router.replace("/login");
   }

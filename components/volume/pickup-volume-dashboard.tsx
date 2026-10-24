@@ -6,6 +6,7 @@ import { Building2, CalendarDays, MapPin, PackageCheck, RefreshCcw, Route, Searc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 
 export type PickupCotSummary = {
   cot: string;
@@ -26,6 +27,7 @@ export type PickupWard = {
 };
 
 export type PickupDistrict = {
+  area: string;
   district: string;
   count: number;
   cots: PickupCotSummary[];
@@ -51,12 +53,18 @@ export function PickupVolumeDashboard({
   onRefresh,
   loading,
   error,
-  totalOrders,
-  totalRoutes,
-  wardCount,
-  cotVolumes,
   districts,
 }: PickupVolumeDashboardProps) {
+  const [area, setArea] = useState("all");
+  const scoped = useMemo(() => districts.filter((item) => area === "all" || item.area === area), [districts, area]);
+  const totalOrders = scoped.reduce((sum, item) => sum + item.count, 0);
+  const totalRoutes = new Set(scoped.flatMap((item) => item.wards.flatMap((ward) => ward.routes.map((route) => route.route))).filter((route) => route !== "Chưa có mã tuyến")).size;
+  const wardCount = scoped.reduce((sum, item) => sum + item.wards.length, 0);
+  const cotVolumes = useMemo(() => {
+    const cots = new Map<string, number>();
+    for (const district of scoped) for (const cot of district.cots) cots.set(cot.cot, (cots.get(cot.cot) ?? 0) + cot.count);
+    return Array.from(cots, ([cot, count]) => ({ cot, count }));
+  }, [scoped]);
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -69,6 +77,18 @@ export function PickupVolumeDashboard({
       </header>
 
       <DateFilter date={date} onDateChange={onDateChange} onRefresh={onRefresh} loading={loading} />
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label="Scope khu vực Pickup">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold text-slate-900">1. Chọn khu vực</h2><p className="text-xs text-slate-500">Khu vực → Quận/huyện → Phường/xã → Mã tuyến</p></div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
+          {["all", ...OPERATING_AREAS, "UNRESOLVED"].map((value) => {
+            const tones: Record<string, string> = { all: "border-slate-300 bg-slate-50", KV1: "border-blue-300 bg-blue-50", KV2: "border-emerald-300 bg-emerald-50", KV3: "border-purple-300 bg-purple-50", KV4: "border-amber-300 bg-amber-50", KV5: "border-pink-300 bg-pink-50", UNRESOLVED: "border-orange-300 bg-orange-50" };
+            const count = districts.filter((item) => value === "all" || item.area === value).reduce((sum, item) => sum + item.count, 0);
+            return <button key={value} type="button" aria-pressed={area === value} onClick={() => setArea(value)} className={cn("rounded-lg border-t-4 border px-3 py-3 text-left transition hover:-translate-y-0.5 motion-reduce:transform-none", tones[value], area === value && "ring-2 ring-slate-700 ring-offset-2")}><span className="text-xs font-bold text-slate-700">{value === "all" ? "Tất cả khu vực" : value === "UNRESOLVED" ? "Chưa rõ KV" : value}</span><strong className="mt-1 block text-xl tabular-nums text-slate-950">{loading ? "—" : formatNumber(count)}</strong><span className="text-[11px] text-slate-500">đơn pickup</span></button>;
+          })}
+        </div>
+        <p className="mt-3 text-xs font-semibold text-slate-600">Đang xem: {area === "all" ? "Tất cả khu vực" : area === "UNRESOLVED" ? "Chưa rõ khu vực" : area} · {scoped.length} địa bàn quận/huyện · {formatNumber(totalOrders)} đơn</p>
+      </section>
 
       {error ? (
         <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
@@ -87,10 +107,11 @@ export function PickupVolumeDashboard({
       <CotVolumeCard cotVolumes={cotVolumes} loading={loading} />
 
       <PickupAreaExplorer
+        key={`${date}:${area}`}
         date={date}
         totalOrders={totalOrders}
         totalRoutes={totalRoutes}
-        districts={districts}
+        districts={scoped}
         loading={loading}
       />
     </div>
@@ -226,7 +247,7 @@ function PickupAreaExplorer({
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [selectedWard, setSelectedWard] = useState<string | null>(null);
   const [routeQuery, setRouteQuery] = useState("");
-  const activeDistrict = districts.find((district) => district.district === selectedDistrict) ?? districts[0] ?? null;
+  const activeDistrict = districts.find((district) => `${district.area}::${district.district}` === selectedDistrict) ?? districts[0] ?? null;
   const activeWard = activeDistrict?.wards.find((ward) => ward.ward === selectedWard) ?? activeDistrict?.wards[0] ?? null;
   const filteredRoutes = useMemo(() => {
     const query = normalizeSearch(routeQuery);
@@ -239,7 +260,7 @@ function PickupAreaExplorer({
       <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <h2 className="font-bold text-slate-950">Pickup theo địa bàn ngày {formatVietnameseDate(date)}</h2>
-          <p className="mt-0.5 text-sm text-slate-500">Chọn quận → phường/xã của seller → xem sản lượng COT. Đơn chưa xác định được địa bàn nằm trong nhóm “Chưa rõ địa bàn seller” để đối chiếu, fetch lại.</p>
+          <p className="mt-0.5 text-sm text-slate-500">Chọn khu vực ở trên, sau đó chọn quận → phường/xã → mã tuyến pickup. Số liệu chỉ tính trong khu vực đang xem.</p>
         </div>
         <div className="flex gap-2 text-xs font-bold">
           <span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600">{totalRoutes} tuyến</span>
@@ -250,7 +271,7 @@ function PickupAreaExplorer({
       <div className="grid min-h-[560px] xl:grid-cols-[280px_320px_minmax(0,1fr)]">
         <DistrictList
           districts={districts}
-          selectedDistrict={activeDistrict?.district ?? null}
+          selectedDistrict={activeDistrict ? `${activeDistrict.area}::${activeDistrict.district}` : null}
           loading={loading}
           onSelect={(district) => {
             setSelectedDistrict(district);
@@ -267,7 +288,7 @@ function PickupAreaExplorer({
           }}
         />
         <RouteTable
-          district={activeDistrict?.district ?? null}
+          district={activeDistrict ? `${activeDistrict.area === "UNRESOLVED" ? "Chưa rõ KV" : activeDistrict.area} · ${activeDistrict.district}` : null}
           ward={activeWard ?? null}
           routes={filteredRoutes}
           query={routeQuery}
@@ -291,22 +312,23 @@ function DistrictList({
 }) {
   return (
     <div className="border-b border-slate-200 xl:border-b-0 xl:border-r">
-      <ColumnHeader step="1" title="Quận / nhóm chờ xác định" count={districts.length} />
+      <ColumnHeader step="2" title="Chọn quận / huyện" count={districts.length} />
       <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto xl:max-h-[720px]">
         {!loading && districts.length === 0 ? <EmptyState text="Chưa có dữ liệu quận/huyện." /> : null}
         {districts.map((district) => (
           <button
-            key={district.district}
+            key={`${district.area}::${district.district}`}
             type="button"
-            onClick={() => onSelect(district.district)}
+            onClick={() => onSelect(`${district.area}::${district.district}`)}
             className={cn(
               "w-full border-l-2 px-4 py-3 text-left transition",
-              selectedDistrict === district.district
+              selectedDistrict === `${district.area}::${district.district}`
                 ? "border-orange-500 bg-orange-50/70"
                 : "border-transparent hover:bg-slate-50",
             )}
           >
             <ListItemHeader name={district.district} value={district.count} />
+            <span className="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{district.area === "UNRESOLVED" ? "Chưa rõ KV" : district.area}</span>
             {district.district === "Chưa rõ địa bàn seller" ? <span className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Cần đối chiếu / fetch lại</span> : null}
             <p className="mt-1 text-xs text-slate-500">
               {district.wards.length} phường/xã · {countDistrictRoutes(district)} tuyến
@@ -330,7 +352,7 @@ function WardList({
 }) {
   return (
     <div className="border-b border-slate-200 xl:border-b-0 xl:border-r">
-      <ColumnHeader step="2" title="Chọn phường" count={wards.length} />
+      <ColumnHeader step="3" title="Chọn phường / xã" count={wards.length} />
       <div className="max-h-[400px] divide-y divide-slate-100 overflow-y-auto xl:max-h-[720px]">
         {wards.length === 0 ? <EmptyState text="Chọn quận để xem phường/xã." /> : null}
         {wards.map((ward) => (
@@ -373,7 +395,7 @@ function RouteTable({
       <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase text-slate-400">3. Mã tuyến trong phường</p>
+            <p className="text-xs font-bold uppercase text-slate-400">4. Mã tuyến trong phường</p>
             <h3 className="mt-1 truncate text-lg font-black text-slate-950">{ward?.ward ?? "Chưa chọn phường"}</h3>
             <p className="truncate text-sm text-slate-500">{district ?? "Chưa chọn quận"}</p>
           </div>

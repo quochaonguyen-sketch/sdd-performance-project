@@ -6,6 +6,7 @@ import { canonicalDistrictName } from "@/lib/locations/hcm";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageRiders } from "@/lib/auth/permissions";
+import { canEditRiderArea } from "@/lib/auth/rider-scope";
 import { invalidateRidersCache } from "@/lib/cache/operations-cache";
 
 type ImportRow = {
@@ -197,6 +198,9 @@ export async function POST(request: Request) {
   // ID da ton tai thi bo qua (khong bao loi), chi import ID moi.
   const skippedCodes = [...existingCodes].filter((code) => codeRows.has(code));
   const newRows = rows.filter((row) => !existingCodes.has(row.rider_code));
+  for (const row of newRows) {
+    if (!canEditRiderArea(context.profile.role, context.profile.permissions.manage_riders, context.profile.rider_edit_areas, row.kv)) errors.push({ row: row.row, rider_code: row.rider_code, error: "KV nằm ngoài phạm vi được cấp quyền" });
+  }
 
   if (errors.length > 0) {
     return NextResponse.json(

@@ -64,6 +64,17 @@ export function districtKey(area: string, district: string) {
   return `${area}::${district}`;
 }
 
+export function scopeDeliveryBoards(districts: DistrictAgg[], area: string, district: string, ward: string): DistrictAgg[] {
+  return districts
+    .filter((item) => area === "all" || item.area === area)
+    .filter((item) => district === "all" || districtKey(item.area, item.district) === district)
+    .map((item) => {
+      const wards = item.wards.filter((value) => ward === "all" || focusKey(value) === ward);
+      return { ...item, wards, totals: wards.reduce((sum, value) => addCounts(sum, value), emptyCounts()) };
+    })
+    .filter((item) => item.wards.length > 0);
+}
+
 export function sameFocus(a: InventoryFocus | null, b: InventoryFocus) {
   return !!a && a.area === b.area && a.district === b.district && a.ward === b.ward;
 }
@@ -93,11 +104,11 @@ export function buildAnalytics(primaryBoards: DistrictAgg[], additionalBoards: D
   return {
     districts: districts.length,
     wards: wards.length,
-    hotWards: wards.filter((ward) => heatLevel(visibleTotal(ward, "all")) === "red").length,
+    hotWards: wards.filter((ward) => heatLevel(visibleTotal(ward, cot)) === "red").length,
     emptyWards: wards.filter((ward) => visibleTotal(ward, cot) <= 0).length,
     visible: visibleBoardTotal(districts, cot),
-    cot1,
-    cot2,
+    cot1: cot === "cot2" ? 0 : cot1,
+    cot2: cot === "cot1" ? 0 : cot2,
     topDistricts,
     heatBins,
   };

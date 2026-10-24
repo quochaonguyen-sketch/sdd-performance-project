@@ -84,6 +84,7 @@ export function VolumeView({ kind }: { kind: VolumeKind }) {
               .select("summary_id,report_date,new_ward,district,area,cot,ma_tuyen,total_orders").in("area", [...OPERATING_AREAS, "UNRESOLVED"])
               .eq("report_date", date)
               .order("district")
+              .order("summary_id")
               .range(offset, offset + PAGE_SIZE - 1);
 
       const { data, error: queryError } = await query;
@@ -287,7 +288,8 @@ function summarizePickupDistrictRoutes(rows: VolumeRow[]): PickupDistrict[] {
     const districtName = row.district?.trim() || "Chưa xác định quận/huyện";
     const wardName = row.new_ward?.trim() || row.ward?.trim() || "Chưa xác định phường/xã";
     const cot = normalizeCot(row.cot);
-    const district = districts.get(districtName) ?? { count: 0, cots: new Map(), wards: new Map() };
+    const districtId = `${row.area || "UNRESOLVED"}::${districtName}`;
+    const district = districts.get(districtId) ?? { count: 0, cots: new Map(), wards: new Map() };
     const ward = district.wards.get(wardName) ?? { count: 0, cots: new Map(), routes: new Map() };
 
     for (const entry of parseRouteBreakdown(row.ma_tuyen, row.total_orders ?? 0)) {
@@ -304,11 +306,12 @@ function summarizePickupDistrictRoutes(rows: VolumeRow[]): PickupDistrict[] {
     }
 
     district.wards.set(wardName, ward);
-    districts.set(districtName, district);
+    districts.set(districtId, district);
   }
 
-  return Array.from(districts, ([district, districtData]) => ({
-    district,
+  return Array.from(districts, ([districtId, districtData]) => ({
+    area: districtId.slice(0, districtId.indexOf("::")),
+    district: districtId.slice(districtId.indexOf("::") + 2),
     count: districtData.count,
     cots: sortCotSummaries(districtData.cots),
     wards: Array.from(districtData.wards, ([ward, wardData]) => ({

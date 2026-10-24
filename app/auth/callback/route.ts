@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSuperAdminEmail } from "@/lib/auth/super-admin";
+import { recordUserActivity } from "@/lib/audit/events";
 
 const ALLOWED_DOMAIN = "@spxexpress.com";
 
@@ -60,5 +61,6 @@ export async function GET(request: Request) {
     });
   }
 
+  await recordUserActivity({ id: data.user.id }, { event_type: "login", summary: "Đăng nhập Google thành công", path: "/auth/callback" });
   return NextResponse.redirect(new URL("/dashboard", origin));
 }

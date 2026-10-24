@@ -4,19 +4,25 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { defaultPermissionsForRole, normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
 import { isSuperAdminEmail } from "@/lib/auth/super-admin";
+import { normalizeRiderEditAreas } from "@/lib/auth/rider-scope";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { recordUserActivity } from "@/lib/audit/events";
 
 const roleSchema = z.enum(["admin", "leader", "viewer", "member"]);
 const permissionsSchema = z.record(z.string(), z.boolean());
+const areasSchema = z.array(z.enum(OPERATING_AREAS)).max(5);
 const createMemberSchema = z.object({
   email: z.email("Email không hợp lệ").trim().toLowerCase(),
   full_name: z.string().trim().min(2, "Họ tên cần ít nhất 2 ký tự").max(100),
   role: roleSchema,
   permissions: permissionsSchema.optional(),
+  rider_edit_areas: areasSchema.optional(),
 });
 const updateMemberSchema = z.object({
   id: z.string().uuid(),
   role: roleSchema.optional(),
   permissions: permissionsSchema.optional(),
+  rider_edit_areas: areasSchema.optional(),
 });
 const deleteMemberSchema = z.object({ id: z.string().uuid() });
 
@@ -59,6 +65,7 @@ export async function GET() {
       is_current_user: profile.id === session.user.id,
       is_super_admin: isSuperAdminEmail(email),
       permissions: permissionsFor(profile.role, null, authUser?.app_metadata?.permissions),
+      rider_edit_areas: normalizeRiderEditAreas(authUser?.app_metadata?.rider_edit_areas),
     };
   });
   return NextResponse.json({ success: true, members });
@@ -88,7 +95,7 @@ export async function POST(request: Request) {
     email,
     email_confirm: true,
     user_metadata: { full_name },
-    app_metadata: { permissions, super_admin: isSuperAdminEmail(email) },
+    app_metadata: { permissions, rider_edit_areas: parsed.data.rider_edit_areas ?? [], super_admin: isSuperAdminEmail(email) },
   });
 
   let userId = created.user?.id;
@@ -99,10 +106,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: createError?.message ?? "Không thể thêm thành viên" }, { status: 400 });
     }
     userId = existingAuth.id;
-    await session.admin.auth.admin.updateUserById(userId, {
+    const { error: updateError } = await session.admin.auth.admin.updateUserById(userId, {
       user_metadata: { full_name },
-      app_metadata: { ...existingAuth.app_metadata, permissions, super_admin: isSuperAdminEmail(email) },
+      app_metadata: { ...existingAuth.app_metadata, permissions, rider_edit_areas: parsed.data.rider_edit_areas ?? [], super_admin: isSuperAdminEmail(email) },
     });
+    if (updateError) return NextResponse.json({ success: false, error: "Không cập nhật được quyền tài khoản" }, { status: 400 });
   }
 
   const { error: profileError } = await session.admin.from("profiles").upsert({
@@ -115,6 +123,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: profileError.message }, { status: 400 });
   }
 
+  await recordUserActivity({ id: session.user.id }, { event_type: "member_created", entity_type: "profiles", entity_id: userId, summary: `Thêm tài khoản ${email}`, changes: { role: nextRole, permissions, rider_edit_areas: parsed.data.rider_edit_areas ?? [] } });
   return NextResponse.json({ success: true, message: `Đã cho phép ${email} đăng nhập Google` }, { status: 201 });
 }
 
@@ -135,24 +144,15 @@ export async function PATCH(request: Request) {
   }
 
   const nextRole = parsed.data.role ?? current.role;
-  const { data: authUser } = await session.admin.auth.admin.getUserById(parsed.data.id);
+  const { data: authUser, error: authError } = await session.admin.auth.admin.getUserById(parsed.data.id);
+  if (authError || !authUser.user) return NextResponse.json({ success: false, error: "Không tải được quyền tài khoản" }, { status: 400 });
   const permissions = permissionsFor(nextRole, parsed.data.permissions, authUser.user?.app_metadata?.permissions);
-
-  const { data, error } = await session.admin
-    .from("profiles")
-    .update({ role: nextRole, updated_at: new Date().toISOString() })
-    .eq("id", parsed.data.id)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) return NextResponse.json({ success: false, error: error?.message ?? "Không tìm thấy thành viên" }, { status: 400 });
-
-  if (authUser.user) {
-    await session.admin.auth.admin.updateUserById(parsed.data.id, {
-      app_metadata: { ...authUser.user.app_metadata, permissions },
-    });
-  }
-
-  return NextResponse.json({ success: true, permissions });
+  const rider_edit_areas = parsed.data.rider_edit_areas ?? normalizeRiderEditAreas(authUser.user.app_metadata?.rider_edit_areas);
+  const { error: accessError } = await session.admin.rpc("admin_set_member_access", {
+    target_id: parsed.data.id, target_role: nextRole, target_permissions: permissions, target_areas: rider_edit_areas,
+  });
+  if (accessError) return NextResponse.json({ success: false, error: "Không lưu được quyền tài khoản; chưa thay đổi quyền" }, { status: 400 });
+  return NextResponse.json({ success: true, permissions, rider_edit_areas });
 }
 
 export async function DELETE(request: Request) {
@@ -170,7 +170,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: false, error: "Không thể tự xóa tài khoản đang đăng nhập" }, { status: 400 });
   }
 
+  const { error: deleteError } = await session.admin.auth.admin.deleteUser(current.id);
+  if (deleteError) return NextResponse.json({ success: false, error: deleteError.message }, { status: 400 });
   await session.admin.from("profiles").delete().eq("id", current.id);
-  await session.admin.auth.admin.deleteUser(current.id);
+  await recordUserActivity({ id: session.user.id }, { event_type: "member_deleted", entity_type: "profiles", entity_id: current.id, summary: `Xóa tài khoản ${current.email}` });
   return NextResponse.json({ success: true });
 }
