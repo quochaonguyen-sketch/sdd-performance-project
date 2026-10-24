@@ -10,6 +10,7 @@ type RealtimeTable =
   | "pickup_48h_no_api2"
   | "pickup_48h_summary_groups"
   | "pickup_48h_realtime_riders"
+  | "pickup_48h_rider_groups"
   | "riders"
   | "attendance_logs"
   | "zones"
