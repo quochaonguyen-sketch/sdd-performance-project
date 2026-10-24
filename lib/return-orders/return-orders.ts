@@ -1,3 +1,4 @@
+import "server-only";
 import { OPERATING_AREAS, normalizeOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -531,14 +532,7 @@ export async function getReturnOrders(filters: ReturnOrderFilters): Promise<Retu
   };
 }
 
-export type ReturnView = "ledger" | "rider" | "pivot" | "dashboard";
-
-export function returnViewFrom(value: string | null | undefined): ReturnView {
-  if (value === "rider") return "rider";
-  if (value === "pivot") return "pivot";
-  if (value === "dashboard") return "dashboard";
-  return "ledger";
-}
+export { returnViewFrom, type ReturnView } from "./return-view";
 
 export type ReturnPivotCell = { cot1: number; cot2: number; unassigned: number; total: number; cot1Ids: string[]; cot2Ids: string[]; unassignedIds: string[] };
 export type ReturnPivotRider = {

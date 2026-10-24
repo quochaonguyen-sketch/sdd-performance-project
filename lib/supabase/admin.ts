@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { auditRequestHeaders } from "@/lib/audit/actor";
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BarChart3, PackageSearch, Truck, ListChecks } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { returnViewFrom, type ReturnView } from "@/lib/return-orders/return-orders";
+import { returnViewFrom, type ReturnView } from "@/lib/return-orders/return-view";
 
 const VIEWS: Array<{ id: ReturnView; href: string; label: string; icon: typeof PackageSearch }> = [
   { id: "dashboard", href: "/return-orders?view=dashboard", label: "Dashboard", icon: BarChart3 },
