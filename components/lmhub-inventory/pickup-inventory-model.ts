@@ -125,7 +125,7 @@ export function pickupAnalytics(primaryBoards: DistrictAgg[], additionalBoards: 
   return {
     zones: districts.length,
     riders: wards.length,
-    hotRiders: wards.filter((item) => heatLevel(visibleTotal(item, "all")) === "red").length,
+    hotRiders: wards.filter((item) => heatLevel(visibleTotal(item, cot)) === "red").length,
     emptyRiders: wards.filter((item) => visibleTotal(item, cot) <= 0).length,
     visible: visibleBoardTotal(districts, cot),
     cot1: districts.reduce((sum, item) => sum + item.totals.cot1, 0),

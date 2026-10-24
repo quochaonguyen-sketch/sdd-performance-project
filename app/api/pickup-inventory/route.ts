@@ -22,6 +22,27 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
 
   try {
+    if (view === "zone-board") {
+      const status = (url.searchParams.get("p_status") ?? "").trim();
+      if (!["Assigned", "Pickup Onhold", "Created"].includes(status)) return NextResponse.json({success:false,error:"Trạng thái không hợp lệ"},{status:400});
+      const { data, error } = await admin.rpc("pickup_inventory_zone_board", { p_status: status });
+      if (error) throw error;
+      return NextResponse.json({success:true,...data},{headers:{"Cache-Control":"private, no-store"}});
+    }
+    if (view === "zones") {
+      const area = (url.searchParams.get("p_area") ?? "").trim(), ward = (url.searchParams.get("p_ward") ?? "").trim(), status = (url.searchParams.get("p_status") ?? "").trim();
+      if (!isOperatingArea(area) || !ward || ward.length > 200 || !["Assigned","Pickup Onhold","Created"].includes(status)) return NextResponse.json({success:false,error:"Phường/khu vực/trạng thái không hợp lệ"},{status:400});
+      const { data, error } = await admin.rpc("pickup_inventory_ward_zones", { p_area:area,p_ward:ward,p_status:status });
+      if (error) throw error;
+      return NextResponse.json({success:true,rows:data??[]},{headers:{"Cache-Control":"private, no-store"}});
+    }
+    if (view === "riders") {
+      const status = (url.searchParams.get("p_status") ?? "").trim();
+      if (!["Assigned","Pickup Onhold","Created"].includes(status)) return NextResponse.json({success:false,error:"Trạng thái không hợp lệ"},{status:400});
+      const { data, error } = await admin.rpc("pickup_inventory_riders", { p_status: status });
+      if (error) throw error;
+      return NextResponse.json({ success:true,...data }, {headers:{"Cache-Control":"private, no-store"}});
+    }
     if (view === "detail") {
       const area = (url.searchParams.get("p_area") ?? "").trim();
       const ward = (url.searchParams.get("p_ward") ?? "").trim();

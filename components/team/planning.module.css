@@ -5,7 +5,7 @@
 .root button,.root select,.root input { font:inherit; }
 .root button { cursor:pointer; }
 .root button:disabled { cursor:default;opacity:.5; }
-.root button:not(.close),.root input,.root select { border:1px solid #dbe2ec;border-radius:8px;background:var(--color-paper,white);padding:8px 11px;font-size:12px; }
+.root :where(button,input,select) { border:1px solid #dbe2ec;border-radius:8px;background:var(--color-paper,white);padding:8px 11px;font-size:12px; }
 .root button:focus-visible,.root input:focus-visible,.root select:focus-visible { outline:3px solid #93c5fd;outline-offset:2px; }
 .root .primary { display:inline-flex;align-items:center;gap:6px;background:#2563eb;color:white;border-color:#2563eb;font-weight:750; }
 .root .primary:hover { background:#1d4ed8; }
