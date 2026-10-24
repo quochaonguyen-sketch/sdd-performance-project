@@ -1,0 +1,52 @@
+do $test$
+declare admin_actor uuid; actor uuid:=gen_random_uuid(); person_id text:='test-plan-'||gen_random_uuid();
+  day date:=(now() at time zone 'Asia/Ho_Chi_Minh')::date+1; row_version timestamptz; person_version timestamptz;
+  config jsonb; changes jsonb; blocked boolean; applied integer;
+begin
+  select id into admin_actor from public.profiles where role='admin' limit 1;
+  if admin_actor is null then raise exception 'Missing admin fixture'; end if;
+  insert into auth.users(id,email,raw_app_meta_data,raw_user_meta_data) values(actor,'planning-'||actor||'@spxexpress.com','{}','{}');
+  insert into public.profiles(id,email,full_name,role) values(actor,'planning-'||actor||'@spxexpress.com','Planning test','member');
+  insert into public.team_staff(id,full_name,role,status,areas) values(person_id,'Planning fixture','FTE','Active',array['KV1']);
+  insert into public.team_staff_shifts(staff_id,work_date,shift) values(person_id,day,'13:00-22:00');
+  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+  perform set_config('request.headers',jsonb_build_object('x-app-actor-id',actor)::text,true);
+  blocked:=false;
+  begin update public.team_shift_templates set active=false where id='bb57425a-10a0-4000-8000-000000000003';
+  exception when insufficient_privilege then blocked:=true; end;
+  if not blocked then raise exception 'Member edited shift catalog'; end if;
+  blocked:=false;
+  begin perform public.save_team_staffing_targets(jsonb_build_array(jsonb_build_object('area','KV1','pool','OPS','day_key',day::text,'hour',8,'required',2)));
+  exception when insufficient_privilege then blocked:=true; end;
+  if not blocked then raise exception 'Member edited staffing targets'; end if;
+  perform set_config('request.headers',jsonb_build_object('x-app-actor-id',admin_actor)::text,true);
+  perform public.save_team_staffing_targets(jsonb_build_array(jsonb_build_object('area','KV1','pool','OPS','day_key',day::text,'hour',8,'required',0)));
+  if not exists(select 1 from team_staffing_targets where area='KV1' and pool='OPS' and day_key=day::text and hour=8 and required=0) then raise exception 'Zero target not stored'; end if;
+  select public.team_planning_settings(day-1,day+1) into config;
+  select updated_at into row_version from public.team_staff_shifts where staff_id=person_id;
+  select updated_at into person_version from public.team_staff where id=person_id;
+  changes:=jsonb_build_array(jsonb_build_object('staff_id',person_id,'work_date',day,'from_shift','13:00-22:00','to_shift','07:00-16:00','template_id','bb57425a-10a0-4000-8000-000000000003','expected_updated_at',row_version,'staff_updated_at',person_version,'expected_previous_at',null,'expected_next_at',null));
+  applied:=public.apply_team_shift_plan(changes,config->>'template_version',config->>'target_version');
+  if applied<>1 or not exists(select 1 from public.team_staff_shifts where staff_id=person_id and shift='07:00-16:00') then raise exception 'Plan not applied'; end if;
+  if not exists(select 1 from public.user_activity_logs a where a.actor_id=admin_actor and a.entity_type='team_staff_shifts' and a.changes->'shift'->>'before'='13:00-22:00' and a.changes->'shift'->>'after'='07:00-16:00') then raise exception 'Plan audit missing'; end if;
+  blocked:=false;
+  begin perform public.apply_team_shift_plan(changes,config->>'template_version',config->>'target_version');
+  exception when serialization_failure then blocked:=true; end;
+  if not blocked then raise exception 'Stale preview overwrote schedule'; end if;
+  update public.team_staff_shifts set shift='OFF' where staff_id=person_id;
+  changes:=jsonb_set(changes,'{0,from_shift}','"OFF"');
+  blocked:=false;
+  begin perform public.apply_team_shift_plan(changes,config->>'template_version',config->>'target_version');
+  exception when raise_exception then blocked:=true; end;
+  if not blocked then raise exception 'Plan changed OFF'; end if;
+  update public.team_staff_shifts set shift='13:00-22:00' where staff_id=person_id;
+  changes:=jsonb_set(changes,'{0,from_shift}','"13:00-22:00"');
+  update public.team_shift_templates set note=note||' [test]' where id='bb57425a-10a0-4000-8000-000000000003';
+  blocked:=false;
+  begin perform public.apply_team_shift_plan(changes,config->>'template_version',config->>'target_version');
+  exception when serialization_failure then blocked:=true; end;
+  if not blocked then raise exception 'Plan ignored changed configuration'; end if;
+  if has_table_privilege('authenticated','public.team_staffing_targets','SELECT')
+    or has_table_privilege('anon','public.team_shift_templates','SELECT')
+    or has_function_privilege('authenticated','public.apply_team_shift_plan(jsonb,text,text)','EXECUTE') then raise exception 'Browser bypasses planning API'; end if;
+end $test$;

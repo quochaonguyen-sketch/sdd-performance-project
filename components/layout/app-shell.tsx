@@ -18,6 +18,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/realtime-dashboard", label: "Realtime Dashboard", icon: Activity },
   { href: "/riders", label: "Riders", icon: Bike },
+  { href: "/team", label: "Nhân sự & lịch FTE", icon: UsersRound },
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/lmhub-inventory", label: "Tồn pickup", icon: PackageOpen },
@@ -82,7 +83,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
   const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity"].includes(item.href));
-  const teamPaths = ["/riders", "/notes", "/off-schedule", "/tasks", "/violations"];
+  const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
   const dataPaths = ["/route-sheet", "/imports"];
   const systemItems = navItems.filter((item) => item.href === "/settings" || item.href === "/user-activity" && user.role === "admin");
   const moreNavItems = [
