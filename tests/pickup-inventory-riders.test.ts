@@ -27,4 +27,6 @@ test("rider zones are deduplicated across wards and searchable",()=>{
   assert.deepEqual([...result[0].zones],["ZONE-A","ZONE-B","ZONE-C"]);
   assert.equal(result[0].visible,14);
   assert.equal(inventoryRiders(rows,"KV2","cot2","zone-b").length,1);
+  const searched=inventoryRiders([rows[0],{...rows[0],ward:"Phường B",zones:["ZONE-C"],total:2}],"KV2","cot1","zone-c");
+  assert.equal(searched[0].visible,14); // Searching finds riders; it does not truncate their order scope.
 });

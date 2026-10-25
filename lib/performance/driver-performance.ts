@@ -39,10 +39,22 @@ export type PerformanceRow = {
   delivery_ward: string | null;
   delivery_assigned: number;
   delivery_delivered: number;
+  delivery_assigned_cot1: number;
+  delivery_delivered_cot1: number;
+  delivery_assigned_cot2: number;
+  delivery_delivered_cot2: number;
   pickup_assigned: number;
   pickup_picked: number;
+  pickup_assigned_cot1: number;
+  pickup_picked_cot1: number;
+  pickup_assigned_cot2: number;
+  pickup_picked_cot2: number;
   delivery_rate: number | null;
   pickup_rate: number | null;
+  cot_breakdown?: {
+    delivery?: Record<string, { assigned: number; delivered: number }>;
+    pickup?: Record<string, { assigned: number; picked: number }>;
+  } | null;
 };
 
 export type PerformanceSummary = {
@@ -92,6 +104,15 @@ function getParam(params: SearchParamsLike, key: string) {
   if (params instanceof URLSearchParams) return params.get(key) ?? undefined;
   const value = params[key];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function tryParseJson<T>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 export function todayString() {
@@ -167,7 +188,9 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
   const kvClause = filters.kv === "all" ? Prisma.empty : Prisma.sql`and upper(coalesce(kv, '')) = ${filters.kv}`;
   const districtClause = filters.district === "all" ? Prisma.empty : Prisma.sql`and delivery_district = ${filters.district}`;
   const wardClause = filters.ward === "all" ? Prisma.empty : Prisma.sql`and delivery_ward = ${filters.ward}`;
-  const cotClause = filters.cot === "all" ? Prisma.empty : Prisma.sql`and cot = ${filters.cot}`;
+  const cotClause = filters.cot === "all"
+    ? Prisma.empty
+    : Prisma.sql`and lower(trim(coalesce(nullif(trim(r.cot), ''), nullif(trim(p.cot), '')))) = lower(trim(${filters.cot}))`;
   const searchClause = filters.q
     ? Prisma.sql`and (
         p.driver_id ilike ${likeQuery}
@@ -175,7 +198,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         or p.contract_type_name ilike ${likeQuery}
         or r.full_name ilike ${likeQuery}
         or r.kv ilike ${likeQuery}
-        or r.cot ilike ${likeQuery}
+        or coalesce(p.cot, r.cot) ilike ${likeQuery}
         or r.pickup_district ilike ${likeQuery}
         or r.delivery_district ilike ${likeQuery}
         or r.delivery_ward ilike ${likeQuery}
@@ -195,8 +218,17 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       delivery_ward: string | null;
       delivery_assigned: bigint;
       delivery_delivered: bigint;
+      delivery_assigned_cot1: bigint;
+      delivery_delivered_cot1: bigint;
+      delivery_assigned_cot2: bigint;
+      delivery_delivered_cot2: bigint;
       pickup_assigned: bigint;
       pickup_picked: bigint;
+      pickup_assigned_cot1: bigint;
+      pickup_picked_cot1: bigint;
+      pickup_assigned_cot2: bigint;
+      pickup_picked_cot2: bigint;
+      cot_breakdown_raw: string | null;
       delivery_rate: Prisma.Decimal | null;
       pickup_rate: Prisma.Decimal | null;
       total_groups: bigint | null;
@@ -221,7 +253,6 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         ${kvClause}
         ${districtClause}
         ${wardClause}
-        ${cotClause}
     ),
     grouped as (
       select
@@ -230,17 +261,27 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         max(p.driver_name) as driver_name,
         max(r.full_name) as rider_name,
         max(r.kv) as kv,
-        max(r.cot) as cot,
+        max(coalesce(nullif(trim(r.cot), ''), nullif(trim(p.cot), ''))) as cot,
         max(r.pickup_district) as pickup_district,
         max(r.delivery_district) as delivery_district,
         max(r.delivery_ward) as delivery_ward,
         sum(coalesce(p.delivery_assigned, 0))::bigint as delivery_assigned,
         sum(coalesce(p.delivery_delivered, 0))::bigint as delivery_delivered,
+        sum(coalesce(p.delivery_assigned_cot1, 0))::bigint as delivery_assigned_cot1,
+        sum(coalesce(p.delivery_delivered_cot1, 0))::bigint as delivery_delivered_cot1,
+        sum(coalesce(p.delivery_assigned_cot2, 0))::bigint as delivery_assigned_cot2,
+        sum(coalesce(p.delivery_delivered_cot2, 0))::bigint as delivery_delivered_cot2,
         sum(coalesce(p.pickup_assigned, 0))::bigint as pickup_assigned,
-        sum(coalesce(p.pickup_picked, 0))::bigint as pickup_picked
+        sum(coalesce(p.pickup_picked, 0))::bigint as pickup_picked,
+        sum(coalesce(p.pickup_assigned_cot1, 0))::bigint as pickup_assigned_cot1,
+        sum(coalesce(p.pickup_picked_cot1, 0))::bigint as pickup_picked_cot1,
+        sum(coalesce(p.pickup_assigned_cot2, 0))::bigint as pickup_assigned_cot2,
+        sum(coalesce(p.pickup_picked_cot2, 0))::bigint as pickup_picked_cot2,
+        max(p.cot_breakdown::text) as cot_breakdown_raw
       from public.driver_performance_daily p
       join rider_scope r on r.rider_code = p.driver_id
       where p.report_date between ${start}::date and ${end}::date
+        ${cotClause}
         ${searchClause}
       group by ${groupBy}
     ),
@@ -288,7 +329,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
     )
     select distinct
       nullif(trim(r.delivery_district), '') as delivery_district,
-      nullif(trim(r.cot), '') as cot
+      nullif(trim(coalesce(nullif(trim(r.cot), ''), nullif(trim(p.cot), ''))), '') as cot
     from public.driver_performance_daily p
     join rider_scope r on r.rider_code = p.driver_id
     where p.report_date between ${start}::date and ${end}::date
@@ -353,8 +394,17 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       delivery_ward: row.delivery_ward,
       delivery_assigned: Number(row.delivery_assigned),
       delivery_delivered: Number(row.delivery_delivered),
+      delivery_assigned_cot1: Number(row.delivery_assigned_cot1 ?? 0),
+      delivery_delivered_cot1: Number(row.delivery_delivered_cot1 ?? 0),
+      delivery_assigned_cot2: Number(row.delivery_assigned_cot2 ?? 0),
+      delivery_delivered_cot2: Number(row.delivery_delivered_cot2 ?? 0),
       pickup_assigned: Number(row.pickup_assigned),
       pickup_picked: Number(row.pickup_picked),
+      pickup_assigned_cot1: Number(row.pickup_assigned_cot1 ?? 0),
+      pickup_picked_cot1: Number(row.pickup_picked_cot1 ?? 0),
+      pickup_assigned_cot2: Number(row.pickup_assigned_cot2 ?? 0),
+      pickup_picked_cot2: Number(row.pickup_picked_cot2 ?? 0),
+      cot_breakdown: tryParseJson(row.cot_breakdown_raw),
       delivery_rate: decimalToNumber(row.delivery_rate),
       pickup_rate: decimalToNumber(row.pickup_rate),
     })),

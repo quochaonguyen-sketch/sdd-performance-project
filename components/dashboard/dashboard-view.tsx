@@ -87,11 +87,45 @@ export function DashboardView() {
 
   const kv56Delivery = useMemo(() => state.delivery.filter(isKv56VolumeRow), [state.delivery]);
   const kv56Pickup = useMemo(() => state.pickup.filter(isKv56VolumeRow), [state.pickup]);
-  const summary = useMemo(() => buildSummary({ ...state, delivery: kv56Delivery, pickup: kv56Pickup }, dateRange), [dateRange, kv56Delivery, kv56Pickup, state]);
+
+  const effectiveVolumeRange = useMemo(() => {
+    const hasVolumeInRange = (
+      kv56Delivery.some((row) => { const d = row.report_date?.slice(0, 10); return d && d >= dateRange.start && d <= dateRange.end; }) ||
+      kv56Pickup.some((row) => { const d = row.report_date?.slice(0, 10); return d && d >= dateRange.start && d <= dateRange.end; })
+    );
+
+    if (hasVolumeInRange) {
+      return { start: dateRange.start, end: dateRange.end, isFallback: false, fallbackDate: null as string | null };
+    }
+
+    // Nếu khoảng thời gian hiện tại không có dữ liệu (ví dụ hôm nay chưa có volume),
+    // tự động lấy số của ngày gần nhất trước đó có dữ liệu (số ngày hôm trước)
+    let previousDate: string | null = null;
+    for (const row of kv56Delivery) {
+      const d = row.report_date?.slice(0, 10);
+      if (d && d <= dateRange.end && (!previousDate || d > previousDate)) {
+        previousDate = d;
+      }
+    }
+    for (const row of kv56Pickup) {
+      const d = row.report_date?.slice(0, 10);
+      if (d && d <= dateRange.end && (!previousDate || d > previousDate)) {
+        previousDate = d;
+      }
+    }
+
+    if (previousDate) {
+      return { start: previousDate, end: previousDate, isFallback: true, fallbackDate: previousDate };
+    }
+
+    return { start: dateRange.start, end: dateRange.end, isFallback: false, fallbackDate: null as string | null };
+  }, [dateRange.start, dateRange.end, kv56Delivery, kv56Pickup]);
+
+  const summary = useMemo(() => buildSummary({ ...state, delivery: kv56Delivery, pickup: kv56Pickup }, dateRange, effectiveVolumeRange), [dateRange, effectiveVolumeRange, kv56Delivery, kv56Pickup, state]);
   const volumeAnalytics = useMemo(() => buildVolumeAnalytics(kv56Delivery, kv56Pickup, volumeMode, volumeGrouping), [kv56Delivery, kv56Pickup, volumeGrouping, volumeMode]);
   const volumeDailyData = useMemo(() => buildDailyVolumeRecords(kv56Delivery, kv56Pickup, volumeMode), [kv56Delivery, kv56Pickup, volumeMode]);
   const districtAverages = useMemo(() => ({ delivery: buildDistrictAverages(kv56Delivery, dateRange.end, shortDistrictLabel), pickup: buildDistrictAverages(kv56Pickup, dateRange.end, shortDistrictLabel) }), [dateRange.end, kv56Delivery, kv56Pickup]);
-  const areaBreakdown = useMemo(() => buildAreaBreakdown(state, dateRange), [dateRange, state]);
+  const areaBreakdown = useMemo(() => buildAreaBreakdown(state, dateRange, effectiveVolumeRange), [dateRange, effectiveVolumeRange, state]);
   const alerts = useMemo(() => buildAlerts(state, summary), [state, summary]);
 
   return <div className="dashboard-control ops-overview ops-dashboard mx-auto max-w-[1600px] space-y-6">
@@ -113,8 +147,8 @@ export function DashboardView() {
 
     <section className="dash-summary-grid" aria-label="Sản lượng và tiến độ">
       <article className="dash-volume-panel">
-        <div className="dash-panel-heading"><span>Sản lượng giao nhận</span><span className="dash-scope">KV1–KV5</span></div>
-        <div className="dash-volume-total"><DashboardNumber value={summary.totalVolume} loading={loading} /><span>đơn trong kỳ</span></div>
+        <div className="dash-panel-heading"><span>Sản lượng giao nhận</span><span className="dash-scope">{summary.isVolumeFallback && summary.volumeDate ? `KV1–KV5 · Ngày ${formatDate(summary.volumeDate)}` : "KV1–KV5"}</span></div>
+        <div className="dash-volume-total"><DashboardNumber value={summary.totalVolume} loading={loading} /><span>{summary.isVolumeFallback && summary.volumeDate ? `đơn (hôm trước · ${formatDate(summary.volumeDate)})` : "đơn trong kỳ"}</span></div>
         <div className="dash-volume-split">
           <Link href="/volume/delivery" data-series="delivery"><span className="dash-series-label"><i className="is-delivery" />Delivery</span><strong><DashboardNumber value={summary.deliveryVolume} loading={loading} /></strong><span>{volumeShare(summary.deliveryVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
           <Link href="/volume/pickup" data-series="pickup"><span className="dash-series-label"><i className="is-pickup" />Pickup</span><strong><DashboardNumber value={summary.pickupVolume} loading={loading} /></strong><span>{volumeShare(summary.pickupVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
@@ -133,7 +167,7 @@ export function DashboardView() {
     </section>
 
     <section className="dash-area-section" aria-labelledby="area-breakdown">
-      <div className="dash-area-heading"><h2 id="area-breakdown">Nhịp độ 5 khu vực</h2><span>Sản lượng delivery + pickup · {rangeLabel(range).toLowerCase()}</span></div>
+      <div className="dash-area-heading"><h2 id="area-breakdown">Nhịp độ 5 khu vực</h2><span>Sản lượng delivery + pickup · {summary.isVolumeFallback && summary.volumeDate ? `ngày ${formatDate(summary.volumeDate)} (hôm trước)` : rangeLabel(range).toLowerCase()}</span></div>
       <div className="dash-area-rail">{OPERATING_AREAS.map((area) => { const data = areaBreakdown[area]; const total = data.deliveryVolume + data.pickupVolume; const rate = data.assigned ? Math.round(data.delivered / data.assigned * 100) : 0; return <article key={area} className="dash-area-cell" data-area={area}><div><span>{area}</span><small>{loading ? "Đang tải" : data.assigned ? rate + "% đã giao" : "Chưa có đơn gán"}</small></div><strong><DashboardNumber value={total} loading={loading} /><span>đơn</span></strong><div className="dash-area-track" aria-hidden="true"><span style={{ width: Math.min(100, rate) + "%" }} /></div></article>; })}</div>
     </section>
 
@@ -604,32 +638,51 @@ export function AlertsList({ alerts, className }: { alerts: ReturnType<typeof bu
 
 function Empty({ text }: { text: string }) { return <p className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500">{text}</p>; }
 
-function buildSummary(state: DashboardState, range: { start: string; end: string }) {
+function buildSummary(
+  state: DashboardState,
+  range: { start: string; end: string },
+  volumeRange?: { start: string; end: string; isFallback: boolean; fallbackDate: string | null }
+) {
+  const vRange = volumeRange ?? { start: range.start, end: range.end, isFallback: false, fallbackDate: null };
   const riderByCode = new Map(state.riders.map((rider) => [normalizeRiderCode(rider.rider_code), rider]));
   const kv56Realtime = state.realtime.filter((row) => row.work_date.slice(0, 10) === range.end && isKv56(riderByCode.get(normalizeRiderCode(row.driver_id))?.kv));
   const realtime = kv56Realtime.reduce((sum, row) => ({ assigned: sum.assigned + row.total_assigned, delivered: sum.delivered + row.delivered, delivering: sum.delivering + row.delivering, failed: sum.failed + row.failed }), { assigned: 0, delivered: 0, delivering: 0, failed: 0 });
-  const volumeTotal = (rows: VolumeRow[]) => rows.filter((row) => { const date = row.report_date?.slice(0, 10); return date && date >= range.start && date <= range.end; }).reduce((sum, row) => sum + (row.total_orders ?? 1), 0);
+  const volumeTotal = (rows: VolumeRow[]) => rows.filter((row) => { const date = row.report_date?.slice(0, 10); return date && date >= vRange.start && date <= vRange.end; }).reduce((sum, row) => sum + (row.total_orders ?? 1), 0);
   const deliveryVolume = volumeTotal(state.delivery);
   const pickupVolume = volumeTotal(state.pickup);
-  return { ...realtime, deliveryRate: realtime.assigned ? Math.round(realtime.delivered / realtime.assigned * 100) : 0, idleRiders: kv56Realtime.filter((row) => row.delivering > 0 && row.idle_delivery_seconds > 3600).length, deliveryVolume, pickupVolume, totalVolume: deliveryVolume + pickupVolume };
+  return {
+    ...realtime,
+    deliveryRate: realtime.assigned ? Math.round(realtime.delivered / realtime.assigned * 100) : 0,
+    idleRiders: kv56Realtime.filter((row) => row.delivering > 0 && row.idle_delivery_seconds > 3600).length,
+    deliveryVolume,
+    pickupVolume,
+    totalVolume: deliveryVolume + pickupVolume,
+    isVolumeFallback: vRange.isFallback,
+    volumeDate: vRange.fallbackDate,
+  };
 }
 
-function buildAreaBreakdown(state: DashboardState, range: { start: string; end: string }) {
+function buildAreaBreakdown(
+  state: DashboardState,
+  range: { start: string; end: string },
+  volumeRange?: { start: string; end: string }
+) {
+  const vRange = volumeRange ?? range;
   const riderByCode = new Map(state.riders.map((rider) => [normalizeRiderCode(rider.rider_code), rider]));
   const zero = (): AreaTotals => ({ deliveryVolume: 0, pickupVolume: 0, assigned: 0, delivered: 0, delivering: 0, failed: 0 });
   const totals = Object.fromEntries(OPERATING_AREAS.map((area) => [area, zero()])) as AreaBreakdown;
 
-  const inRange = (row: VolumeRow) => {
+  const inVolumeRange = (row: VolumeRow) => {
     const date = row.report_date?.slice(0, 10);
-    return Boolean(date && date >= range.start && date <= range.end);
+    return Boolean(date && date >= vRange.start && date <= vRange.end);
   };
 
-  for (const row of state.delivery.filter(inRange)) {
+  for (const row of state.delivery.filter(inVolumeRange)) {
     const area = kvAreaOf(row);
     if (!area) continue;
     totals[`KV${area}`].deliveryVolume += row.total_orders ?? 1;
   }
-  for (const row of state.pickup.filter(inRange)) {
+  for (const row of state.pickup.filter(inVolumeRange)) {
     const area = kvAreaOf(row);
     if (!area) continue;
     totals[`KV${area}`].pickupVolume += row.total_orders ?? 1;

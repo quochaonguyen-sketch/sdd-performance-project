@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
+import { pickupOrderParams } from "@/lib/pickup/inventory-orders";
 
 // Proxy cung origin cho trang Ton pickup: browser goi /api/pickup-inventory
 // (khong can apikey Supabase), server doc DB bang service key.
@@ -22,6 +23,14 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
 
   try {
+    if (view === "orders") {
+      let params;
+      try { params = pickupOrderParams(url.searchParams); }
+      catch { return NextResponse.json({ success:false, error:"Bộ lọc mã đơn pickup không hợp lệ" }, { status:400 }); }
+      const { data, error } = await admin.rpc("pickup_inventory_orders", params);
+      if (error) throw error;
+      return NextResponse.json({ success:true, ...data }, { headers:{ "Cache-Control":"private, no-store" } });
+    }
     if (view === "zone-board") {
       const status = (url.searchParams.get("p_status") ?? "").trim();
       if (!["Assigned", "Pickup Onhold", "Created"].includes(status)) return NextResponse.json({success:false,error:"Trạng thái không hợp lệ"},{status:400});

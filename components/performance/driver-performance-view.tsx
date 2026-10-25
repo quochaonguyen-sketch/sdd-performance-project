@@ -512,7 +512,15 @@ function RiderPerformanceTable({
           <thead className="perf-table-thead">
             <tr>
               <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className="w-[24%]" />
-              <th scope="col" className="px-4 py-3 font-semibold">KV / COT</th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                <div className="flex items-center gap-1.5">
+                  <span>KV / COT</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-normal">
+                    <span className="rounded bg-blue-100 px-1.5 py-0.2 text-blue-700 dark:bg-blue-950 dark:text-blue-300">COT1</span>
+                    <span className="rounded bg-amber-100 px-1.5 py-0.2 text-amber-700 dark:bg-amber-950 dark:text-amber-300">COT2</span>
+                  </span>
+                </div>
+              </th>
               <SortHeader label="Khu vực" sortKey="area" current={filters} onSort={onSort} />
               <SortHeader label="Deli" sortKey="delivery" current={filters} onSort={onSort} align="right" />
               <SortHeader label="Tỉ lệ deli" sortKey="deliveryRate" current={filters} onSort={onSort} align="right" />
@@ -554,12 +562,60 @@ function RiderPerformanceTable({
   );
 }
 
+function CotBadge({ cot }: { cot: string | null | undefined }) {
+  if (!cot || !cot.trim()) {
+    return <span className="text-xs text-[var(--color-muted)]">—</span>;
+  }
+  const clean = cot.trim();
+  const lower = clean.toLowerCase();
+  const isCot1 = lower.startsWith("cot 1") || lower === "cot1";
+  const isCot2 = lower.startsWith("cot 2") || lower === "cot2";
+
+  if (isCot1) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300">
+        <span className="size-1.5 rounded-full bg-blue-500" />
+        {clean}
+      </span>
+    );
+  }
+
+  if (isCot2) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 shadow-sm dark:border-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
+        <span className="size-1.5 rounded-full bg-amber-500" />
+        {clean}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+      {clean}
+    </span>
+  );
+}
+
 function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: number }) {
   const deliRate = row.delivery_rate;
   const pickRate = row.pickup_rate;
 
+  const cotClean = (row.cot ?? "").trim().toLowerCase();
+  const isCot1 = cotClean.startsWith("cot 1") || cotClean === "cot1";
+  const isCot2 = cotClean.startsWith("cot 2") || cotClean === "cot2";
+
+  const hasDeliCot = row.delivery_assigned_cot1 > 0 || row.delivery_assigned_cot2 > 0;
+  const hasPickCot = row.pickup_assigned_cot1 > 0 || row.pickup_assigned_cot2 > 0;
+
   return (
-    <tr className={cn("transition hover:bg-[var(--color-accent-soft)]", index % 2 === 1 ? "bg-[var(--color-paper-2)]" : "bg-[var(--color-paper)]")}>
+    <tr
+      className={cn(
+        "transition hover:bg-[var(--color-accent-soft)]",
+        index % 2 === 1 ? "bg-[var(--color-paper-2)]" : "bg-[var(--color-paper)]",
+        isCot1 && "border-l-4 border-l-blue-500",
+        isCot2 && "border-l-4 border-l-amber-500"
+      )}
+    >
       <th scope="row" className="px-4 py-3 text-left">
         <p className="max-w-72 truncate font-bold text-[var(--color-ink)]" title={row.rider_name ?? row.driver_name ?? row.driver_id}>
           {row.rider_name ?? row.driver_name ?? "Chưa map rider"}
@@ -568,7 +624,9 @@ function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: numbe
       </th>
       <td className="px-4 py-3">
         <p className="font-bold text-[var(--color-ink-2)]">{row.kv ?? "—"}</p>
-        <p className="text-xs text-[var(--color-muted)]">{row.cot ?? "—"}</p>
+        <div className="mt-1">
+          <CotBadge cot={row.cot} />
+        </div>
       </td>
       <td className="px-4 py-3">
         <p className="max-w-56 truncate font-semibold text-[var(--color-ink-2)]" title={row.delivery_district ?? undefined}>{row.delivery_district ?? "Chưa có quận giao"}</p>
@@ -582,6 +640,51 @@ function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: numbe
       <td className="px-4 py-3 text-right">
         <p className="font-black tabular-nums text-[var(--color-ink)]">{formatNumber(row.delivery_delivered)}</p>
         <p className="text-xs text-[var(--color-muted)]">/ {formatNumber(row.delivery_assigned)} phân</p>
+        {hasDeliCot ? (
+          <div className="mt-1.5 flex flex-col items-end gap-1">
+            {row.delivery_assigned_cot1 > 0 && (
+              <span className="inline-flex flex-col items-end rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                <span className="flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-blue-500" />
+                  COT 1: {formatNumber(row.delivery_delivered_cot1)}/{formatNumber(row.delivery_assigned_cot1)}
+                </span>
+                {(row.cot_breakdown?.delivery?.["COT 1.1"] || row.cot_breakdown?.delivery?.["COT 1.2"]) && (
+                  <span className="text-[10px] font-normal text-blue-600 dark:text-blue-400">
+                    {row.cot_breakdown?.delivery?.["COT 1.1"] && (
+                      <span>1.1: {formatNumber(row.cot_breakdown.delivery["COT 1.1"].delivered)}/{formatNumber(row.cot_breakdown.delivery["COT 1.1"].assigned)}</span>
+                    )}
+                    {row.cot_breakdown?.delivery?.["COT 1.1"] && row.cot_breakdown?.delivery?.["COT 1.2"] && " · "}
+                    {row.cot_breakdown?.delivery?.["COT 1.2"] && (
+                      <span>1.2: {formatNumber(row.cot_breakdown.delivery["COT 1.2"].delivered)}/{formatNumber(row.cot_breakdown.delivery["COT 1.2"].assigned)}</span>
+                    )}
+                  </span>
+                )}
+              </span>
+            )}
+            {row.delivery_assigned_cot2 > 0 && (
+              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                <span className="size-1.5 rounded-full bg-amber-500" />
+                COT 2: {formatNumber(row.delivery_delivered_cot2)}/{formatNumber(row.delivery_assigned_cot2)}
+              </span>
+            )}
+          </div>
+        ) : (
+          row.delivery_assigned > 0 && (
+            <div className="mt-1.5 flex flex-col items-end">
+              {isCot1 ? (
+                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                  <span className="size-1.5 rounded-full bg-blue-500" />
+                  COT 1: {formatNumber(row.delivery_delivered)}/{formatNumber(row.delivery_assigned)}
+                </span>
+              ) : isCot2 ? (
+                <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  COT 2: {formatNumber(row.delivery_delivered)}/{formatNumber(row.delivery_assigned)}
+                </span>
+              ) : null}
+            </div>
+          )
+        )}
       </td>
       <td className="px-4 py-3 text-right">
         <ProgressMetric value={deliRate} />
@@ -589,6 +692,38 @@ function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: numbe
       <td className="px-4 py-3 text-right">
         <p className="font-black tabular-nums text-[var(--color-ink)]">{formatNumber(row.pickup_picked)}</p>
         <p className="text-xs text-[var(--color-muted)]">/ {formatNumber(row.pickup_assigned)} phân</p>
+        {hasPickCot ? (
+          <div className="mt-1.5 flex flex-col items-end gap-1">
+            {row.pickup_assigned_cot1 > 0 && (
+              <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                <span className="size-1.5 rounded-full bg-blue-500" />
+                COT 1: {formatNumber(row.pickup_picked_cot1)}/{formatNumber(row.pickup_assigned_cot1)}
+              </span>
+            )}
+            {row.pickup_assigned_cot2 > 0 && (
+              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                <span className="size-1.5 rounded-full bg-amber-500" />
+                COT 2: {formatNumber(row.pickup_picked_cot2)}/{formatNumber(row.pickup_assigned_cot2)}
+              </span>
+            )}
+          </div>
+        ) : (
+          row.pickup_assigned > 0 && (
+            <div className="mt-1.5 flex flex-col items-end">
+              {isCot1 ? (
+                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                  <span className="size-1.5 rounded-full bg-blue-500" />
+                  COT 1: {formatNumber(row.pickup_picked)}/{formatNumber(row.pickup_assigned)}
+                </span>
+              ) : isCot2 ? (
+                <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  COT 2: {formatNumber(row.pickup_picked)}/{formatNumber(row.pickup_assigned)}
+                </span>
+              ) : null}
+            </div>
+          )
+        )}
       </td>
       <td className="px-4 py-3 text-right">
         <ProgressMetric value={pickRate} />

@@ -1,6 +1,11 @@
 # Tồn pickup
 
+Trang này chỉ hiển thị **Assigned thực sự**, chưa Onhold và chưa Picked. Bỏ lựa chọn Created/Onhold trên trang. Worker đọc SPX status 2 cho toàn bộ backlog, kiểm thêm các cờ `on_hold_reason`, `pickup_on_hold_reason`, tên lý do Onhold và thời điểm đã lấy. Created không được suy thành Assigned chỉ vì điểm lấy hàng có task. Bước ghi từ chối mọi dòng không phải Assigned; snapshot 0 đơn chỉ được ghi sau khi đã xác nhận đọc đủ nguồn, để không giữ tồn cũ khi mọi đơn đã xử lý. Quy tắc nguồn ở `sdd-web-data/sdd_data/pickup_status.py`; kiểm tra hồi quy trong `tests/test_pickup_inventory.py` của sdd-web-data.
+
 - Tồn khu vực / zone: danh sách mã zone trực tiếp theo KV1–KV5, không còn bước nhóm theo phường. Tìm mã zone, lọc COT đơn và mức tồn; KPI và biểu đồ dùng cùng dữ liệu zone. Zone trống vẫn có nhóm Chưa có mã zone.
 - Tồn theo rider: cột Mã zone liệt kê các zone đang giữ đơn; tìm được bằng tên, mã rider hoặc mã zone. Lọc theo COT phụ trách từ hồ sơ rider, giữ cả tồn từ COT trước. Không tách rider theo COT tạo đơn.
 - API zone-board và riders yêu cầu đăng nhập và quyền quản lý pickup. RPC chỉ cấp service_role, tổng hợp JSON tránh giới hạn 1000 dòng. Snapshot lấy từ dữ liệu nguồn.
 - Cài SQL: prisma/pickup-rider-inventory.sql. Kiểm tra SQL bằng tests/pickup-rider-inventory.integration.sql trong giao dịch rollback.
+- Bấm tên zone/số tồn hoặc tên rider/số tồn để mở danh sách mã đơn. Cột COT 1/2 của zone mở đúng COT đơn; chi tiết rider lọc đúng COT phụ trách và giữ tồn từ COT trước. Tìm rider theo zone chỉ tìm rider, không cắt bớt tổng tồn của rider đó.
+- Danh sách mã đơn có mã vận đơn, mã SPX, zone/KV, điểm lấy hàng, COT đơn và thời gian tạo; tìm theo mã, sao chép từng mã/trang, phân trang 100 đơn. Đếm distinct shipment_id giống dữ liệu tổng hợp; không giới hạn ngầm 1000 dòng. Hộp thoại hỗ trợ Escape và khóa focus bằng native dialog.
+- API `view=orders` dùng cùng quyền pickup. RPC `pickup_inventory_orders` chỉ cho service_role, đọc đúng KV1–KV5 và không trả địa chỉ/chuỗi gán rider. Cài `prisma/pickup-inventory-orders.sql`; kiểm tra rollback trong `tests/pickup-inventory-orders.integration.sql` và unit test `tests/pickup-inventory-orders.test.ts`.

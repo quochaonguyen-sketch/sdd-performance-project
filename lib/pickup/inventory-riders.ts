@@ -5,10 +5,9 @@ export function inventoryRiders(rows:RiderInventoryRow[],area:string,cot:"all"|"
   for(const row of rows) {
     if(area!=="all"&&row.area!==area)continue;
     if(cot!=="all"&&row.rider_cot.toLowerCase()!==cot)continue;
-    if(query&&!fold(`${row.rider_name} ${row.rider_code} ${row.zones.join(' ')} ${row.area}`).includes(fold(query)))continue;
     const key=`${row.rider_code}:${row.rider_cot}`;
     const value=map.get(key)??{id:row.rider_code,name:row.rider_name,cot:row.rider_cot,areas:new Set<string>(),zones:new Set<string>(),visible:0};
     value.areas.add(row.area);for(const zone of row.zones)value.zones.add(zone);value.visible+=Number(row.total);map.set(key,value);
   }
-  return [...map.values()].filter(r=>r.visible>0).sort((a,b)=>b.visible-a.visible||a.name.localeCompare(b.name,"vi"));
+  return [...map.values()].filter(r=>r.visible>0 && (!query || fold(`${r.name} ${r.id} ${[...r.zones].join(' ')} ${[...r.areas].join(' ')}`).includes(fold(query)))).sort((a,b)=>b.visible-a.visible||a.name.localeCompare(b.name,"vi"));
 }

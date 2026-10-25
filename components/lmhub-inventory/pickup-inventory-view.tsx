@@ -37,12 +37,15 @@ import {
   type PickupStatusRow,
 } from "@/components/lmhub-inventory/pickup-inventory-model";
 import { PickupRiderInventory } from "./pickup-rider-inventory";
+import { PickupOrderDialog } from "./pickup-order-dialog";
+import type { PickupOrderScope } from "@/lib/pickup/inventory-orders";
 import { cn } from "@/utils/cn";
 import "./pickup-inventory.css";
 
 export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }) {
+  const [orderScope, setOrderScope] = useState<PickupOrderScope | null>(null);
   const [section, setSection] = useState<"zones" | "riders">("zones");
-  const [status, setStatus] = useState<PickupStatusKey>("assigned");
+  const status: PickupStatusKey = "assigned";
   const [rows, setRows] = useState<PickupStatusRow[]>([]);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -246,10 +249,6 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
     return [...map.values()].filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 10);
   }, [allDistricts, cot]);
 
-  const changeStatus = (next: PickupStatusKey) => {
-    setStatus(next);
-  };
-
   useSupabaseRealtime({ table: "pickup_48h_no_api2", onChange: scheduleLoad, debounceMs: 1500 });
 
   const clearFilters = () => {
@@ -320,35 +319,8 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
         <button aria-pressed={section === "zones"} onClick={() => { setSection("zones"); setQuery(""); setHeat("all"); }} className={cn("rounded-lg px-5 py-2.5 text-sm font-bold", section === "zones" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-50")}>Tồn khu vực / zone</button>
         <button aria-pressed={section === "riders"} onClick={() => { setSection("riders"); setQuery(""); setHeat("all"); }} className={cn("rounded-lg px-5 py-2.5 text-sm font-bold", section === "riders" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-50")}>Tồn theo rider</button>
       </nav>
-      {/* Prominent Status Selector Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {(
-            [
-              { id: "assigned", label: "Assigned (Đã gán)", desc: "Rider đang giữ đơn" },
-              { id: "onhold", label: "Pickup Onhold (Tạm giữ)", desc: "Đơn tạm giữ xử lý lại" },
-              { id: "created", label: "Created (Chưa gán)", desc: "Đơn mới tạo chưa có rider" },
-            ] as const
-          ).map((item) => {
-            const active = status === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => changeStatus(item.id)}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all",
-                  active
-                    ? "bg-[var(--area-deep)] text-white shadow-md shadow-slate-900/10"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                )}
-              >
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div><span className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">Assigned · Chưa Onhold / chưa Picked</span><p className="mt-3 text-[11px] text-slate-500">Chỉ đơn đang gán và còn chờ lấy; không suy trạng thái từ task của điểm lấy hàng.</p></div>
         <div className="flex items-center gap-2 pr-2">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
             {(queueMeta?.pending ?? 0) + (queueMeta?.running ?? 0) > 0 || waitingSnapshot ? (
@@ -623,6 +595,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
               <ZoneTable
                 key={board.area}
                 area={board.area}
+                onOrders={setOrderScope}
                 zones={board.wards}
                 cot={cot}
                 statusLabel={statusLabel}
@@ -633,6 +606,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
       )}
 
       </>}
+      {orderScope && <PickupOrderDialog scope={orderScope} onClose={() => setOrderScope(null)}/>}
     </div>
   );
 }
@@ -659,11 +633,12 @@ function mergeWards(districts: DistrictAgg[], cot: CotFilter): FlatWard[] {
   return [...map.values()].sort((a, b) => visibleTotal(b, cot) - visibleTotal(a, cot) || a.ward.localeCompare(b.ward, "vi"));
 }
 
-function ZoneTable({ area, zones, cot, statusLabel, updatedAt }: { area:Area; zones:FlatWard[]; cot:CotFilter; statusLabel:string; updatedAt:string|null }) {
+function ZoneTable({ area, zones, cot, statusLabel, updatedAt, onOrders }: { area:Area; zones:FlatWard[]; cot:CotFilter; statusLabel:string; updatedAt:string|null; onOrders:(scope:PickupOrderScope)=>void }) {
+  const openOrders = (zone:string, selectedCot:CotFilter=cot) => onOrders({area, zone, cot:selectedCot, status:statusLabel, title:zone});
   const total=zones.reduce((n,z)=>n+visibleTotal(z,cot),0);
   return <article data-area={area} className="pickup-scope overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-[var(--area-tint)] px-5 py-4"><div><h2 className="flex items-center gap-2 text-sm font-bold"><span className="pickup-area-dot"/>Khu vực {area}</h2><p className="mt-1 text-xs text-slate-500">{zones.length} zone · {formatDateTime(updatedAt)}</p></div><strong className="font-mono text-sm">{total.toLocaleString("vi-VN")} đơn</strong></header>
-    <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-slate-500"><tr><th className="px-5 py-3">Mã zone · {statusLabel}</th><th className="px-4 py-3 text-right">COT 1</th><th className="px-4 py-3 text-right">COT 2</th><th className="px-5 py-3 text-right">Tồn đang xem</th></tr></thead><tbody>{zones.map(z=><tr key={z.ward} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-5 py-3 font-semibold">{z.ward}</td><td className="px-4 py-3 text-right font-mono text-blue-700">{z.cot1.toLocaleString("vi-VN")}</td><td className="px-4 py-3 text-right font-mono text-emerald-700">{z.cot2.toLocaleString("vi-VN")}</td><td className="px-5 py-3 text-right"><span className={cn("rounded-md px-2.5 py-1 font-mono font-bold",heatClass(visibleTotal(z,cot)))}>{visibleTotal(z,cot).toLocaleString("vi-VN")}</span></td></tr>)}{!zones.length&&<tr><td colSpan={4} className="p-8 text-center text-slate-400">Không có zone phù hợp.</td></tr>}</tbody></table></div>
+    <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-[var(--area-tint)] px-5 py-4"><div><h2 className="flex items-center gap-2 text-sm font-bold"><span className="pickup-area-dot"/>Khu vực {area}</h2><p className="mt-1 text-xs text-slate-500">{zones.length} zone · Bấm zone hoặc số tồn để xem mã đơn · {formatDateTime(updatedAt)}</p></div><strong className="font-mono text-sm">{total.toLocaleString("vi-VN")} đơn</strong></header>
+    <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-slate-500"><tr><th className="px-5 py-3">Mã zone · {statusLabel}</th><th className="px-4 py-3 text-right">COT 1</th><th className="px-4 py-3 text-right">COT 2</th><th className="px-5 py-3 text-right">Tồn đang xem</th></tr></thead><tbody>{zones.map(z=><tr key={z.ward} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-5 py-3 font-semibold"><button onClick={()=>openOrders(z.ward)} className="text-left hover:text-blue-700 hover:underline" title="Xem mã đơn trong zone">{z.ward}</button></td><td className="px-4 py-3 text-right font-mono text-blue-700"><button disabled={!z.cot1} onClick={()=>openOrders(z.ward,"cot1")} className="underline decoration-dotted underline-offset-4 disabled:no-underline" aria-label={`Xem ${z.cot1} mã đơn COT 1 của ${z.ward}`}>{z.cot1.toLocaleString("vi-VN")}</button></td><td className="px-4 py-3 text-right font-mono text-emerald-700"><button disabled={!z.cot2} onClick={()=>openOrders(z.ward,"cot2")} className="underline decoration-dotted underline-offset-4 disabled:no-underline" aria-label={`Xem ${z.cot2} mã đơn COT 2 của ${z.ward}`}>{z.cot2.toLocaleString("vi-VN")}</button></td><td className="px-5 py-3 text-right"><button onClick={()=>openOrders(z.ward)} title="Xem mã đơn" className={cn("rounded-md px-2.5 py-1 font-mono font-bold underline decoration-dotted underline-offset-4 hover:ring-2 hover:ring-blue-300",heatClass(visibleTotal(z,cot)))}>{visibleTotal(z,cot).toLocaleString("vi-VN")}</button></td></tr>)}{!zones.length&&<tr><td colSpan={4} className="p-8 text-center text-slate-400">Không có zone phù hợp.</td></tr>}</tbody></table></div>
   </article>;
 }
 

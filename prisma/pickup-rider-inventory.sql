@@ -63,7 +63,9 @@ returns jsonb language sql stable security invoker set search_path=pg_catalog as
   ), grouped as (
     select area,zone,cot,count(distinct shipment_id) as orders from raw group by area,zone,cot
   ) select jsonb_build_object('rows',coalesce((select jsonb_agg(to_jsonb(g) order by g.orders desc,g.zone) from grouped g),'[]'),
-    'snapshotAt',(select max(snapshot_at) from raw));
+    'snapshotAt',coalesce((select max(snapshot_at) from raw),
+      (select max(finished_at) from public.lmhub_fetch_jobs where status='DONE'
+        and params->>'kind' in ('pickup','ton_pickup','all','both') and p_status='Assigned')));
 $fn$;
 revoke all on function public.pickup_inventory_zone_board(text) from public,anon,authenticated;
 grant execute on function public.pickup_inventory_zone_board(text) to service_role;
