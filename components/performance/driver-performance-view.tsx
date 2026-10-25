@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
+import { PerformanceAnalysis } from "./performance-analysis";
+import analysisStyles from "./performance-analysis.module.css";
 import {
   type PerformanceDirection,
   type PerformanceFilters,
@@ -17,7 +19,6 @@ import {
   type PerformanceRow,
   type PerformanceSortKey,
   type PerformanceSummary,
-  type PerformanceWardRow,
 } from "@/lib/performance/driver-performance";
 
 type Props = {
@@ -53,7 +54,6 @@ export function DriverPerformanceView({ result, filters, error, loadedKey }: Pro
   const rows = result?.rows ?? [];
   const summary = result?.summary ?? emptySummary;
   const options = result?.options ?? emptyOptions;
-  const wardOnHold = result?.wardOnHold ?? [];
   const pageCount = Math.max(1, Math.ceil(summary.groups / filters.pageSize));
   const isLoading = isPending || clientLoading;
 
@@ -103,7 +103,7 @@ export function DriverPerformanceView({ result, filters, error, loadedKey }: Pro
   }
 
   return (
-    <div className="perf-page mx-auto max-w-[1600px]">
+    <div className={cn("perf-page mx-auto max-w-[1600px]", analysisStyles.page)}>
       <PageHeader />
 
       <PerformanceFilters
@@ -120,9 +120,9 @@ export function DriverPerformanceView({ result, filters, error, loadedKey }: Pro
         </div>
       ) : null}
 
-      <PerformanceKpiCards summary={summary} page={filters.page} pageCount={pageCount} pageSize={filters.pageSize} isLoading={isLoading} />
+      <PerformanceKpiCards summary={summary} isLoading={isLoading} />
 
-      <WardOnHoldChart rows={wardOnHold} filters={filters} isLoading={isLoading} />
+      <PerformanceAnalysis analysis={result?.analysis} isLoading={isLoading} onArea={area => updateParams(params => { params.set("kv", area); params.delete("district"); params.delete("ward"); params.set("page", "1"); })} />
 
       <RiderPerformanceTable
         rows={rows}
@@ -147,15 +147,15 @@ function PageHeader() {
         </span>
         <div className="perf-header-copy">
           <p className="perf-kicker">Rider Operations · KV1–KV5</p>
-          <h1 className="perf-title">Performance Deli / Pick KV1–KV5</h1>
+          <h1 className="perf-title">Phân tích hiệu suất Deli / Pick</h1>
           <p className="perf-desc">
-            Xem sản lượng rider KV1–KV5 theo ngày, tuần hoặc tháng — có phân trang server-side.
+            Theo dõi xu hướng hoàn thành, so sánh khu vực × COT và phân tích hiệu suất rider.
           </p>
         </div>
       </div>
       <div className="perf-scope">
         <span>Ngữ cảnh</span>
-        <strong>Chỉ tính rider KV1–KV5 · Tổng hợp theo chu kỳ đã chọn</strong>
+        <strong>Rider KV1–KV5 · Biểu đồ tính trên toàn bộ dữ liệu theo bộ lọc</strong>
       </div>
     </header>
   );
@@ -284,7 +284,7 @@ function PerformanceFilters({
         </label>
 
         <label className="block" htmlFor="performance-cot">
-          <span className="perf-field-label">COT</span>
+          <span className="perf-field-label">COT rider</span>
           <Select id="performance-cot" value={filters.cot} onChange={(event) => changeFilter("cot", event.target.value)} aria-label="Lọc theo COT">
             <option value="all">Tất cả COT</option>
             {options.cots.map((cot) => (
@@ -320,15 +320,9 @@ function PerformanceFilters({
 
 function PerformanceKpiCards({
   summary,
-  page,
-  pageCount,
-  pageSize,
   isLoading,
 }: {
   summary: PerformanceSummary;
-  page: number;
-  pageCount: number;
-  pageSize: number;
   isLoading: boolean;
 }) {
   const deliRate = rate(summary.delivery_delivered, summary.delivery_assigned);
@@ -339,115 +333,22 @@ function PerformanceKpiCards({
       <div className="perf-kpi-grid">
         <KpiCard
           icon={<Truck size={18} />}
-          title="Deli đã giao / đã phân"
-          primary={formatNumber(summary.delivery_delivered)}
-          secondary={`/ ${formatNumber(summary.delivery_assigned)} đã phân`}
+          title="Tỷ lệ giao thành công"
+          primary={formatRate(deliRate)}
+          secondary={`${formatNumber(summary.delivery_delivered)} / ${formatNumber(summary.delivery_assigned)} đơn phân`}
           rate={deliRate}
         />
         <KpiCard
           icon={<PackageCheck size={18} />}
-          title="Pick đã lấy / đã phân"
-          primary={formatNumber(summary.pickup_picked)}
-          secondary={`/ ${formatNumber(summary.pickup_assigned)} đã phân`}
+          title="Tỷ lệ lấy thành công"
+          primary={formatRate(pickRate)}
+          secondary={`${formatNumber(summary.pickup_picked)} / ${formatNumber(summary.pickup_assigned)} đơn phân`}
           rate={pickRate}
         />
       </div>
       <div className="perf-kpi-context" aria-label="Thông tin dữ liệu đang xem">
-        <ContextStat label="Dòng dữ liệu" value={formatNumber(summary.groups)} sub={`Trang ${page}/${pageCount} · ${formatNumber(pageSize)} dòng/trang`} />
-        <ContextStat label="Rider có dữ liệu" value={formatNumber(summary.active_riders)} sub="Chỉ tính rider KV1–KV5" />
+        <ContextStat label="Rider có dữ liệu" value={formatNumber(summary.active_riders)} sub="Toàn bộ phạm vi lọc · Tỷ lệ tính từ tổng hoàn thành / tổng được phân" />
       </div>
-    </section>
-  );
-}
-
-function WardOnHoldChart({ rows, filters, isLoading }: { rows: PerformanceWardRow[]; filters: PerformanceFilters; isLoading: boolean }) {
-  const [sortKey, setSortKey] = useState<"rate" | "count">("rate");
-  const isAllDistricts = filters.district === "all";
-
-  const items = useMemo(() => {
-    if (isAllDistricts) {
-      const map = new Map<string, { name: string; assigned: number; delivered: number }>();
-      for (const row of rows) {
-        const name = row.district ?? "Chưa xác định";
-        const item = map.get(name) ?? { name, assigned: 0, delivered: 0 };
-        item.assigned += row.delivery_assigned;
-        item.delivered += row.delivery_delivered;
-        map.set(name, item);
-      }
-      return Array.from(map.values()).map((item) => {
-        const onHold = Math.max(0, item.assigned - item.delivered);
-        return { key: item.name, name: item.name, onHold, assigned: item.assigned, rate: item.assigned > 0 ? (onHold / item.assigned) * 100 : null };
-      });
-    }
-    return rows
-      .filter((row) => row.ward)
-      .map((row) => {
-        const onHold = Math.max(0, row.delivery_assigned - row.delivery_delivered);
-        return { key: `${row.district}-${row.ward}`, name: row.ward as string, onHold, assigned: row.delivery_assigned, rate: row.rate };
-      });
-  }, [rows, isAllDistricts]);
-
-  const data = useMemo(
-    () =>
-      [...items]
-        .sort((a, b) =>
-          sortKey === "rate"
-            ? (b.rate ?? -1) - (a.rate ?? -1) || b.onHold - a.onHold
-            : b.onHold - a.onHold || (b.rate ?? -1) - (a.rate ?? -1),
-        )
-        .slice(0, 12),
-    [items, sortKey],
-  );
-
-  const totalOnHold = data.reduce((sum, row) => sum + row.onHold, 0);
-  const scope = periodScopeLabel(filters);
-  const title = isAllDistricts ? "Quận On Hold cao nhất" : "Phường On Hold cao nhất";
-
-  return (
-    <section className="perf-ward-onhold" aria-label={title}>
-      <div className="perf-ward-head">
-        <div>
-          <h2>{title}</h2>
-          <p>
-            {scope} · {isAllDistricts ? "tất cả quận" : filters.district} · {formatNumber(totalOnHold)} đơn OH · xếp theo{" "}
-            {sortKey === "rate" ? "tỉ lệ" : "số đơn"}
-          </p>
-        </div>
-        <div className="perf-period-toggle" role="group" aria-label="Xếp hạng on hold">
-          <button type="button" aria-pressed={sortKey === "rate"} className={cn("perf-period-option", sortKey === "rate" && "is-active")} onClick={() => setSortKey("rate")}>
-            Theo tỉ lệ
-          </button>
-          <button type="button" aria-pressed={sortKey === "count"} className={cn("perf-period-option", sortKey === "count" && "is-active")} onClick={() => setSortKey("count")}>
-            Theo số đơn
-          </button>
-        </div>
-      </div>
-
-      {isLoading && data.length === 0 ? (
-        <div className="perf-ward-list is-loading" aria-hidden="true">
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="perf-ward-row" />)}
-        </div>
-      ) : data.length === 0 ? (
-        <p className="perf-ward-empty">Không có dữ liệu On Hold trong phạm vi đang chọn.</p>
-      ) : (
-        <div className="perf-ward-list">
-          {data.map((row, index) => (
-            <div className="perf-ward-row" key={row.key}>
-              <span className="perf-ward-rank">{String(index + 1).padStart(2, "0")}</span>
-              <div className="perf-ward-main">
-                <p className="perf-ward-name" title={row.name}>{row.name}</p>
-                <div className="perf-ward-track" aria-hidden="true">
-                  <span className="perf-ward-fill" style={{ width: `${Math.min(100, row.rate ?? 0)}%` }} />
-                </div>
-              </div>
-              <div className="perf-ward-value">
-                <strong className={scoreTextClass(row.rate)}>{formatRate(row.rate)}</strong>
-                <span>{formatNumber(row.onHold)} đơn OH</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -643,22 +544,11 @@ function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: numbe
         {hasDeliCot ? (
           <div className="mt-1.5 flex flex-col items-end gap-1">
             {row.delivery_assigned_cot1 > 0 && (
-              <span className="inline-flex flex-col items-end rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+              <span className="inline-flex items-center rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                 <span className="flex items-center gap-1">
                   <span className="size-1.5 rounded-full bg-blue-500" />
                   COT 1: {formatNumber(row.delivery_delivered_cot1)}/{formatNumber(row.delivery_assigned_cot1)}
                 </span>
-                {(row.cot_breakdown?.delivery?.["COT 1.1"] || row.cot_breakdown?.delivery?.["COT 1.2"]) && (
-                  <span className="text-[10px] font-normal text-blue-600 dark:text-blue-400">
-                    {row.cot_breakdown?.delivery?.["COT 1.1"] && (
-                      <span>1.1: {formatNumber(row.cot_breakdown.delivery["COT 1.1"].delivered)}/{formatNumber(row.cot_breakdown.delivery["COT 1.1"].assigned)}</span>
-                    )}
-                    {row.cot_breakdown?.delivery?.["COT 1.1"] && row.cot_breakdown?.delivery?.["COT 1.2"] && " · "}
-                    {row.cot_breakdown?.delivery?.["COT 1.2"] && (
-                      <span>1.2: {formatNumber(row.cot_breakdown.delivery["COT 1.2"].delivered)}/{formatNumber(row.cot_breakdown.delivery["COT 1.2"].assigned)}</span>
-                    )}
-                  </span>
-                )}
               </span>
             )}
             {row.delivery_assigned_cot2 > 0 && (
@@ -813,7 +703,7 @@ function KpiCard({
     <Card className="perf-kpi">
       <div className="perf-kpi-top">
         <span className="perf-kpi-icon">{icon}</span>
-        <span className={cn("perf-kpi-badge", scoreBadgeClass(rate))}>{formatRate(rate)}</span>
+        <span className="text-xs text-[var(--color-muted)]">Hoàn thành / được phân</span>
       </div>
       <div className="perf-kpi-body">
         <p className="perf-kpi-title">{title}</p>
@@ -928,14 +818,6 @@ function scoreTone(value: number | null | undefined): "blue" | "emerald" | "slat
   if (value >= 90) return "emerald";
   if (value >= 70) return "amber";
   return "red";
-}
-
-function scoreBadgeClass(value: number | null | undefined) {
-  const tone = scoreTone(value);
-  if (tone === "emerald") return "bg-[var(--color-success-soft)] text-[var(--color-success)]";
-  if (tone === "amber") return "bg-[var(--color-warning-soft)] text-[var(--color-warning)]";
-  if (tone === "red") return "bg-[var(--color-error-soft)] text-[var(--color-error)]";
-  return "bg-[var(--color-paper-2)] text-[var(--color-muted)]";
 }
 
 function scoreTextClass(value: number | null | undefined) {

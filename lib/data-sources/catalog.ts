@@ -26,5 +26,7 @@ export function sourceAction(value:unknown, today=vietnamDay()) {
   if(body.action==="auto"&&(typeof body.enabled!=="boolean"||!Number.isInteger(interval)||interval<300||interval>86400))throw new Error("Chu kỳ tự động từ 5 phút đến 24 giờ");
   const mode=body.mode??"interval",scheduleTime=body.time??"06:00",offset=body.offset??0;
   if(body.action==="auto"&&(typeof mode!=="string"||!["interval","daily"].includes(mode)||typeof scheduleTime!=="string"||!/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduleTime)||!Number.isInteger(offset)||![0,1].includes(offset as number)||(!source.dated&&offset!==0)))throw new Error("Chọn lịch hợp lệ, giờ HH:mm và ngày hiện tại hoặc hôm trước");
-  return { source:source.id,action:body.action as "run"|"stop"|"auto",day:source.dated?day:today,enabled:body.enabled===true,interval,mode:mode as "interval"|"daily",time:scheduleTime as string,offset:offset as number };
+  const start=body.start??null,end=body.end??null;
+  if(body.action==="auto"&&[start,end].some(v=>v!==null&&(typeof v!=="string"||!/^([01]\d|2[0-3]):[0-5]\d$/.test(v))))throw new Error("Khung giờ bắt đầu/kết thúc phải có dạng HH:mm");
+  return { source:source.id,action:body.action as "run"|"stop"|"auto",day:source.dated?day:today,enabled:body.enabled===true,interval,mode:mode as "interval"|"daily",time:scheduleTime as string,offset:offset as number,start:start as string|null,end:end as string|null };
 }

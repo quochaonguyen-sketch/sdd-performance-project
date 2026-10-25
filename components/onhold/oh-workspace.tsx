@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   BarChart3,
   Download,
@@ -15,6 +15,10 @@ import {
   RotateCcw,
   CheckCircle2,
   FileSpreadsheet,
+  MapPin,
+  Users,
+  Search,
+  Maximize2,
 } from "lucide-react";
 import {
   OH_AREAS,
@@ -27,7 +31,9 @@ import {
   type OHData,
   type OHOrdersResult,
 } from "@/lib/onhold/model";
+import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { OHOrderDialog } from "./oh-order-dialog";
+import { OHFullRankingsDialog } from "./oh-full-rankings-dialog";
 import s from "./oh-workspace.module.css";
 
 const nf = new Intl.NumberFormat("vi-VN");
@@ -36,17 +42,18 @@ const shortDate = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
 
 export function OHWorkspace({
   initialData,
-  initialError,
+  initialError = "",
   from,
   today,
 }: {
-  initialData: OHData;
-  initialError: string;
+  initialData?: OHData;
+  initialError?: string;
   from: string;
   today: string;
 }) {
-  const [data, setData] = useState(initialData);
+  const [data, setData] = useState<OHData>(initialData ?? { reports: [], cells: [] });
   const [error, setError] = useState(initialError);
+  const [loading, setLoading] = useState(!initialData);
   const [busy, setBusy] = useState(false);
   const [start, setStart] = useState(from);
   const [end, setEnd] = useState(today);
@@ -54,20 +61,51 @@ export function OHWorkspace({
   const [geoMode, setGeoMode] = useState<"district" | "ward">("ward");
   const [day, setDay] = useState(today);
 
-  // 5 Dimensional Filters requested by user:
-  // 1. Trạng thái (status: "all" | "5" | "1")
-  // 2. Lý do OH (reason: "all" | code)
-  // 3. Khu vực (area: "all" | OH_AREAS)
-  // 4. Quận (district: "all" | name)
-  // 5. Phường (ward: "all" | name)
+  // Hook into AppLoadingOverlay (renders rider loader on top of AppShell while sidebar stays solid)
+  useReportInitialDataLoading("onhold", loading);
+
+  // Client-side fetch on mount if initialData was not provided
+  useEffect(() => {
+    if (!initialData) {
+      setLoading(true);
+      fetch(`/api/onhold?from=${start}&to=${end}`, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || "Không tải được dữ liệu phân tích OH");
+          }
+          return res.json();
+        })
+        .then((next: OHData) => {
+          setData(next);
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : "Không tải được pivot OH.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [initialData, start, end]);
+
+  // 5 Dimensional Filters:
   const [status, setStatus] = useState("all");
   const [reason, setReason] = useState("all");
   const [area, setArea] = useState("all");
   const [district, setDistrict] = useState("all");
   const [ward, setWard] = useState("all");
 
-  // Modal Dialog and Export state
+  // Inline table searches and view limits
+  const [geoSearch, setGeoSearch] = useState("");
+  const [geoLimit, setGeoLimit] = useState<number>(20);
+  const [riderSearch, setRiderSearch] = useState("");
+  const [riderLimit, setRiderLimit] = useState<number>(20);
+
+  // Dialog states
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
+  const [orderDialogQuery, setOrderDialogQuery] = useState("");
+  const [isFullRankingsOpen, setIsFullRankingsOpen] = useState(false);
+  const [fullRankingsTab, setFullRankingsTab] = useState<"riders" | "wards" | "districts">("riders");
   const [exportingOrders, setExportingOrders] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -76,7 +114,7 @@ export function OHWorkspace({
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // Base filtered by the 4 dimensions (excluding area) across the date range (for pivot table and KV cards)
+  // Base filtered by the 4 dimensions across dates (for pivot table & KV cards)
   const baseCrossDate = useMemo(() => {
     return data.cells.filter((c) => {
       if (status !== "all" && String(c.status) !== status) return false;
@@ -87,7 +125,7 @@ export function OHWorkspace({
     });
   }, [data.cells, status, reason, district, ward]);
 
-  // Cells strictly matching ALL 5 filters for the selected `day`
+  // Cells strictly matching ALL 5 filters for selected day
   const cells = useMemo(() => {
     return baseCrossDate.filter((c) => {
       if (c.report_date !== day) return false;
@@ -130,7 +168,7 @@ export function OHWorkspace({
       .sort((a, b) => b.count - a.count);
   }, [data.cells, day, status, area, reasonLabelMap]);
 
-  // List of available districts in the selected day matching area, status & reason
+  // Available districts
   const availableDistricts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of data.cells) {
@@ -146,7 +184,7 @@ export function OHWorkspace({
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
   }, [data.cells, day, area, status, reason]);
 
-  // List of available wards in the selected day matching district, area, status & reason
+  // Available wards
   const availableWards = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of data.cells) {
@@ -163,7 +201,7 @@ export function OHWorkspace({
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
   }, [data.cells, day, area, district, status, reason]);
 
-  // Reason breakdown for the current filtered cell list
+  // Reason breakdown
   const reasons = useMemo(() => {
     return Object.entries(
       cells.reduce<Record<string, number>>((out, c) => {
@@ -188,8 +226,61 @@ export function OHWorkspace({
     cells.filter((c) => c.hour === h).reduce((n, c) => n + c.orders, 0)
   );
   const peak = Math.max(...hours, 1);
-  const geography = ohRankings(cells, geoMode);
-  const riders = ohRankings(cells, "rider");
+
+  // Complete lists of rankings (ALL items)
+  const allGeography = useMemo(() => ohRankings(cells, geoMode), [cells, geoMode]);
+  const allWards = useMemo(() => ohRankings(cells, "ward"), [cells]);
+  const allDistricts = useMemo(() => ohRankings(cells, "district"), [cells]);
+  const allRiders = useMemo(() => ohRankings(cells, "rider"), [cells]);
+
+  // Inline filtered Geography list
+  const displayGeography = useMemo(() => {
+    const q = geoSearch.trim().toLowerCase();
+    const list = q
+      ? allGeography.filter(
+          (r) =>
+            r.name.toLowerCase().includes(q) ||
+            (r.detail && r.detail.toLowerCase().includes(q))
+        )
+      : allGeography;
+    return list.slice(0, geoLimit);
+  }, [allGeography, geoSearch, geoLimit]);
+
+  // Inline filtered Rider list
+  const displayRiders = useMemo(() => {
+    const q = riderSearch.trim().toLowerCase();
+    const list = q
+      ? allRiders.filter(
+          (r) =>
+            r.name.toLowerCase().includes(q) ||
+            (r.detail && r.detail.toLowerCase().includes(q)) ||
+            (r.area && r.area.toLowerCase().includes(q)) ||
+            (r.district && r.district.toLowerCase().includes(q)) ||
+            (r.ward && r.ward.toLowerCase().includes(q)) ||
+            (r.wards && r.wards.some((w) => w.toLowerCase().includes(q)))
+        )
+      : allRiders;
+    return list.slice(0, riderLimit);
+  }, [allRiders, riderSearch, riderLimit]);
+
+  function getAreaBadgeClass(areaName?: string) {
+    if (!areaName) return s.areaBadgeOther;
+    if (areaName.includes("1")) return `${s.areaBadge} ${s.areaBadgeKV1}`;
+    if (areaName.includes("2")) return `${s.areaBadge} ${s.areaBadgeKV2}`;
+    if (areaName.includes("3")) return `${s.areaBadge} ${s.areaBadgeKV3}`;
+    if (areaName.includes("4")) return `${s.areaBadge} ${s.areaBadgeKV4}`;
+    if (areaName.includes("5")) return `${s.areaBadge} ${s.areaBadgeKV5}`;
+    return `${s.areaBadge} ${s.areaBadgeOther}`;
+  }
+
+  // Peak orders for visual progress bars
+  const maxGeoOrders = useMemo(() => {
+    return allGeography.length ? Math.max(...allGeography.map((r) => r.orders), 1) : 1;
+  }, [allGeography]);
+
+  const maxRiderOrders = useMemo(() => {
+    return allRiders.length ? Math.max(...allRiders.map((r) => r.orders), 1) : 1;
+  }, [allRiders]);
 
   const timeLabel = (value: string) =>
     new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
@@ -217,7 +308,6 @@ export function OHWorkspace({
 
   function handleAreaChange(newArea: string) {
     setArea(newArea);
-    // If current district is not in new area, reset district & ward
     if (newArea !== "all" && district !== "all") {
       const match = data.cells.some(
         (c) => c.report_date === day && c.area === newArea && c.district === district
@@ -404,6 +494,121 @@ export function OHWorkspace({
     } finally {
       setExportingOrders(false);
     }
+  }
+
+  // Render Skeleton inside the workspace while maintaining the sidebar
+  if (loading) {
+    return (
+      <div className={s.workspace} aria-busy="true" aria-label="Đang tải phân tích Onhold">
+        <header className={s.header}>
+          <div>
+            <div className={s.eyebrow}>
+              <BarChart3 size={16} /> DELIVERY INTELLIGENCE
+            </div>
+            <h1>
+              Phân tích Onhold<span>OH</span>
+            </h1>
+            <p>Theo dõi áp lực OH theo khu vực, quận, phường, lý do và thời điểm.</p>
+          </div>
+          <Link className={s.sourceLink} href="/data-sources">
+            Quản lý nguồn dữ liệu <ArrowUpRight size={16} />
+          </Link>
+        </header>
+
+        {/* Skeleton notice */}
+        <div className="h-14 rounded-xl border border-slate-200 bg-white/70 animate-pulse dark:border-slate-800 dark:bg-slate-900/60" />
+
+        {/* Skeleton Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-slate-200 bg-white animate-pulse dark:border-slate-800 dark:bg-slate-900">
+          <div className="h-10 w-36 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+          <div className="h-10 w-36 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+          <div className="h-10 w-36 bg-blue-200 dark:bg-blue-950/60 rounded-lg" />
+          <div className="ml-auto h-10 w-32 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+        </div>
+
+        {/* Skeleton Filter Card */}
+        <div className="p-5 rounded-2xl border border-slate-200 bg-white animate-pulse dark:border-slate-800 dark:bg-slate-900 space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="h-5 w-48 bg-slate-200 dark:bg-slate-800 rounded-md" />
+            <div className="h-5 w-32 bg-slate-100 dark:bg-slate-800 rounded-md" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="h-3.5 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-10 w-full bg-slate-100 dark:bg-slate-800/80 rounded-lg" />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2.5 pt-2">
+            <div className="h-9 w-36 bg-blue-200 dark:bg-blue-900/40 rounded-lg" />
+            <div className="h-9 w-36 bg-emerald-200 dark:bg-emerald-900/40 rounded-lg" />
+            <div className="h-9 w-32 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+          </div>
+        </div>
+
+        {/* Skeleton 4 Metric cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className={`p-5 rounded-2xl border ${
+                i === 1
+                  ? "bg-slate-800 dark:bg-slate-800 border-slate-700"
+                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+              } space-y-3`}
+            >
+              <div className={`h-3.5 w-28 rounded ${i === 1 ? "bg-slate-600" : "bg-slate-200 dark:bg-slate-800"}`} />
+              <div className={`h-9 w-20 rounded-md ${i === 1 ? "bg-slate-500" : "bg-slate-300 dark:bg-slate-700"}`} />
+              <div className={`h-3 w-36 rounded ${i === 1 ? "bg-slate-600" : "bg-slate-200 dark:bg-slate-800"}`} />
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton 7 Area buttons */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 animate-pulse">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 space-y-2">
+              <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-7 w-12 bg-slate-300 dark:bg-slate-700 rounded" />
+              <div className="h-2.5 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton 2 Panels */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 animate-pulse">
+          {[1, 2].map((panelIdx) => (
+            <div key={panelIdx} className="p-6 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1.5">
+                  <div className="h-5 w-36 bg-slate-300 dark:bg-slate-700 rounded-md" />
+                  <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                </div>
+                <div className="h-8 w-28 bg-slate-100 dark:bg-slate-800 rounded-lg" />
+              </div>
+              <div className="space-y-2.5 pt-2">
+                {[1, 2, 3, 4, 5, 6].map((row) => (
+                  <div key={row} className="flex items-center justify-between py-2.5 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-800" />
+                      <div className="space-y-1">
+                        <div className="h-4 w-36 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-3 w-20 bg-slate-100 dark:bg-slate-850 rounded" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-4 w-10 bg-slate-300 dark:bg-slate-700 rounded" />
+                      <div className="h-2 w-16 bg-slate-200 dark:bg-slate-800 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -640,22 +845,19 @@ export function OHWorkspace({
 
         {/* Filter Action Buttons */}
         <div className={s.filterActions}>
-          {/* Xem danh sách mã đơn */}
           <button
             type="button"
             className={s.primaryAction}
-            onClick={() => setIsOrderDialogOpen(true)}
-            title={
-              isToday
-                ? "Xem danh sách mã vận đơn chi tiết khớp với bộ lọc hiện tại"
-                : "Xem mã đơn (lưu ý: snapshot chi tiết qua ngày sẽ giải phóng theo quy chế)"
-            }
+            onClick={() => {
+              setOrderDialogQuery("");
+              setIsOrderDialogOpen(true);
+            }}
+            title="Xem danh sách mã vận đơn chi tiết khớp với bộ lọc hiện tại"
           >
             <Eye size={16} />
             Xem mã đơn ({report ? number(summary.total) : "0"})
           </button>
 
-          {/* Xuất mã đơn CSV */}
           <button
             type="button"
             disabled={exportingOrders || !summary.total}
@@ -667,7 +869,6 @@ export function OHWorkspace({
             {exportingOrders ? "Đang xuất…" : "Xuất mã đơn (CSV)"}
           </button>
 
-          {/* Sao chép mã đơn */}
           <button
             type="button"
             disabled={exportingOrders || !summary.total}
@@ -679,7 +880,6 @@ export function OHWorkspace({
             Sao chép mã đơn
           </button>
 
-          {/* Reset Filters */}
           {activeFilterCount > 0 && (
             <button
               type="button"
@@ -791,9 +991,9 @@ export function OHWorkspace({
         </div>
       )}
 
-      {/* Rankings Section (Địa bàn & Rider) */}
+      {/* REDESIGNED RANKINGS SECTION: 2 PROFESSIONAL PANELS WITH FULL ACCESS TO ALL RIDERS & WARDS */}
       {report && (
-        <section className={s.rankSection} aria-label="Xếp hạng OH theo khu vực và địa bàn">
+        <section className={s.rankSection} aria-label="Xếp hạng OH theo địa bàn và rider">
           <div className={s.panelTitle}>
             <div>
               <div className={s.eyebrow}>ĐỊA BÀN & RIDER</div>
@@ -804,112 +1004,413 @@ export function OHWorkspace({
               </h2>
             </div>
             <span>
-              {shortDate(day)} · {number(summary.total)} mã
+              {shortDate(day)} · {number(summary.total)} mã đơn
             </span>
           </div>
+
           <div className={s.analysis}>
-            {/* Quận / Phường Panel */}
+            {/* PANEL 1: QUẬN / PHƯỜNG */}
             <section className={s.panel}>
-              <div className={s.panelTitle}>
-                <h2>Quận / phường</h2>
-                <div className={s.segment}>
+              {/* Header */}
+              <div className={s.rankPanelHeader}>
+                <div className={s.rankHeaderTitle}>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400">
+                    <MapPin size={16} />
+                  </div>
+                  <h2>Quận / phường</h2>
+                  <span className={s.rankHeaderCount}>
+                    {allGeography.length} {geoMode === "ward" ? "phường" : "quận"}
+                  </span>
+                </div>
+                <div className={s.rankHeaderActions}>
+                  <div className={s.segment}>
+                    <button
+                      aria-pressed={geoMode === "district"}
+                      onClick={() => {
+                        setGeoMode("district");
+                        setGeoSearch("");
+                      }}
+                    >
+                      Quận
+                    </button>
+                    <button
+                      aria-pressed={geoMode === "ward"}
+                      onClick={() => {
+                        setGeoMode("ward");
+                        setGeoSearch("");
+                      }}
+                    >
+                      Phường
+                    </button>
+                  </div>
                   <button
-                    aria-pressed={geoMode === "district"}
-                    onClick={() => setGeoMode("district")}
+                    type="button"
+                    onClick={() => {
+                      setFullRankingsTab(geoMode === "ward" ? "wards" : "districts");
+                      setIsFullRankingsOpen(true);
+                    }}
+                    className={s.viewAllBtn}
+                    title="Mở hộp thoại xem toàn bộ các phường/quận có đơn OH"
                   >
-                    Quận
-                  </button>
-                  <button aria-pressed={geoMode === "ward"} onClick={() => setGeoMode("ward")}>
-                    Phường
+                    <Maximize2 size={13} />
+                    Xem tất cả ({allGeography.length})
                   </button>
                 </div>
               </div>
+
+              {/* Quick Search & Limit Toolbar */}
+              <div className={s.rankToolbar}>
+                <div className={s.rankSearchBox}>
+                  <Search size={13} />
+                  <input
+                    type="text"
+                    value={geoSearch}
+                    onChange={(e) => setGeoSearch(e.target.value)}
+                    placeholder={geoMode === "ward" ? "Tìm theo tên phường, quận…" : "Tìm theo tên quận…"}
+                    className={s.rankSearchInput}
+                  />
+                </div>
+                <div className={s.rankViewPills}>
+                  {[20, 50, 99999].map((limitVal) => (
+                    <button
+                      key={limitVal}
+                      type="button"
+                      aria-pressed={geoLimit === limitVal}
+                      onClick={() => setGeoLimit(limitVal)}
+                      className={s.rankViewPill}
+                    >
+                      {limitVal === 99999 ? "Tất cả" : `Top ${limitVal}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table */}
               <div className={s.tableScroll}>
                 <table>
                   <caption className={s.srOnly}>Địa bàn có nhiều mã OH trong khu vực đã chọn</caption>
                   <thead>
                     <tr>
-                      <th scope="col">{geoMode === "ward" ? "Phường / quận" : "Quận"}</th>
-                      <th scope="col">Mã OH</th>
-                      <th scope="col">Tỷ trọng</th>
+                      <th scope="col" style={{ width: "48px", textAlign: "center" }}>
+                        Hạng
+                      </th>
+                      <th scope="col">{geoMode === "ward" ? "Phường / Quận" : "Quận"}</th>
+                      <th scope="col" style={{ width: "90px" }}>
+                        Mã OH
+                      </th>
+                      <th scope="col" style={{ width: "130px" }}>
+                        Tỷ trọng
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {geography.slice(0, 25).map((r, i) => (
-                      <tr
-                        key={r.key}
-                        className={s.clickableRow}
-                        onClick={() => {
-                          if (geoMode === "district") {
-                            handleDistrictChange(district === r.name ? "all" : r.name);
-                          } else {
-                            if (r.detail) handleDistrictChange(r.detail);
-                            setWard(ward === r.name ? "all" : r.name);
-                          }
-                        }}
-                        title={`Bấm để ${
-                          (geoMode === "district" ? district === r.name : ward === r.name)
-                            ? "hủy lọc"
-                            : "lọc theo"
-                        } ${r.name}`}
-                      >
-                        <th scope="row">
-                          <span className={s.rankNumber}>{i + 1}</span>
-                          {r.name}
-                          {r.detail && <small className={s.rowDetail}>{r.detail}</small>}
-                        </th>
-                        <td>
-                          <strong>{number(r.orders)}</strong>
-                        </td>
-                        <td>{summary.total ? Math.round((r.orders / summary.total) * 100) : 0}%</td>
-                      </tr>
-                    ))}
+                    {displayGeography.map((r, i) => {
+                      const rankNum = i + 1;
+                      const percent = summary.total ? Math.round((r.orders / summary.total) * 100) : 0;
+                      const barPercent = Math.max(5, Math.round((r.orders / maxGeoOrders) * 100));
+
+                      return (
+                        <tr
+                          key={r.key}
+                          className={s.clickableRow}
+                          onClick={() => {
+                            if (geoMode === "district") {
+                              handleDistrictChange(district === r.name ? "all" : r.name);
+                            } else {
+                              if (r.detail) handleDistrictChange(r.detail);
+                              setWard(ward === r.name ? "all" : r.name);
+                            }
+                          }}
+                          title={`Bấm để ${
+                            (geoMode === "district" ? district === r.name : ward === r.name)
+                              ? "hủy lọc"
+                              : "lọc theo"
+                          } ${r.name}`}
+                        >
+                          <th scope="row" style={{ textAlign: "center", padding: "10px 8px" }}>
+                            {rankNum === 1 ? (
+                              <span className={s.rankBadge1}>1</span>
+                            ) : rankNum === 2 ? (
+                              <span className={s.rankBadge2}>2</span>
+                            ) : rankNum === 3 ? (
+                              <span className={s.rankBadge3}>3</span>
+                            ) : (
+                              <span className={s.rankBadgeNormal}>{rankNum}</span>
+                            )}
+                          </th>
+
+                          <td style={{ textAlign: "left" }}>
+                            <div className={s.entityRow}>
+                              <div className={s.geoIconWrap}>
+                                <MapPin size={14} />
+                              </div>
+                              <div>
+                                <span className={s.entityName}>{r.name}</span>
+                                {r.detail && <span className={s.entitySub}>{r.detail}</span>}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td>
+                            <strong className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100">
+                              {number(r.orders)}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <div className={s.shareVisual}>
+                              <div className={s.shareLabel}>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {percent}%
+                                </span>
+                              </div>
+                              <div className={s.shareTrack}>
+                                <div
+                                  className={s.shareFill}
+                                  style={{
+                                    width: `${barPercent}%`,
+                                    background:
+                                      rankNum <= 3
+                                        ? "linear-gradient(90deg, #f59e0b, #d97706)"
+                                        : "linear-gradient(90deg, #3b82f6, #1d4ed8)",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-              {!geography.length && <p className={s.muted}>Chưa có đơn trong bộ lọc.</p>}
-              <p className={s.footnote}>
-                Bấm vào một hàng để lọc trực tiếp theo Quận/Phường đó. Top 25 theo số mã OH.
-              </p>
+
+              {!displayGeography.length && (
+                <p className={s.muted} style={{ padding: "16px", textAlign: "center" }}>
+                  Chưa có đơn trong bộ lọc hoặc không khớp từ khóa tìm kiếm.
+                </p>
+              )}
+
+              <div className={s.footnote}>
+                <span>
+                  Đang hiện <strong>{displayGeography.length}</strong> / <strong>{allGeography.length}</strong> {geoMode === "ward" ? "phường" : "quận"}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFullRankingsTab(geoMode === "ward" ? "wards" : "districts");
+                    setIsFullRankingsOpen(true);
+                  }}
+                  className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Xem toàn bộ danh sách →
+                </button>
+              </div>
             </section>
 
-            {/* Rider Panel */}
+            {/* PANEL 2: RIDER OH NHIỀU */}
             <section className={s.panel}>
-              <div className={s.panelTitle}>
-                <h2>Rider OH nhiều</h2>
-                <span>Top 25 · {riders.length} rider/nhóm</span>
+              {/* Header */}
+              <div className={s.rankPanelHeader}>
+                <div className={s.rankHeaderTitle}>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400">
+                    <Users size={16} />
+                  </div>
+                  <h2>Rider OH nhiều</h2>
+                  <span className={s.rankHeaderCount}>{allRiders.length} rider</span>
+                </div>
+                <div className={s.rankHeaderActions}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFullRankingsTab("riders");
+                      setIsFullRankingsOpen(true);
+                    }}
+                    className={s.viewAllBtn}
+                    title="Mở hộp thoại tra cứu toàn bộ rider có đơn OH"
+                  >
+                    <Maximize2 size={13} />
+                    Xem tất cả ({allRiders.length})
+                  </button>
+                </div>
               </div>
+
+              {/* Quick Search & Limit Toolbar */}
+              <div className={s.rankToolbar}>
+                <div className={s.rankSearchBox}>
+                  <Search size={13} />
+                  <input
+                    type="text"
+                    value={riderSearch}
+                    onChange={(e) => setRiderSearch(e.target.value)}
+                    placeholder="Tìm tên, mã rider, khu vực, quận, phường…"
+                    className={s.rankSearchInput}
+                  />
+                </div>
+                <div className={s.rankViewPills}>
+                  {[20, 50, 99999].map((limitVal) => (
+                    <button
+                      key={limitVal}
+                      type="button"
+                      aria-pressed={riderLimit === limitVal}
+                      onClick={() => setRiderLimit(limitVal)}
+                      className={s.rankViewPill}
+                    >
+                      {limitVal === 99999 ? "Tất cả" : `Top ${limitVal}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table */}
               <div className={s.tableScroll}>
                 <table>
                   <caption className={s.srOnly}>Rider có nhiều mã OH trong khu vực đã chọn</caption>
                   <thead>
                     <tr>
-                      <th scope="col">Rider / mã rider</th>
-                      <th scope="col">Mã OH</th>
-                      <th scope="col">Tỷ trọng</th>
+                      <th scope="col" style={{ width: "48px", textAlign: "center" }}>
+                        Hạng
+                      </th>
+                      <th scope="col">Rider / Nhân sự</th>
+                      <th scope="col" style={{ width: "115px", textAlign: "center" }}>
+                        Khu vực
+                      </th>
+                      <th scope="col" style={{ textAlign: "left" }}>
+                        Quận / Phường giao
+                      </th>
+                      <th scope="col" style={{ width: "90px" }}>
+                        Mã OH
+                      </th>
+                      <th scope="col" style={{ width: "130px" }}>
+                        Tỷ trọng
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {riders.slice(0, 25).map((r, i) => (
-                      <tr key={r.key}>
-                        <th scope="row">
-                          <span className={s.rankNumber}>{i + 1}</span>
-                          {r.name}
-                          <small className={s.rowDetail}>{r.detail}</small>
-                        </th>
-                        <td>
-                          <strong>{number(r.orders)}</strong>
-                        </td>
-                        <td>{summary.total ? Math.round((r.orders / summary.total) * 100) : 0}%</td>
-                      </tr>
-                    ))}
+                    {displayRiders.map((r, i) => {
+                      const rankNum = i + 1;
+                      const percent = summary.total ? Math.round((r.orders / summary.total) * 100) : 0;
+                      const barPercent = Math.max(5, Math.round((r.orders / maxRiderOrders) * 100));
+                      const initial = r.name.trim().charAt(0).toUpperCase();
+
+                      return (
+                        <tr
+                          key={r.key}
+                          className={s.clickableRow}
+                          onClick={() => {
+                            setOrderDialogQuery(r.name);
+                            setIsOrderDialogOpen(true);
+                          }}
+                          title={`Bấm để xem danh sách mã đơn của rider ${r.name}`}
+                        >
+                          <th scope="row" style={{ textAlign: "center", padding: "10px 8px" }}>
+                            {rankNum === 1 ? (
+                              <span className={s.rankBadge1}>1</span>
+                            ) : rankNum === 2 ? (
+                              <span className={s.rankBadge2}>2</span>
+                            ) : rankNum === 3 ? (
+                              <span className={s.rankBadge3}>3</span>
+                            ) : (
+                              <span className={s.rankBadgeNormal}>{rankNum}</span>
+                            )}
+                          </th>
+
+                          <td style={{ textAlign: "left" }}>
+                            <div className={s.entityRow}>
+                              <div className={s.avatarWrap}>{initial}</div>
+                              <div>
+                                <span className={s.entityName}>{r.name}</span>
+                                {r.detail && r.detail !== "Chưa có mã rider" ? (
+                                  <span className={s.driverCodePill}>ID: {r.detail}</span>
+                                ) : (
+                                  <span className={s.entitySub}>Chưa có mã rider</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td style={{ textAlign: "center" }}>
+                            <span className={getAreaBadgeClass(r.area)}>
+                              {r.area || "Chưa rõ KV"}
+                            </span>
+                          </td>
+
+                          <td style={{ textAlign: "left" }}>
+                            <div className={s.geoCell}>
+                              <span className={s.geoDistrict}>{r.district || "Chưa rõ quận"}</span>
+                              <span
+                                className={s.geoWard}
+                                title={
+                                  r.wards && r.wards.length > 1
+                                    ? `Các phường giao: ${r.wards.join(", ")}`
+                                    : r.ward
+                                }
+                              >
+                                {r.ward || "Chưa rõ phường"}
+                                {r.wards && r.wards.length > 1 && (
+                                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                    {" "}(+{r.wards.length - 1})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td>
+                            <strong className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100">
+                              {number(r.orders)}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <div className={s.shareVisual}>
+                              <div className={s.shareLabel}>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {percent}%
+                                </span>
+                              </div>
+                              <div className={s.shareTrack}>
+                                <div
+                                  className={s.shareFill}
+                                  style={{
+                                    width: `${barPercent}%`,
+                                    background:
+                                      rankNum <= 3
+                                        ? "linear-gradient(90deg, #ea580c, #c2410c)"
+                                        : "linear-gradient(90deg, #0284c7, #0369a1)",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-              {!riders.length && <p className={s.muted}>Chưa có đơn trong bộ lọc.</p>}
-              <p className={s.footnote}>
-                Rider tại lần đầu ghi nhận; không suy đoán rider khi SPX đã xóa thông tin.
-              </p>
+
+              {!displayRiders.length && (
+                <p className={s.muted} style={{ padding: "16px", textAlign: "center" }}>
+                  Chưa có đơn trong bộ lọc hoặc không khớp từ khóa tìm kiếm.
+                </p>
+              )}
+
+              <div className={s.footnote}>
+                <span>
+                  Đang hiện <strong>{displayRiders.length}</strong> / <strong>{allRiders.length}</strong> rider.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFullRankingsTab("riders");
+                    setIsFullRankingsOpen(true);
+                  }}
+                  className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Xem toàn bộ danh sách →
+                </button>
+              </div>
             </section>
           </div>
         </section>
@@ -1075,6 +1576,28 @@ export function OHWorkspace({
         today={today}
         filters={{ status, reason, area, district, ward }}
         reasonLabelMap={reasonLabelMap}
+        initialQuery={orderDialogQuery}
+      />
+
+      {/* Full Rankings Dialog (ALL Riders, ALL Wards, ALL Districts) */}
+      <OHFullRankingsDialog
+        isOpen={isFullRankingsOpen}
+        onClose={() => setIsFullRankingsOpen(false)}
+        initialTab={fullRankingsTab}
+        day={day}
+        areaFilter={area}
+        totalOrders={summary.total}
+        riders={allRiders}
+        wards={allWards}
+        districts={allDistricts}
+        onFilterRider={(name, code) => {
+          setOrderDialogQuery(name);
+          setIsOrderDialogOpen(true);
+        }}
+        onFilterWard={(wName, dName) => {
+          if (dName) handleDistrictChange(dName);
+          setWard(wName);
+        }}
       />
     </div>
   );

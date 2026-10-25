@@ -10,6 +10,13 @@ alter table public.data_source_settings add constraint data_source_settings_sour
 alter table public.data_source_settings add column if not exists schedule_mode text not null default 'interval' check(schedule_mode in ('interval','daily'));
 alter table public.data_source_settings add column if not exists daily_time time not null default '06:00';
 alter table public.data_source_settings add column if not exists day_offset integer not null default 0 check(day_offset in (0,1));
+do $$ begin
+  if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='data_source_settings' and column_name='window_start') then
+    alter table public.data_source_settings add column window_start time not null default '08:00';
+    alter table public.data_source_settings add column window_end time not null default '00:00';
+    update public.data_source_settings set window_start='00:00' where source_id='onhold_daily';
+  end if;
+end $$;
 insert into public.data_source_settings(source_id,interval_seconds) values
  ('pickup_inventory',1800),('delivery_inventory',1800),('pickup_realtime',300),('pickup_volume',1800),('delivery_volume',1800),('performance',1800),('return_inventory',1800),('onhold_daily',300)
 on conflict(source_id) do nothing;
@@ -39,7 +46,16 @@ returns timestamptz language sql stable security invoker set search_path=pg_cata
     then (p_after at time zone 'Asia/Ho_Chi_Minh')::date else (p_after at time zone 'Asia/Ho_Chi_Minh')::date+1 end)+p_time) at time zone 'Asia/Ho_Chi_Minh';
 $$;
 
-create or replace function public.configure_data_source_schedule(p_source text,p_actor uuid,p_enabled boolean,p_mode text,p_interval integer,p_time text,p_offset integer)
+-- Start inclusive, end exclusive. Equal endpoints represent a full day.
+create or replace function public.next_data_source_window(p_start time,p_end time,p_after timestamptz)
+returns timestamptz language plpgsql stable security invoker set search_path=pg_catalog as $$
+declare local_at timestamp:=p_after at time zone 'Asia/Ho_Chi_Minh'; t time:=local_at::time;
+begin
+  if p_start=p_end or (p_start<p_end and t>=p_start and t<p_end) or (p_start>p_end and (t>=p_start or t<p_end)) then return p_after; end if;
+  return ((local_at::date+case when p_start<p_end and t>=p_end then 1 else 0 end)+p_start) at time zone 'Asia/Ho_Chi_Minh';
+end $$;
+
+create or replace function public.configure_data_source_schedule(p_source text,p_actor uuid,p_enabled boolean,p_mode text,p_interval integer,p_time text,p_offset integer,p_start text default null,p_end text default null)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
 declare s public.data_source_settings; next_at timestamptz;
 begin
@@ -49,13 +65,16 @@ begin
   perform pg_advisory_xact_lock(948251,1);
   select * into s from public.data_source_settings where source_id=p_source for update;
   if not found then raise exception 'Unknown source'; end if;
-  next_at:=case when not p_enabled then null when p_mode='daily' then public.next_data_source_daily(p_time::time,now()) else now()+make_interval(secs=>p_interval) end;
+  if (p_start is not null and p_start !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$') or (p_end is not null and p_end !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$') then raise exception 'Invalid work window'; end if;
+  s.window_start:=coalesce(p_start::time,s.window_start); s.window_end:=coalesce(p_end::time,s.window_end);
+  next_at:=case when not p_enabled then null when p_mode='daily' then public.next_data_source_daily(p_time::time,now()) else public.next_data_source_window(s.window_start,s.window_end,now()+make_interval(secs=>p_interval)) end;
   update public.data_source_settings set auto_enabled=p_enabled,schedule_mode=p_mode,interval_seconds=p_interval,
-    daily_time=p_time::time,day_offset=p_offset,next_run_at=next_at,updated_at=now() where source_id=p_source;
+    daily_time=p_time::time,day_offset=p_offset,window_start=s.window_start,window_end=s.window_end,next_run_at=next_at,updated_at=now() where source_id=p_source;
   insert into public.activity_logs(entity_type,action,message,raw_data) values('data_sources','schedule','Lịch nguồn dữ liệu: '||p_source||' · '||p_mode,
-    jsonb_build_object('source',p_source,'actor_id',p_actor,'enabled',p_enabled,'mode',p_mode,'daily_time',p_time,'day_offset',p_offset,'interval',p_interval,'next_run_at',next_at));
+    jsonb_build_object('source',p_source,'actor_id',p_actor,'enabled',p_enabled,'mode',p_mode,'daily_time',p_time,'day_offset',p_offset,'interval',p_interval,'window_start',s.window_start,'window_end',s.window_end,'next_run_at',next_at));
   return jsonb_build_object('message','Đã lưu lịch chạy theo giờ Việt Nam','nextRunAt',next_at);
 end $$;
+drop function if exists public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer);
 
 -- One most recent due occurrence is queued after downtime; never replay a backlog of missed days.
 -- Busy sources keep their due time until free; insertion and advancement share one lock/transaction.
@@ -65,7 +84,11 @@ declare s public.data_source_settings; scheduled_at timestamptz; report_day date
 begin
   perform pg_advisory_xact_lock(948251,1);
   for s in select * from public.data_source_settings where auto_enabled and next_run_at<=p_now
-    and (source_id='onhold_daily' or schedule_mode='daily' or extract(hour from p_now at time zone 'Asia/Ho_Chi_Minh')>=8) for update loop
+    for update loop
+    if s.schedule_mode='interval' and public.next_data_source_window(s.window_start,s.window_end,p_now)>p_now then
+      update public.data_source_settings set next_run_at=public.next_data_source_window(s.window_start,s.window_end,p_now) where source_id=s.source_id;
+      continue;
+    end if;
     if exists(select 1 from public.data_source_jobs where source_id=s.source_id and status in ('QUEUED','RUNNING','CANCEL_REQUESTED')) then continue; end if;
     scheduled_at:=p_now;
     if s.schedule_mode='daily' then
@@ -79,13 +102,13 @@ begin
     get diagnostics inserted=row_count;
     if inserted>0 then
       enqueued:=enqueued+1;
-      update public.data_source_settings set next_run_at=case when s.schedule_mode='daily' then public.next_data_source_daily(s.daily_time,p_now) else p_now+make_interval(secs=>s.interval_seconds) end where source_id=s.source_id;
+      update public.data_source_settings set next_run_at=case when s.schedule_mode='daily' then public.next_data_source_daily(s.daily_time,p_now) else public.next_data_source_window(s.window_start,s.window_end,p_now+make_interval(secs=>s.interval_seconds)) end where source_id=s.source_id;
     end if;
   end loop;
   return enqueued;
 end $$;
-revoke all on function public.next_data_source_daily(time,timestamptz),public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer),public.enqueue_due_data_sources(timestamptz) from public,anon,authenticated;
-grant execute on function public.next_data_source_daily(time,timestamptz),public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer),public.enqueue_due_data_sources(timestamptz) to service_role;
+revoke all on function public.next_data_source_window(time,time,timestamptz),public.next_data_source_daily(time,timestamptz),public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer,text,text),public.enqueue_due_data_sources(timestamptz) from public,anon,authenticated;
+grant execute on function public.next_data_source_window(time,time,timestamptz),public.next_data_source_daily(time,timestamptz),public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer,text,text),public.enqueue_due_data_sources(timestamptz) to service_role;
 
 create or replace function public.control_data_source(p_source text,p_action text,p_day date,p_actor uuid,p_enabled boolean default false,p_interval integer default 1800)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
@@ -109,7 +132,7 @@ begin
   else
     if p_interval not between 300 and 86400 then raise exception 'Invalid interval'; end if;
     update public.data_source_settings set auto_enabled=p_enabled,interval_seconds=p_interval,schedule_mode='interval',day_offset=0,
-      next_run_at=case when p_enabled then now()+make_interval(secs=>p_interval) else null end,updated_at=now() where source_id=p_source;
+      next_run_at=case when p_enabled then public.next_data_source_window(window_start,window_end,now()+make_interval(secs=>p_interval)) else null end,updated_at=now() where source_id=p_source;
   end if;
   insert into public.activity_logs(entity_type,action,message,raw_data) values('data_sources',p_action,'Nguồn dữ liệu: '||p_source||' · '||p_action,
     jsonb_build_object('source',p_source,'actor_id',p_actor,'job_id',j.id,'report_date',p_day,'enabled',p_enabled,'interval',p_interval));
@@ -134,6 +157,11 @@ begin
     where status in ('RUNNING','CANCEL_REQUESTED') and lease_until<now();
   perform public.enqueue_due_data_sources();
   if (select count(*) from public.data_source_jobs where worker_id=p_worker and status in ('RUNNING','CANCEL_REQUESTED'))>=capacity then return null; end if;
+  -- Automatic work queued for capacity must not start after its window closes.
+  update public.data_source_jobs queued set status='CANCELLED',phase='finished',finished_at=now(),message='Đã qua khung giờ tự động; chờ lượt trong khung tiếp theo',
+    events=queued.events||jsonb_build_array(jsonb_build_object('at',now(),'message','Đã qua khung giờ tự động'))
+    from public.data_source_settings config where queued.source_id=config.source_id and queued.status='QUEUED' and (queued.events->0 ? 'scheduled_at')
+      and config.schedule_mode='interval' and public.next_data_source_window(config.window_start,config.window_end,now())>now();
   select * into j from public.data_source_jobs where status='QUEUED' order by requested_at,id for update skip locked limit 1;
   if not found then return null; end if;
   update public.data_source_jobs set status='RUNNING',phase='fetching',worker_id=p_worker,started_at=now(),lease_until=now()+interval '2 minutes',message='Máy chủ đang lấy dữ liệu',
@@ -193,7 +221,7 @@ begin
   update public.data_source_jobs set status=p_status,phase='finished',finished_at=now(),lease_until=null,message=msg,
     events=events||jsonb_build_array(jsonb_build_object('at',now(),'message',msg)) where id=p_job;
   update public.lmhub_fetch_jobs set status='ERROR',error_message=msg,finished_at=now(),updated_at=now() where id=j.legacy_job_id and status='RUNNING';
-  update public.data_source_settings set next_run_at=now()+make_interval(secs=>interval_seconds) where source_id=j.source_id and auto_enabled and schedule_mode='interval';
+  update public.data_source_settings set next_run_at=public.next_data_source_window(window_start,window_end,now()+make_interval(secs=>interval_seconds)) where source_id=j.source_id and auto_enabled and schedule_mode='interval';
   return true;
 end $$;
 

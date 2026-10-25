@@ -2,12 +2,14 @@
 
 import { OPERATING_AREAS, normalizeOperatingArea, isOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ChevronRight, CircleAlert, Clock3, Hourglass, MapPin, PackageOpen, PackageX, RefreshCcw, TimerOff, Truck, UserRoundX } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import type { ActivityLog, Rider } from "@/types";
+import { SpotlightSheen, useDashboardSpotlight } from "./dashboard-spotlight";
+import spotlightStyles from "./dashboard-spotlight.module.css";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
@@ -37,6 +39,7 @@ const emptyDistrictOnHold: DistrictOnHoldState = { day: [], week: [], daily: [] 
 const emptyState: DashboardState = { riders: [], activity: [], delivery: [], pickup: [], realtime: [], returnOverdue: emptyReturnOverdue, failedLeaders: { day: [], week: [] } };
 
 export function DashboardView() {
+  const spotlightRoot = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<DashboardState>(emptyState);
   const [range, setRange] = useState<RangeKey>("today");
   const [volumeMode, setVolumeMode] = useState<VolumeMode>("all");
@@ -119,7 +122,7 @@ export function DashboardView() {
     }
 
     return { start: dateRange.start, end: dateRange.end, isFallback: false, fallbackDate: null as string | null };
-  }, [dateRange.start, dateRange.end, kv56Delivery, kv56Pickup]);
+  }, [dateRange, kv56Delivery, kv56Pickup]);
 
   const summary = useMemo(() => buildSummary({ ...state, delivery: kv56Delivery, pickup: kv56Pickup }, dateRange, effectiveVolumeRange), [dateRange, effectiveVolumeRange, kv56Delivery, kv56Pickup, state]);
   const volumeAnalytics = useMemo(() => buildVolumeAnalytics(kv56Delivery, kv56Pickup, volumeMode, volumeGrouping), [kv56Delivery, kv56Pickup, volumeGrouping, volumeMode]);
@@ -128,7 +131,9 @@ export function DashboardView() {
   const areaBreakdown = useMemo(() => buildAreaBreakdown(state, dateRange, effectiveVolumeRange), [dateRange, effectiveVolumeRange, state]);
   const alerts = useMemo(() => buildAlerts(state, summary), [state, summary]);
 
-  return <div className="dashboard-control ops-overview ops-dashboard mx-auto max-w-[1600px] space-y-6">
+  useDashboardSpotlight(spotlightRoot, { ready: !loading && !error, version: lastUpdated?.getTime() ?? 0, scope: range });
+
+  return <div ref={spotlightRoot} className={cn("dashboard-control ops-overview ops-dashboard mx-auto max-w-[1600px] space-y-6", spotlightStyles.root)}>
     <header className="dashboard-command-header">
       <div className="min-w-0">
         <div className="dashboard-kicker">SDD · Hệ thống quản lý vận hành</div>
@@ -146,15 +151,16 @@ export function DashboardView() {
     {error ? <div role="status" className="dash-data-notice"><CircleAlert size={15} /><span>Chưa tải đủ dữ liệu.</span><details><summary>Chi tiết</summary><p>{error}</p></details><button type="button" onClick={refresh} disabled={loading}>Thử lại</button></div> : null}
 
     <section className="dash-summary-grid" aria-label="Sản lượng và tiến độ">
-      <article className="dash-volume-panel">
+      <article className="dash-volume-panel" data-dashboard-spotlight="volume" data-spotlight-value={JSON.stringify([summary.totalVolume, summary.deliveryVolume, summary.pickupVolume])}>
         <div className="dash-panel-heading"><span>Sản lượng giao nhận</span><span className="dash-scope">{summary.isVolumeFallback && summary.volumeDate ? `KV1–KV5 · Ngày ${formatDate(summary.volumeDate)}` : "KV1–KV5"}</span></div>
         <div className="dash-volume-total"><DashboardNumber value={summary.totalVolume} loading={loading} /><span>{summary.isVolumeFallback && summary.volumeDate ? `đơn (hôm trước · ${formatDate(summary.volumeDate)})` : "đơn trong kỳ"}</span></div>
         <div className="dash-volume-split">
           <Link href="/volume/delivery" data-series="delivery"><span className="dash-series-label"><i className="is-delivery" />Delivery</span><strong><DashboardNumber value={summary.deliveryVolume} loading={loading} /></strong><span>{volumeShare(summary.deliveryVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
           <Link href="/volume/pickup" data-series="pickup"><span className="dash-series-label"><i className="is-pickup" />Pickup</span><strong><DashboardNumber value={summary.pickupVolume} loading={loading} /></strong><span>{volumeShare(summary.pickupVolume, summary.totalVolume)} tổng sản lượng<ChevronRight size={14} /></span></Link>
         </div>
+        <SpotlightSheen />
       </article>
-      <article className="dash-progress-panel">
+      <article className="dash-progress-panel" data-dashboard-spotlight="progress" data-spotlight-value={JSON.stringify([summary.assigned, summary.delivered, summary.delivering, summary.failed])}>
         <div className="dash-panel-heading"><h2>Tiến độ giao hàng</h2><Link href="/realtime-dashboard" aria-label="Mở tiến độ giao hàng realtime"><ChevronRight size={18} /></Link></div>
         <div className="dash-progress-lead"><strong>{loading ? <span className="dash-skeleton" /> : summary.deliveryRate + "%"}</strong><span>hoàn tất trên {summary.assigned.toLocaleString("vi-VN")} đơn được gán</span></div>
         <div className="dash-progress-track" aria-hidden="true"><span style={{ width: Math.min(100, summary.deliveryRate) + "%" }} /></div>
@@ -163,12 +169,13 @@ export function DashboardView() {
           <div><dt><i className="is-complete" />Thành công</dt><dd><DashboardNumber value={summary.delivered} loading={loading} /></dd></div>
           <div><dt><i className={summary.failed ? "is-failed" : "is-neutral"} />Thất bại</dt><dd><DashboardNumber value={summary.failed} loading={loading} /></dd></div>
         </dl>
+        <SpotlightSheen />
       </article>
     </section>
 
     <section className="dash-area-section" aria-labelledby="area-breakdown">
       <div className="dash-area-heading"><h2 id="area-breakdown">Nhịp độ 5 khu vực</h2><span>Sản lượng delivery + pickup · {summary.isVolumeFallback && summary.volumeDate ? `ngày ${formatDate(summary.volumeDate)} (hôm trước)` : rangeLabel(range).toLowerCase()}</span></div>
-      <div className="dash-area-rail">{OPERATING_AREAS.map((area) => { const data = areaBreakdown[area]; const total = data.deliveryVolume + data.pickupVolume; const rate = data.assigned ? Math.round(data.delivered / data.assigned * 100) : 0; return <article key={area} className="dash-area-cell" data-area={area}><div><span>{area}</span><small>{loading ? "Đang tải" : data.assigned ? rate + "% đã giao" : "Chưa có đơn gán"}</small></div><strong><DashboardNumber value={total} loading={loading} /><span>đơn</span></strong><div className="dash-area-track" aria-hidden="true"><span style={{ width: Math.min(100, rate) + "%" }} /></div></article>; })}</div>
+      <div className="dash-area-rail">{OPERATING_AREAS.map((area) => { const data = areaBreakdown[area]; const total = data.deliveryVolume + data.pickupVolume; const rate = data.assigned ? Math.round(data.delivered / data.assigned * 100) : 0; return <article key={area} className="dash-area-cell" data-area={area} data-dashboard-spotlight={area} data-spotlight-value={JSON.stringify([total,data.assigned,data.delivered])}><div><span>{area}</span><small>{loading ? "Đang tải" : data.assigned ? rate + "% đã giao" : "Chưa có đơn gán"}</small></div><strong><DashboardNumber value={total} loading={loading} /><span>đơn</span></strong><div className="dash-area-track" aria-hidden="true"><span style={{ width: Math.min(100, rate) + "%" }} /></div><SpotlightSheen /></article>; })}</div>
     </section>
 
     <section aria-labelledby="volume-trend" className="space-y-3">
@@ -545,7 +552,7 @@ function DistrictOnHoldCard({ initialEndDate }: { initialEndDate: string }) {
 }
 
 function ReturnOverdueCard({ data, loading }: { data: ReturnOverdueState; loading: boolean }) {
-  return <article className={cn("dashboard-return-overdue", data.totalOrders > 0 && "has-overdue")}>
+  return <article className={cn("dashboard-return-overdue", data.totalOrders > 0 && "has-overdue")} data-dashboard-spotlight="returns" data-spotlight-value={JSON.stringify([data.totalOrders,data.riders.length,data.missingStartedAt])}>
     <header>
       <div className="dashboard-card-title"><span><TimerOff size={17} /></span><div><h3>Rider chưa trả hàng sau 48 giờ</h3><p>Snapshot {data.snapshotAt ? formatDashboardDateTime(data.snapshotAt) : "chưa có dữ liệu"}</p></div></div>
       <div className="dashboard-return-overdue-summary"><strong>{loading ? "—" : data.totalOrders.toLocaleString("vi-VN")}</strong><span>đơn quá hạn · {loading ? "—" : data.riders.length.toLocaleString("vi-VN")} rider</span></div>
@@ -562,6 +569,7 @@ function ReturnOverdueCard({ data, loading }: { data: ReturnOverdueState; loadin
       {!loading && data.riders.length === 0 ? <Empty text="Không có rider giữ đơn trả quá 48 giờ trong snapshot mới nhất." /> : null}
     </div>
     {!loading && data.missingStartedAt > 0 ? <p className="dashboard-return-overdue-missing"><CircleAlert size={14} />{data.missingStartedAt.toLocaleString("vi-VN")} đơn đang trả thiếu mốc delivering_time nên chưa thể đánh giá quá hạn.</p> : null}
+    <SpotlightSheen />
   </article>;
 }
 

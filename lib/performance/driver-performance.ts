@@ -2,6 +2,7 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma/client";
+import { buildPerformanceAnalysis, shiftPerformanceDate, type PerformanceAnalysis, type PerformanceAnalysisInput } from "@/lib/performance/analysis";
 
 export const performanceSortSchema = z.enum(["area", "rider", "delivery", "pickup", "deliveryRate", "pickupRate"]);
 export const performanceDirectionSchema = z.enum(["asc", "desc"]);
@@ -80,6 +81,7 @@ export type PerformanceResult = {
   rows: PerformanceRow[];
   summary: PerformanceSummary;
   wardOnHold: PerformanceWardRow[];
+  analysis: PerformanceAnalysis;
   options: {
     districts: string[];
     cots: string[];
@@ -88,15 +90,6 @@ export type PerformanceResult = {
 };
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-
-const emptySummary: PerformanceSummary = {
-  groups: 0,
-  active_riders: 0,
-  delivery_assigned: 0,
-  delivery_delivered: 0,
-  pickup_assigned: 0,
-  pickup_picked: 0,
-};
 
 type SearchParamsLike = Record<string, string | string[] | undefined> | URLSearchParams;
 
@@ -116,7 +109,7 @@ function tryParseJson<T>(raw: string | null | undefined): T | null {
 }
 
 export function todayString() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 }
 
 function shiftDate(value: string, days: number) {
@@ -379,7 +372,41 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
     group by r.delivery_ward, r.delivery_district
   `;
 
-  const first = rows[0];
+  // Charts aggregate the full filtered scope, independently of table pagination.
+  // Daily mode adds six preceding dates for context; week/month use the selected range.
+  const trendStart = filters.period === "day" ? shiftPerformanceDate(end, -6) : start;
+  const [aggregates] = await prisma.$queryRaw<PerformanceAnalysisInput[]>`
+    with rider_scope as (
+      select rider_code,full_name,kv,cot,pickup_district,delivery_district,delivery_ward
+      from public.riders where upper(coalesce(kv,'')) in ('KV1','KV2','KV3','KV4','KV5')
+      ${kvClause} ${districtClause} ${wardClause}
+    ), scoped as (
+      select p.*,upper(r.kv) as analytics_area,lower(replace(coalesce(nullif(trim(r.cot),''),nullif(trim(p.cot),''),''),' ','')) as analytics_cot from public.driver_performance_daily p
+      join rider_scope r on r.rider_code=p.driver_id
+      where p.report_date between ${trendStart}::date and ${end}::date ${cotClause} ${searchClause}
+    ), selected as (select * from scoped where report_date between ${start}::date and ${end}::date),
+    daily as (
+      select to_char(report_date,'YYYY-MM-DD') as date,count(distinct driver_id)::integer as riders,
+        sum(coalesce(delivery_assigned,0)) as delivery_assigned,sum(coalesce(delivery_delivered,0)) as delivery_delivered,
+        sum(coalesce(pickup_assigned,0)) as pickup_assigned,sum(coalesce(pickup_picked,0)) as pickup_picked
+      from scoped group by report_date order by report_date
+    ), areas as (
+      select analytics_area as kv,sum(coalesce(delivery_assigned,0)) as delivery_assigned,sum(coalesce(delivery_delivered,0)) as delivery_delivered,
+        sum(coalesce(pickup_assigned,0)) as pickup_assigned,sum(coalesce(pickup_picked,0)) as pickup_picked,
+        sum(case when analytics_cot in ('cot1','cot1.1','cot1.2') then coalesce(delivery_assigned,0) else 0 end) as delivery_assigned_cot1,sum(case when analytics_cot in ('cot1','cot1.1','cot1.2') then coalesce(delivery_delivered,0) else 0 end) as delivery_delivered_cot1,
+        sum(case when analytics_cot='cot2' then coalesce(delivery_assigned,0) else 0 end) as delivery_assigned_cot2,sum(case when analytics_cot='cot2' then coalesce(delivery_delivered,0) else 0 end) as delivery_delivered_cot2,
+        sum(case when analytics_cot in ('cot1','cot1.1','cot1.2') then coalesce(pickup_assigned,0) else 0 end) as pickup_assigned_cot1,sum(case when analytics_cot in ('cot1','cot1.1','cot1.2') then coalesce(pickup_picked,0) else 0 end) as pickup_picked_cot1,
+        sum(case when analytics_cot='cot2' then coalesce(pickup_assigned,0) else 0 end) as pickup_assigned_cot2,sum(case when analytics_cot='cot2' then coalesce(pickup_picked,0) else 0 end) as pickup_picked_cot2
+      from selected group by analytics_area order by analytics_area
+    ), rider_totals as (
+      select driver_id,sum(coalesce(delivery_assigned,0)) as delivery_assigned,sum(coalesce(delivery_delivered,0)) as delivery_delivered,
+        sum(coalesce(pickup_assigned,0)) as pickup_assigned,sum(coalesce(pickup_picked,0)) as pickup_picked
+      from selected group by driver_id
+    ) select (select jsonb_agg(to_jsonb(daily)) from daily) as daily,
+      (select jsonb_agg(to_jsonb(areas)) from areas) as areas,
+      (select jsonb_agg(to_jsonb(rider_totals)-'driver_id') from rider_totals) as riders
+  `;
+  const analysis = buildPerformanceAnalysis(aggregates ?? { daily: [], areas: [], riders: [] }, trendStart, end);
   return {
     filters,
     rows: rows.map((row) => ({
@@ -408,16 +435,8 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       delivery_rate: decimalToNumber(row.delivery_rate),
       pickup_rate: decimalToNumber(row.pickup_rate),
     })),
-    summary: first
-      ? {
-          groups: Number(first.total_groups ?? 0),
-          active_riders: Number(first.total_active_riders ?? 0),
-          delivery_assigned: decimalToNumber(first.total_delivery_assigned) ?? 0,
-          delivery_delivered: decimalToNumber(first.total_delivery_delivered) ?? 0,
-          pickup_assigned: decimalToNumber(first.total_pickup_assigned) ?? 0,
-          pickup_picked: decimalToNumber(first.total_pickup_picked) ?? 0,
-        }
-      : emptySummary,
+    summary: { groups: analysis.riderCount, active_riders: analysis.riderCount, ...analysis.totals },
+    analysis,
     wardOnHold: wardOnHoldRows
       .map((row) => {
         const assigned = Number(row.delivery_assigned);

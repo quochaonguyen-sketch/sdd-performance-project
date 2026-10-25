@@ -1,0 +1,46 @@
+.root [data-dashboard-spotlight] {
+  --spotlight-color: var(--dash-blue, var(--color-accent));
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1), box-shadow 220ms ease, border-color 180ms ease;
+}
+.root :global(.dash-volume-panel) { --spotlight-color: var(--dash-delivery-on-dark); }
+.root :global(.dash-area-cell) { --spotlight-color: var(--area-color); }
+.root [data-dashboard-spotlight]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(260px circle at var(--spotlight-x,50%) var(--spotlight-y,50%), color-mix(in srgb,var(--spotlight-color) 16%,transparent), transparent 76%);
+  transition: opacity 180ms ease;
+}
+.root :global(.dashboard-spotlight-sheen) {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg,transparent 20%,color-mix(in srgb,var(--spotlight-color) 20%,transparent) 48%,transparent 76%);
+  transform: translateX(-110%);
+}
+.root [data-dashboard-spotlight]:focus-within::before { opacity: .65; }
+.root :global(.dash-progress-track) > span,.root :global(.dash-area-track) > span { transition: width 500ms cubic-bezier(.2,.8,.2,1); }
+@media(hover:hover) and (pointer:fine) {
+  .root [data-dashboard-spotlight][data-spotlight-hover="true"] {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb,var(--spotlight-color) 45%,var(--color-rule));
+    box-shadow: 0 8px 22px color-mix(in srgb,var(--color-ink) 10%,transparent);
+  }
+  .root [data-dashboard-spotlight][data-spotlight-hover="true"]::before { opacity: 1; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .root [data-dashboard-spotlight],.root [data-dashboard-spotlight]::before,.root :global(.dashboard-spotlight-sheen),
+  .root :global(.dash-progress-track) > span,.root :global(.dash-area-track) > span { animation: none !important; transition: none !important; }
+  .root [data-dashboard-spotlight][data-spotlight-hover="true"] { transform: none; box-shadow: none; }
+  .root [data-dashboard-spotlight]::before,.root [data-dashboard-spotlight]:focus-within::before { opacity: 0 !important; }
+}

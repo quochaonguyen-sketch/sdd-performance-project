@@ -3,7 +3,7 @@ do $$
 declare n integer; job public.data_source_jobs; next_at timestamptz;
 begin
   if exists(select 1 from public.data_source_jobs where source_id in ('pickup_volume','delivery_volume','performance') and status in ('QUEUED','RUNNING','CANCEL_REQUESTED')) then raise exception 'Volume/performance sources must be idle for schedule test'; end if;
-  if has_function_privilege('anon','public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer)','execute') or has_function_privilege('authenticated','public.enqueue_due_data_sources(timestamptz)','execute') then raise exception 'Scheduler exposed'; end if;
+  if has_function_privilege('anon','public.configure_data_source_schedule(text,uuid,boolean,text,integer,text,integer,text,text)','execute') or has_function_privilege('authenticated','public.enqueue_due_data_sources(timestamptz)','execute') then raise exception 'Scheduler exposed'; end if;
   if public.next_data_source_daily('18:00','2026-10-25 10:59:59+00')<>'2026-10-25 11:00+00'::timestamptz then raise exception 'VN 18:00 conversion failed'; end if;
   if public.next_data_source_daily('18:00','2026-10-25 11:00+00')<>'2026-10-26 11:00+00'::timestamptz then raise exception 'Exact-time advancement failed'; end if;
   if public.next_data_source_daily('06:00','2026-10-24 22:59:59+00')<>'2026-10-24 23:00+00'::timestamptz then raise exception 'VN day boundary failed'; end if;

@@ -1,0 +1,52 @@
+/* Smooth scene changes: finite feedback, never a looping decoration. */
+.app-shell-technical { --nav-motion-duration: 280ms; --nav-motion-ease: cubic-bezier(.2,.8,.2,1); }
+.app-shell-technical .app-sidebar-nav { position: relative; }
+.app-sidebar-active-marker {
+  position: absolute; top: 0; left: 6px; width: 3px; height: 0; opacity: 0;
+  border-radius: 3px; background: var(--color-accent); pointer-events: none;
+  transition: transform var(--nav-motion-duration) var(--nav-motion-ease), height 180ms ease, opacity 140ms ease;
+}
+.app-shell-technical .app-nav-link {
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms var(--nav-motion-ease);
+}
+.app-shell-technical .app-nav-link > svg { transition: transform 180ms var(--nav-motion-ease), color 160ms ease; }
+.app-shell-technical .app-module-button {
+  transition: background-color 160ms ease, color 160ms ease, transform 180ms var(--nav-motion-ease), box-shadow 180ms ease;
+}
+.app-shell-technical .app-module-button > svg { transition: transform 220ms var(--nav-motion-ease); }
+.app-shell-technical .app-module-button.is-active { box-shadow: 0 2px 8px color-mix(in srgb,var(--color-ink) 7%,transparent); }
+.app-shell-technical .app-module-button:active { transform: scale(.95); }
+.app-shell-technical .app-nav-link:active { transform: translateX(1px) scale(.985); }
+.app-shell-technical .app-sidebar-toggle { transition: background-color 160ms ease, color 160ms ease, transform 180ms ease; }
+.app-shell-technical .app-sidebar-toggle > svg { animation: nav-toggle-arrive 200ms ease-out; }
+@keyframes nav-toggle-arrive { from { opacity: .5; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+@media (hover:hover) and (pointer:fine) {
+  .app-shell-technical .app-nav-link:hover { transform: translateX(2px); }
+  .app-shell-technical .app-nav-link:hover > svg { transform: translateY(-2px); }
+  .app-shell-technical .app-nav-link:active { transform: translateX(1px) scale(.985); }
+  .app-shell-technical .app-module-button:hover { transform: translateY(-2px); }
+  .app-shell-technical .app-module-button:active { transform: scale(.95); }
+}
+@media (min-width:1024px) {
+  .app-shell-technical .app-navigation { transition: width var(--nav-motion-duration) var(--nav-motion-ease), gap var(--nav-motion-duration) var(--nav-motion-ease); }
+  .app-shell-technical .app-sidebar {
+    flex: none; display: flex; width: 216px;
+    transition: width var(--nav-motion-duration) var(--nav-motion-ease), opacity 180ms ease, transform var(--nav-motion-duration) var(--nav-motion-ease), visibility 0s;
+  }
+  .app-shell-technical .app-sidebar-brand,.app-shell-technical .app-sidebar-nav,.app-shell-technical .app-sidebar-foot { flex-shrink: 0; min-width: 214px; }
+  .app-shell-technical .app-sidebar-context { flex-shrink: 0; min-width: 178px; }
+  .app-shell-technical .app-sidebar-nav { flex-shrink: 1; }
+  .app-shell-technical .app-shell-content { transition: padding-left var(--nav-motion-duration) var(--nav-motion-ease); }
+  .app-shell-technical.is-sidebar-collapsed .app-navigation { display: flex; width: 44px; gap: 0; }
+  .app-shell-technical.is-sidebar-collapsed .app-sidebar {
+    display: flex; width: 0; opacity: 0; transform: translateX(-8px); visibility: hidden; border-width: 0; pointer-events: none;
+    transition: width var(--nav-motion-duration) var(--nav-motion-ease), opacity 160ms ease, transform var(--nav-motion-duration) var(--nav-motion-ease), visibility 0s var(--nav-motion-duration);
+  }
+  .app-shell-technical.is-sidebar-collapsed .app-shell-content { padding-left: 72px; padding-inline-start: 72px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .app-shell-technical .app-navigation,.app-shell-technical .app-sidebar,.app-shell-technical .app-shell-content,
+  .app-shell-technical .app-nav-link,.app-shell-technical .app-nav-link > svg,.app-shell-technical .app-module-button,
+  .app-shell-technical .app-module-button > svg,.app-shell-technical .app-sidebar-toggle,.app-shell-technical .app-sidebar-toggle > svg,
+  .app-shell-technical .app-sidebar-active-marker { animation: none !important; transition: none !important; }
+}

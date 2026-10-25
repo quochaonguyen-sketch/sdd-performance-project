@@ -27,7 +27,7 @@ export async function POST(request:Request) {
   if(!sourceAllowed(context.profile.role,context.profile.permissions,command.source)) return NextResponse.json({error:"Không có quyền điều khiển nguồn này"},{status:403});
   const db=createAdminClient();
   const {data,error}=command.action==="auto"
-    ? await db.rpc("configure_data_source_schedule",{p_source:command.source,p_actor:context.user.id,p_enabled:command.enabled,p_mode:command.mode,p_interval:command.interval,p_time:command.time,p_offset:command.offset})
+    ? await db.rpc("configure_data_source_schedule",{p_source:command.source,p_actor:context.user.id,p_enabled:command.enabled,p_mode:command.mode,p_interval:command.interval,p_time:command.time,p_offset:command.offset,p_start:command.start,p_end:command.end})
     : await db.rpc("control_data_source",{p_source:command.source,p_action:command.action,p_day:command.day,p_actor:context.user.id,p_enabled:command.enabled,p_interval:command.interval});
   if(error) return NextResponse.json({error:"Không gửi được lệnh. Vui lòng tải lại trạng thái trước khi thử lại."},{status:503});
   return NextResponse.json(data,{headers:{"Cache-Control":"no-store"}});

@@ -29,6 +29,7 @@ export type OHOrderDialogProps = {
     ward: string;
   };
   reasonLabelMap?: Record<string, string>;
+  initialQuery?: string;
 };
 
 export function OHOrderDialog({
@@ -38,6 +39,7 @@ export function OHOrderDialog({
   today,
   filters,
   reasonLabelMap = {},
+  initialQuery = "",
 }: OHOrderDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -49,8 +51,16 @@ export function OHOrderDialog({
     offset: 0,
   });
   const [page, setPage] = useState(0);
-  const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [input, setInput] = useState(initialQuery);
+  const [query, setQuery] = useState(initialQuery);
+
+  useEffect(() => {
+    if (isOpen) {
+      setInput(initialQuery || "");
+      setQuery(initialQuery || "");
+      setPage(0);
+    }
+  }, [isOpen, initialQuery]);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");

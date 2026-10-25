@@ -88,26 +88,123 @@ export function ohSummary(cells:OHCell[]) {
   return {total,held,received:total-held,unknown:cells.filter(c=>c.area==="Chưa rõ KV").reduce((n,c)=>n+c.orders,0)};
 }
 
-export type OHRank={key:string;name:string;detail:string;orders:number};
+export type OHRank = {
+  key: string;
+  name: string;
+  detail: string;
+  orders: number;
+  area?: string;
+  district?: string;
+  ward?: string;
+  areas?: string[];
+  districts?: string[];
+  wards?: string[];
+};
 
-export function ohRankings(cells:OHCell[],kind:"district"|"ward"|"rider"):OHRank[] {
-  const groups=new Map<string,OHRank>();
-  const names=new Map<string,Set<string>>();
-  const normalizeName=(name:string)=>name.normalize("NFC").trim().replace(/\s+/g," ").toLocaleUpperCase("vi");
-  for(const c of cells){
-    if(c.rider_name&&c.rider_code&&!["unknown","0"].includes(c.rider_code)){
-      const name=normalizeName(c.rider_name),codes=names.get(name)||new Set<string>();
-      codes.add(c.rider_code);names.set(name,codes);
+export function ohRankings(cells: OHCell[], kind: "district" | "ward" | "rider"): OHRank[] {
+  type GroupRank = OHRank & {
+    _areas: Map<string, number>;
+    _districts: Map<string, number>;
+    _wards: Map<string, number>;
+  };
+  const groups = new Map<string, GroupRank>();
+  const names = new Map<string, Set<string>>();
+  const normalizeName = (name: string) =>
+    name.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleUpperCase("vi");
+
+  for (const c of cells) {
+    if (c.rider_name && c.rider_code && !["unknown", "0"].includes(c.rider_code)) {
+      const name = normalizeName(c.rider_name),
+        codes = names.get(name) || new Set<string>();
+      codes.add(c.rider_code);
+      names.set(name, codes);
     }
   }
-  for(const c of cells){
-    const district=c.district||"Chưa rõ quận",ward=c.ward||"Chưa rõ phường";
-    const aliases=names.get(normalizeName(c.rider_name||""));
-    const code=c.rider_code&&!["unknown","0"].includes(c.rider_code)?c.rider_code:aliases?.size===1?[...aliases][0]:"";
-    const name=kind==="rider"?c.rider_name||"Chưa rõ rider":kind==="district"?district:ward;
-    const key=kind==="rider"?JSON.stringify([code||normalizeName(name)]):JSON.stringify(kind==="district"?[district]:[district,ward]);
-    const rank=groups.get(key)||{key,name,detail:kind==="rider"?code||"Chưa có mã rider":kind==="ward"?district:"",orders:0};
-    rank.orders+=c.orders;groups.set(key,rank);
+
+  for (const c of cells) {
+    const district = c.district || "Chưa rõ quận",
+      ward = c.ward || "Chưa rõ phường";
+    const aliases = names.get(normalizeName(c.rider_name || ""));
+    const code =
+      c.rider_code && !["unknown", "0"].includes(c.rider_code)
+        ? c.rider_code
+        : aliases?.size === 1
+        ? [...aliases][0]
+        : "";
+    const name =
+      kind === "rider"
+        ? c.rider_name || "Chưa rõ rider"
+        : kind === "district"
+        ? district
+        : ward;
+    const key =
+      kind === "rider"
+        ? JSON.stringify([code || normalizeName(name)])
+        : JSON.stringify(kind === "district" ? [district] : [district, ward]);
+
+    let rank = groups.get(key);
+    if (!rank) {
+      rank = {
+        key,
+        name,
+        detail:
+          kind === "rider"
+            ? code || "Chưa có mã rider"
+            : kind === "ward"
+            ? district
+            : c.area || "",
+        orders: 0,
+        area: c.area,
+        district: kind === "rider" ? district : kind === "ward" ? district : undefined,
+        ward: kind === "rider" ? ward : kind === "ward" ? ward : undefined,
+        _areas: new Map<string, number>(),
+        _districts: new Map<string, number>(),
+        _wards: new Map<string, number>(),
+      };
+      groups.set(key, rank);
+    }
+
+    rank.orders += c.orders;
+
+    if (c.area) {
+      rank._areas.set(c.area, (rank._areas.get(c.area) || 0) + c.orders);
+    }
+    if (c.district && c.district !== "Chưa rõ quận") {
+      rank._districts.set(c.district, (rank._districts.get(c.district) || 0) + c.orders);
+    }
+    if (c.ward && c.ward !== "Chưa rõ phường") {
+      rank._wards.set(c.ward, (rank._wards.get(c.ward) || 0) + c.orders);
+    }
   }
-  return [...groups.values()].sort((a,b)=>b.orders-a.orders||a.name.localeCompare(b.name,"vi"));
+
+  const results: OHRank[] = [];
+  for (const rank of groups.values()) {
+    if (kind === "rider") {
+      const sortedAreas = [...rank._areas.entries()].sort((a, b) => b[1] - a[1]);
+      if (sortedAreas.length) {
+        rank.area = sortedAreas[0][0];
+        rank.areas = sortedAreas.map(([a]) => a);
+      }
+
+      const sortedDistricts = [...rank._districts.entries()].sort((a, b) => b[1] - a[1]);
+      if (sortedDistricts.length) {
+        rank.district = sortedDistricts[0][0];
+        rank.districts = sortedDistricts.map(([d]) => d);
+      }
+
+      const sortedWards = [...rank._wards.entries()].sort((a, b) => b[1] - a[1]);
+      if (sortedWards.length) {
+        rank.ward = sortedWards[0][0];
+        rank.wards = sortedWards.map(([w]) => w);
+      }
+    } else if (kind === "ward") {
+      const sortedAreas = [...rank._areas.entries()].sort((a, b) => b[1] - a[1]);
+      if (sortedAreas.length) rank.area = sortedAreas[0][0];
+    }
+
+    const { _areas, _districts, _wards, ...cleanRank } = rank;
+    results.push(cleanRank);
+  }
+
+  return results.sort((a, b) => b.orders - a.orders || a.name.localeCompare(b.name, "vi"));
 }

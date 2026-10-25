@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Play, Square, Server, RefreshCw, ArrowUpRight, Clock3, Database, Loader2 } from "lucide-react";
 import { DATA_SOURCES, vietnamDay, type DataSourceId } from "@/lib/data-sources/catalog";
 import { SourceSchedule, type SourceScheduleSetting } from "./source-schedule";
+import { SpxSession } from "./spx-session";
 
 type Job={id:string;source_id:DataSourceId;report_date:string;status:string;phase:string;message:string;requested_at:string;started_at:string|null;finished_at:string|null;events:{at:string;message:string}[]};
 type Setting=SourceScheduleSetting;
@@ -33,6 +34,7 @@ export function DataSourcesView(){
     <div className={`rounded-2xl border p-5 ${workers.length?"border-emerald-200 bg-emerald-50":"border-amber-200 bg-amber-50"}`}><div className="flex items-center gap-3"><Server size={24}/><div><p className="font-semibold">{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</p><p className="mt-1 text-sm">{workers.length?workers.map(w=>`${w.hostname} · tối đa ${w.concurrency} nguồn song song`).join(" | "):"Lệnh chạy sẽ xếp hàng. Bật run_sources_worker.cmd trong sdd-web-data trên máy chủ để nhận lệnh."}</p></div><span className="ml-auto rounded-full bg-white/70 px-3 py-1 text-sm">{state?.jobs.filter(active).length??0} tác vụ đang chờ / chạy</span></div></div>
     {error&&<div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</div>}{notice&&<div role="status" className="rounded-xl bg-blue-50 p-4 text-blue-700">{notice}</div>}
     {!state&&!error&&<p className="flex gap-2"><Loader2 className="animate-spin" size={18}/>Đang tải nguồn dữ liệu…</p>}
+    <SpxSession />
     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{state?.sources.map(source=>{
       const setting=state.settings.find(s=>s.source_id===source.id),job=state.jobs.find(j=>j.source_id===source.id&&active(j))??state.jobs.find(j=>j.source_id===source.id),running=job&&active(job);
       return <section key={source.id} className="flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md" style={{borderTop:`4px solid ${source.color}`}}>

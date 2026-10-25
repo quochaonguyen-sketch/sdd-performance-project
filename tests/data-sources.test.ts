@@ -26,3 +26,12 @@ test("commands reject arbitrary source, invalid dates and interval",()=>{
   assert.equal(sourceAction({source:"pickup_inventory",action:"run",day:"2026-10-01"},"2026-10-25").day,"2026-10-25");
   assert.equal(sourceAction({source:"performance",action:"run",day:"2026-10-01"},"2026-10-25").day,"2026-10-01");
 });
+test("interval windows accept day, overnight and full-day choices and reject malformed times",()=>{
+  const base={source:"pickup_realtime",action:"auto",enabled:true};
+  const command=sourceAction({...base,start:"07:00",end:"17:00"},"2026-10-25");
+  assert.equal(command.start,"07:00");assert.equal(command.end,"17:00");
+  assert.equal(sourceAction(base,"2026-10-25").start,null);
+  assert.equal(sourceAction({...base,start:"22:00",end:"07:00"},"2026-10-25").start,"22:00");
+  assert.equal(sourceAction({...base,start:"00:00",end:"00:00"},"2026-10-25").end,"00:00");
+  for(const extra of [{start:"24:00"},{end:"7:00"},{start:7},{end:["17:00"]}])assert.throws(()=>sourceAction({...base,...extra},"2026-10-25"));
+});

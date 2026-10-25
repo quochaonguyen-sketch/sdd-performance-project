@@ -46,6 +46,12 @@ test('rankings scope by district + ward and stable rider code, descending OH cou
   assert.equal(ohRankings(rows.filter(c => c.district === 'Quận 1'), 'district')[0].orders, 5);
   assert.equal(ohRankings([row, { ...row, rider_code: '0', orders: 4, rider_name: ' rider a ' }], 'rider').length, 1);
   assert.equal(ohRankings([row, { ...row, rider_code: 'R2' }, { ...row, rider_code: '0' }], 'rider').length, 3);
+
+  const riderRankings = ohRankings(rows, 'rider');
+  const r2 = riderRankings.find(r => r.detail === 'R2');
+  assert.equal(r2?.area, 'Khu vực 1');
+  assert.equal(r2?.district, 'Quận 2');
+  assert.equal(r2?.ward, 'Phường A');
 });
 
 test('multi-dimensional filter correctly isolates cells by reason, area, district, ward, and status', () => {

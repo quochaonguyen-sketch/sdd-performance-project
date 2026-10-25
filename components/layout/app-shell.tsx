@@ -10,6 +10,7 @@ import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/a
 import { AppLoadingOverlay } from "@/components/layout/app-loading-overlay";
 import { NavigationPendingIndicator } from "@/components/layout/navigation-pending-indicator";
 import { RouteReveal } from "@/components/layout/route-reveal";
+import { SidebarNavigation } from "@/components/layout/sidebar-navigation";
 import { OffRequestNotifications } from "@/components/layout/off-request-notifications";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
 import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
@@ -164,13 +165,13 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           <Link href="/dashboard" className="app-rail-brand" aria-label={`${APP_NAME} — Dashboard`}><SddMark /></Link>
           {modules.map((module) => {
             const Icon = module.icon;
-            return <button key={module.id} type="button" title={module.label} aria-label={module.label} aria-pressed={selectedModule === module.id} aria-controls="operations-module-panel" className={cn("app-module-button", selectedModule === module.id && "is-active", module.id === "settings" && "is-settings")} onClick={() => setModuleSelection({ pathname, module: module.id })}><Icon size={19} aria-hidden="true" /><span className="app-module-tooltip" aria-hidden="true">{module.label}</span></button>;
+            return <button key={module.id} type="button" title={module.label} aria-label={module.label} aria-pressed={selectedModule === module.id} aria-controls="operations-module-panel" className={cn("app-module-button", selectedModule === module.id && "is-active", module.id === "settings" && "is-settings")} onClick={() => { setModuleSelection({ pathname, module: module.id }); setSidebarOpen(true); }}><Icon size={19} aria-hidden="true" /><span className="app-module-tooltip" aria-hidden="true">{module.label}</span></button>;
           })}
         </nav>
-        <aside className="app-sidebar" id="operations-module-panel" aria-label={modules.find((module) => module.id === selectedModule)?.label}>
+        <aside className="app-sidebar" id="operations-module-panel" aria-label={modules.find((module) => module.id === selectedModule)?.label} aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
           <Link href="/dashboard" className="app-sidebar-brand" aria-label={`${APP_NAME} — Dashboard`}><AppBrand inverse /></Link>
           <div className="app-sidebar-context"><span>Địa bàn</span><strong>Khu vực 1–5</strong></div>
-          <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
+          <SidebarNavigation moduleKey={selectedModule} activeKey={`${pathname}:${searchParams.get("view") ?? ""}`} open={sidebarOpen}>
             <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Không gian vận hành" : modules.find((module) => module.id === selectedModule)?.label}</p>
             {moduleItems.map((item) => {
               const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
@@ -185,7 +186,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
               <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Hàng trả</p>
               {visibleReturnItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
             </> : null}
-          </nav>
+          </SidebarNavigation>
           <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Khu vực 1–5</span></div>
         </aside>
       </div>
