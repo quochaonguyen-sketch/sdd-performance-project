@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getReturnOrders, parseReturnOrderFilters } from "@/lib/return-orders/return-orders";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { canManageReturn } from "@/lib/auth/permissions";
+import { getReturnWorkspace } from "@/lib/return-orders/workspace-server";
 
-export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  try {
-    const result = await getReturnOrders(parseReturnOrderFilters(new URL(request.url).searchParams));
-    return NextResponse.json({ success: true, ...result });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Không thể tải đơn hàng trả" },
-      { status: 500 },
-    );
-  }
+export async function GET() {
+  const context = await getCurrentUserContext();
+  if (!context) return NextResponse.json({success:false,error:"Chưa đăng nhập"},{status:401});
+  if (!canManageReturn(context.profile.role,context.profile.permissions)) return NextResponse.json({success:false,error:"Không có quyền xem hàng trả"},{status:403});
+  try { return NextResponse.json({success:true,...await getReturnWorkspace()},{headers:{"Cache-Control":"private, no-store"}}); }
+  catch { return NextResponse.json({success:false,error:"Không tải được dữ liệu hàng trả. Thử làm mới sau vài giây."},{status:503}); }
 }

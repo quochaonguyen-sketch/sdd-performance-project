@@ -1,8 +1,9 @@
 import "server-only";
 import { OPERATING_AREAS, normalizeOperatingArea, type OperatingArea } from "@/lib/locations/operating-areas";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { RETURN_DISTRICTS, RETURN_SELLER_AREAS } from "./scope";
 
-export const RETURN_ORDER_DISTRICTS = ["Quận 12", "Quận Gò Vấp", "Quận Bình Thạnh", "Quận 3"] as const;
+export const RETURN_ORDER_DISTRICTS = RETURN_DISTRICTS;
 
 export type ReturnOrderRow = {
   shipment_id: string;
@@ -152,25 +153,26 @@ async function loadReturnDashboardContext(
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .eq("order_status", 67),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .eq("order_status", 10),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .eq("order_status", 72),
     supabase
       .from("return_order_snapshots")
       .select("*", { count: "exact", head: true })
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
+      .neq("seller_area", "Chưa rõ KV")
       .in("order_status", [10, 67, 72]),
     supabase
       .from("return_order_snapshots")
@@ -178,7 +180,7 @@ async function loadReturnDashboardContext(
         "shipment_id,shopee_order_sn,return_driver_id,return_driver_name,return_riders_cot1,return_riders_cot2,return_zone,seller_area,seller_district,seller_new_ward,seller_ward,delivering_time",
       )
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .eq("order_status", 72)
       .neq("return_driver_id", ""),
     supabase
@@ -187,13 +189,13 @@ async function loadReturnDashboardContext(
         "shipment_id,shopee_order_sn,return_rider_codes,return_riders_cot1,return_riders_cot2,return_zone,seller_area,seller_district,seller_new_ward,seller_ward",
       )
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .in("order_status", [10, 67]),
     supabase
       .from("return_order_snapshots")
       .select("seller_district,seller_new_ward,seller_ward")
       .eq("snapshot_id", snapshotId)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .in("order_status", [10, 67, 72])
       .in("seller_district", [...RETURN_ORDER_DISTRICTS]),
     supabase
@@ -204,7 +206,7 @@ async function loadReturnDashboardContext(
         .from("return_order_snapshots")
         .select("*", { count: "exact", head: true })
         .eq("snapshot_id", snapshotId)
-        .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+        .in("seller_area", RETURN_SELLER_AREAS)
         .in("order_status", [10, 67, 72])
         .eq("seller_district", district),
     ),
@@ -284,7 +286,7 @@ export async function getReturnOrders(filters: ReturnOrderFilters): Promise<Retu
       { count: "exact" },
     )
     .eq("snapshot_id", latest.snapshot_id)
-    .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+    .in("seller_area", RETURN_SELLER_AREAS)
     .in("order_status", [10, 67, 72]);
 
   if (filters.status === "backlog") query = query.in("order_status", [10, 67]);
@@ -605,7 +607,7 @@ export async function getReturnPivotData(): Promise<ReturnPivotData> {
       .from("return_order_snapshots")
       .select("shipment_id,return_driver_id,return_driver_name,return_riders_cot1,return_riders_cot2,create_time,seller_district,seller_ward,seller_new_ward")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .in("order_status", [10, 67, 72])
       .range(from, from + pageSize - 1);
     if (result.error) throw result.error;
@@ -696,8 +698,8 @@ export async function getReturnPivotData(): Promise<ReturnPivotData> {
     }
     if (row.create_time && (!entry.oldestAt || row.create_time < entry.oldestAt)) entry.oldestAt = row.create_time;
     addToPivotCell(entry.orders, assignedCot || normalizeCotLabel(entry.cot) || "", row.shipment_id);
-    const orderDistrict = String((row as any).seller_district || "").trim();
-    const orderWard = String((row as any).seller_new_ward || (row as any).seller_ward || "").trim();
+    const orderDistrict = String(row.seller_district || "").trim();
+    const orderWard = String(row.seller_new_ward || row.seller_ward || "").trim();
     if (orderDistrict) entry.orderDistricts.add(orderDistrict);
     if (orderWard) entry.orderWards.add(orderWard);
   }
@@ -827,7 +829,7 @@ export async function getReturnAssignData(): Promise<ReturnAssignData> {
       .from("return_order_snapshots")
       .select("shipment_id,order_status,seller_district,seller_ward,seller_new_ward,seller_area,return_zone,create_time")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .in("order_status", [10, 67])
       .order("create_time", { ascending: true, nullsFirst: false })
       .range(from, from + pageSize - 1);
@@ -920,6 +922,7 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
   const orders: Array<{
     shipment_id: string;
     order_status: number;
+    seller_area: string;
     seller_district: string;
     seller_ward: string;
     seller_new_ward: string;
@@ -929,9 +932,9 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
   for (let from = 0; ; from += pageSize) {
     const result = await supabase
       .from("return_order_snapshots")
-      .select("shipment_id,order_status,seller_district,seller_ward,seller_new_ward,return_zone,create_time")
+      .select("shipment_id,order_status,seller_area,seller_district,seller_ward,seller_new_ward,return_zone,create_time")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .in("order_status", [10, 67, 72])
       .range(from, from + pageSize - 1);
     if (result.error) throw result.error;
@@ -963,6 +966,9 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
 
   const now = Date.now();
   for (const order of orders) {
+    const area = normalizeOperatingArea(order.seller_area);
+    if (area) kv[area] += 1;
+    else kv.unknown += 1;
     if (order.order_status === 72) returning += 1;
     else backlog += 1;
 
@@ -995,10 +1001,6 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
       else if (c === "COT2") cot.cot2 += 1;
       else cot.unassigned += 1;
 
-      const k = normalizeOperatingArea(rider?.kv);
-      if (k) kv[k] += 1;
-      else kv.unknown += 1;
-
       const key = String(assignment.rider_code).trim();
       const entry = riderCounts.get(key);
       if (entry) entry.total += 1;
@@ -1013,7 +1015,6 @@ export async function getReturnDashboardData(): Promise<ReturnDashboardData> {
       }
     } else {
       cot.unassigned += 1;
-      kv.unknown += 1;
     }
   }
 

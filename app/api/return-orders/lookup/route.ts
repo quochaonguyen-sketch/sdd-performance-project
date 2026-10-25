@@ -2,7 +2,9 @@ import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { canManageReturn } from "@/lib/auth/permissions";
+import { RETURN_SELLER_AREAS } from "@/lib/return-orders/scope";
 
 const lookupSchema = z.string().trim().min(1).max(100);
 const orderColumns = ["shipment_id", "sls_tracking_number", "shopee_order_sn"] as const;
@@ -15,9 +17,9 @@ function splitList(value: unknown) {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const context = await getCurrentUserContext();
+  if (!context) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  if (!canManageReturn(context.profile.role, context.profile.permissions)) return NextResponse.json({ success: false, error: "Không có quyền xem hàng trả" }, { status: 403 });
 
   const parsed = lookupSchema.safeParse(new URL(request.url).searchParams.get("code"));
   if (!parsed.success) {
@@ -43,7 +45,7 @@ export async function GET(request: Request) {
       .from("return_order_snapshots")
       .select("shipment_id,sls_tracking_number,shopee_order_sn,order_status,status_label,seller_district,seller_ward,seller_new_ward,return_zone,return_rider_codes,return_rider_names,return_riders_cot1,return_riders_cot2,return_driver_id,return_driver_name")
       .eq("snapshot_id", latest.snapshot_id)
-      .in("seller_area", ["Khu vực 1", "Khu vực 2", "Khu vực 3", "Khu vực 4", "Khu vực 5", "Khu vực 6"])
+      .in("seller_area", RETURN_SELLER_AREAS)
       .eq(column, code)
       .limit(1)
       .maybeSingle(),

@@ -23,12 +23,14 @@ const navItems = [
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/lmhub-inventory", label: "Tồn pickup", icon: PackageOpen },
   { href: "/inventory-delivery", label: "Tồn delivery", icon: Truck },
+  { href: "/onhold", label: "Phân tích OH", icon: BarChart3 },
   { href: "/notes", label: "Ghi chú", icon: ListChecks },
   { href: "/off-schedule", label: "Lịch OFF", icon: ListChecks },
   { href: "/tasks", label: "Công việc", icon: ListChecks },
   { href: "/violations", label: "Vi phạm", icon: ListChecks },
   { href: "/route-sheet", label: "Excel / Google Sheet", icon: ListChecks },
   { href: "/imports", label: "Nhập dữ liệu", icon: PackagePlus },
+  { href: "/data-sources", label: "Nguồn dữ liệu", icon: Activity },
   { href: "/settings", label: "Thành viên", icon: UsersRound },
   { href: "/user-activity", label: "Nhật ký người dùng", icon: Activity },
 ];
@@ -43,10 +45,7 @@ const pickupItems = [
   { href: "/pickup-management?view=replacement", view: "replacement", label: "Thế pick", icon: Truck },
 ];
 const returnItems = [
-  { href: "/return-orders?view=dashboard", view: "dashboard", label: "Tổng quan", icon: BarChart3 },
-  { href: "/return-orders", view: null, label: "Tra cứu / gán đơn", icon: PackageSearch },
-  { href: "/return-orders?view=rider", view: "rider", label: "Rider trả", icon: Truck },
-  { href: "/return-orders?view=pivot", view: "pivot", label: "Phân công COT", icon: ListChecks },
+  { href: "/return-orders", view: null, label: "Hàng trả", icon: PackageSearch },
 ];
 const toolItems = [
   { href: "/zones", label: "Khu vực", icon: PencilRuler },
@@ -82,9 +81,9 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleToolItems = memberToolRestricted ? [] : toolItems;
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
-  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity"].includes(item.href));
+  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity"].includes(item.href) && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
   const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
-  const dataPaths = ["/route-sheet", "/imports"];
+  const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => item.href === "/settings" || item.href === "/user-activity" && user.role === "admin");
   const moreNavItems = [
     ...volumeItems,
@@ -121,7 +120,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
       : [...navItems, ...volumeItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const splitItems = [...navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href)), ...volumeItems]
-    .filter((item) => item.href !== pathname && (item.href !== "/user-activity" || user.role === "admin"));
+    .filter((item) => item.href !== pathname && (item.href !== "/user-activity" || user.role === "admin") && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {

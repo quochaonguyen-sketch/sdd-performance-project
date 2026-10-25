@@ -108,7 +108,7 @@ export function ReturnDashboardBoard({ data }: { data: ReturnDashboardData }) {
             <strong>
               {OPERATING_AREAS.map((area) => `${area} ${data.kv[area]}`).join(" · ")}
             </strong>
-            <span>{data.zones.length} zone trả · {data.wards.length} phường top</span>
+            <span>{data.zones.length} zone trả · {data.wards.length} phường top{data.kv.unknown ? ` · ${data.kv.unknown} đơn chưa rõ KV` : ""}</span>
           </div>
         </article>
       </div>
