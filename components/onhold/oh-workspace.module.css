@@ -23,7 +23,7 @@
 .filterHeaderLeft{display:flex;align-items:center;gap:10px}
 .filterHeaderLeft h3{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
 .filterBadge{background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}
-.filterGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.filterGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .filterActions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding-top:4px}
 .filterActions .primaryAction{display:inline-flex;align-items:center;gap:7px;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:650}
 .filterActions .primaryAction:hover{background:#1d4ed8}
@@ -39,7 +39,7 @@
 .activeChip button:hover{color:#dc2626}
 
 /* Metrics Cards */
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
 .metrics article{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;gap:6px}
 .metrics article:first-child{background:#163454;color:white;border-color:#163454}
 .metrics span{font-size:12px;font-weight:650}
@@ -70,8 +70,8 @@
 .track{height:6px;background:var(--soft);border-radius:6px;margin-top:9px;overflow:hidden}
 .track i{display:block;height:100%;background:#ea580c;border-radius:6px}
 .hourGrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:18px 0}
-.hour{background:var(--soft);padding:10px 4px;text-align:center;display:grid;gap:5px;border-radius:7px;border:1px solid var(--line)}
-.hour small{font-size:10px;color:var(--muted)}
+.hour{color:var(--muted);background:var(--soft);padding:10px 4px;text-align:center;display:grid;gap:5px;border-radius:7px;border:1px solid var(--line)}
+.hour small{font-size:10px;color:inherit}
 .hour strong{font-size:15px;font-variant-numeric:tabular-nums}
 
 /* REDESIGNED RANK PANELS & BEAUTIFUL TABLES */
@@ -222,3 +222,13 @@
 @media(prefers-reduced-motion:reduce){.workspace *{animation:none!important;transition:none!important}}
 .workspace label{min-width:0}
 .workspace input,.workspace select{min-width:0;width:100%}
+
+/* Ocean heat scale shared by hour cells and the legend. */
+.hour[data-level="1"],.hourLegend i[data-level="1"]{background:#e0f2fe;color:#0c4a6e;border-color:#bae6fd}
+.hour[data-level="2"],.hourLegend i[data-level="2"]{background:#7dd3fc;color:#0c4a6e;border-color:#38bdf8}
+.hour[data-level="3"],.hourLegend i[data-level="3"]{background:#0284c7;color:#fff;border-color:#0369a1}
+.hour[data-level="4"],.hourLegend i[data-level="4"]{background:#0c4a6e;color:#fff;border-color:#075985}
+.hourLegend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:14px;color:var(--muted);font-size:10px}
+.hourLegend span{display:inline-flex;align-items:center;gap:5px}
+.hourLegend i{display:inline-block;width:14px;height:14px;border:1px solid var(--line);border-radius:4px;background:var(--soft)}
+.hourPeak{margin:10px 0 0;color:var(--ink);font-size:12px;font-weight:650;line-height:1.6}

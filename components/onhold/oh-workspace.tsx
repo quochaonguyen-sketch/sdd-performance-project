@@ -88,8 +88,8 @@ export function OHWorkspace({
     }
   }, [initialData, start, end]);
 
-  // 5 Dimensional Filters:
-  const [status, setStatus] = useState("all");
+  // OH is reported together across all recording statuses.
+  const status = "all";
   const [reason, setReason] = useState("all");
   const [area, setArea] = useState("all");
   const [district, setDistrict] = useState("all");
@@ -117,15 +117,14 @@ export function OHWorkspace({
   // Base filtered by the 4 dimensions across dates (for pivot table & KV cards)
   const baseCrossDate = useMemo(() => {
     return data.cells.filter((c) => {
-      if (status !== "all" && String(c.status) !== status) return false;
       if (reason !== "all" && c.reason !== reason) return false;
       if (district !== "all" && (c.district || "Chưa rõ quận") !== district) return false;
       if (ward !== "all" && (c.ward || "Chưa rõ phường") !== ward) return false;
       return true;
     });
-  }, [data.cells, status, reason, district, ward]);
+  }, [data.cells, reason, district, ward]);
 
-  // Cells strictly matching ALL 5 filters for selected day
+  // Cells matching all filters for the selected day
   const cells = useMemo(() => {
     return baseCrossDate.filter((c) => {
       if (c.report_date !== day) return false;
@@ -150,12 +149,11 @@ export function OHWorkspace({
     return map;
   }, [data.cells]);
 
-  // List of available reasons in the selected day matching status & area
+  // List of available reasons in the selected day matching area
   const availableReasons = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of data.cells) {
       if (c.report_date !== day) continue;
-      if (status !== "all" && String(c.status) !== status) continue;
       if (area !== "all" && c.area !== area) continue;
       counts.set(c.reason, (counts.get(c.reason) || 0) + c.orders);
     }
@@ -166,7 +164,7 @@ export function OHWorkspace({
         count,
       }))
       .sort((a, b) => b.count - a.count);
-  }, [data.cells, day, status, area, reasonLabelMap]);
+  }, [data.cells, day, area, reasonLabelMap]);
 
   // Available districts
   const availableDistricts = useMemo(() => {
@@ -174,7 +172,6 @@ export function OHWorkspace({
     for (const c of data.cells) {
       if (c.report_date !== day) continue;
       if (area !== "all" && c.area !== area) continue;
-      if (status !== "all" && String(c.status) !== status) continue;
       if (reason !== "all" && c.reason !== reason) continue;
       const d = c.district || "Chưa rõ quận";
       counts.set(d, (counts.get(d) || 0) + c.orders);
@@ -182,7 +179,7 @@ export function OHWorkspace({
     return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
-  }, [data.cells, day, area, status, reason]);
+  }, [data.cells, day, area, reason]);
 
   // Available wards
   const availableWards = useMemo(() => {
@@ -191,7 +188,6 @@ export function OHWorkspace({
       if (c.report_date !== day) continue;
       if (area !== "all" && c.area !== area) continue;
       if (district !== "all" && (c.district || "Chưa rõ quận") !== district) continue;
-      if (status !== "all" && String(c.status) !== status) continue;
       if (reason !== "all" && c.reason !== reason) continue;
       const w = c.ward || "Chưa rõ phường";
       counts.set(w, (counts.get(w) || 0) + c.orders);
@@ -199,7 +195,7 @@ export function OHWorkspace({
     return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
-  }, [data.cells, day, area, district, status, reason]);
+  }, [data.cells, day, area, district, reason]);
 
   // Reason breakdown
   const reasons = useMemo(() => {
@@ -225,7 +221,8 @@ export function OHWorkspace({
   const hours = Array.from({ length: 24 }, (_, h) =>
     cells.filter((c) => c.hour === h).reduce((n, c) => n + c.orders, 0)
   );
-  const peak = Math.max(...hours, 1);
+  const peak = Math.max(...hours);
+  const peakHours = hours.flatMap((count, hour) => count === peak && peak > 0 ? [`${String(hour).padStart(2, "0")}:00`] : []);
 
   // Complete lists of rankings (ALL items)
   const allGeography = useMemo(() => ohRankings(cells, geoMode), [cells, geoMode]);
@@ -292,14 +289,12 @@ export function OHWorkspace({
     reasonName(code);
 
   const activeFilterCount =
-    (status !== "all" ? 1 : 0) +
     (reason !== "all" ? 1 : 0) +
     (area !== "all" ? 1 : 0) +
     (district !== "all" ? 1 : 0) +
     (ward !== "all" ? 1 : 0);
 
   function resetFilters() {
-    setStatus("all");
     setReason("all");
     setArea("all");
     setDistrict("all");
@@ -736,14 +731,6 @@ export function OHWorkspace({
             )}
           </div>
           <div className={s.activeChips}>
-            {status !== "all" && (
-              <span className={s.activeChip}>
-                Trạng thái: {status === "5" ? "Onhold (5)" : "Received (1)"}
-                <button title="Bỏ lọc trạng thái" onClick={() => setStatus("all")}>
-                  ×
-                </button>
-              </span>
-            )}
             {reason !== "all" && (
               <span className={s.activeChip}>
                 Lý do: {reasonLabelMap[reason] || reasonNameVi(reason)}
@@ -780,16 +767,6 @@ export function OHWorkspace({
         </div>
 
         <div className={s.filterGrid}>
-          {/* 1. Filter Trạng thái */}
-          <label>
-            Trạng thái lúc ghi nhận
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="all">Tất cả trạng thái</option>
-              <option value="5">Ghi nhận ở Onhold · 5</option>
-              <option value="1">Ghi nhận ở Received · 1</option>
-            </select>
-          </label>
-
           {/* 2. Filter Lý do OH */}
           <label>
             Lý do Onhold
@@ -906,8 +883,6 @@ export function OHWorkspace({
       <div className={s.metrics}>
         {[
           ["Mã đơn OH duy nhất", summary.total, "Khớp bộ lọc hiện tại"],
-          ["Ghi nhận ở Onhold", summary.held, "Trạng thái ở lần đầu ghi nhận = 5"],
-          ["Ghi nhận ở Received", summary.received, "Trạng thái ở lần đầu ghi nhận = 1"],
           ["Chưa xác định KV", summary.unknown, "Giữ riêng để không bỏ sót"],
         ].map(([label, val, hint]) => (
           <article key={label}>
@@ -1474,14 +1449,31 @@ export function OHWorkspace({
               <span>UTC+7</span>
             </div>
             <p className={s.muted}>Giờ OH của đơn tại lần đầu ghi nhận trong ngày {shortDate(day)}.</p>
+            <div className={s.hourLegend} aria-label="Thang màu theo số đơn so với giờ cao nhất">
+              <span>Ít OH</span>
+              {[
+                [0, "0 đơn"],
+                [1, "≤25% đỉnh"],
+                [2, ">25–50%"],
+                [3, ">50–75%"],
+                [4, ">75% đỉnh"],
+              ].map(([level, label]) => (
+                <span key={level}><i data-level={level} aria-hidden="true" />{label}</span>
+              ))}
+              <span>Nhiều OH</span>
+            </div>
+            <p className={s.hourPeak}>
+              {peak > 0
+                ? `Giờ cao nhất: ${peakHours.join(", ")} · ${number(peak)} đơn/giờ`
+                : "Chưa có đơn OH xác định giờ trong bộ lọc này."}
+            </p>
             <div className={s.hourGrid}>
               {hours.map((n, h) => (
                 <div
                   key={h}
                   className={s.hour}
-                  style={{
-                    background: n ? `rgba(37,99,235,${0.09 + (0.19 * n) / peak})` : undefined,
-                  }}
+                  data-level={n === 0 ? 0 : Math.ceil((n / peak) * 4)}
+                  title={`${String(h).padStart(2, "0")}:00 – ${number(n)} đơn OH${peak > 0 ? ` (${Math.round((n / peak) * 100)}% so với giờ cao nhất)` : ""}`}
                 >
                   <small>{String(h).padStart(2, "0")}:00</small>
                   <strong>{number(n)}</strong>

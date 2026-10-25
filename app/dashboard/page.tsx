@@ -1,10 +1,10 @@
 import { ProtectedPage } from "@/components/layout/protected-page";
-import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { OperationsDashboard } from "@/components/dashboard/operations-dashboard";
 
 export default function DashboardPage() {
   return (
     <ProtectedPage>
-      <DashboardView />
+      <OperationsDashboard />
     </ProtectedPage>
   );
 }

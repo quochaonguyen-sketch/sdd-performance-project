@@ -17,39 +17,39 @@ import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/realtime-dashboard", label: "Realtime Dashboard", icon: Activity },
-  { href: "/riders", label: "Riders", icon: Bike },
-  { href: "/team", label: "Nhân sự & lịch FTE", icon: UsersRound },
-  { href: "/performance", label: "Performance", icon: BarChart3 },
-  { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
-  { href: "/lmhub-inventory", label: "Tồn pickup", icon: PackageOpen },
-  { href: "/inventory-delivery", label: "Tồn delivery", icon: Truck },
-  { href: "/onhold", label: "Phân tích OH", icon: BarChart3 },
-  { href: "/notes", label: "Ghi chú", icon: ListChecks },
-  { href: "/off-schedule", label: "Lịch OFF", icon: ListChecks },
-  { href: "/tasks", label: "Công việc", icon: ListChecks },
-  { href: "/violations", label: "Vi phạm", icon: ListChecks },
-  { href: "/route-sheet", label: "Excel / Google Sheet", icon: ListChecks },
-  { href: "/imports", label: "Nhập dữ liệu", icon: PackagePlus },
-  { href: "/data-sources", label: "Nguồn dữ liệu", icon: Activity },
-  { href: "/settings", label: "Thành viên", icon: UsersRound },
-  { href: "/user-activity", label: "Nhật ký người dùng", icon: Activity },
+  { href: "/realtime-dashboard", label: "Live Dashboard", icon: Activity },
+  { href: "/riders", label: "Rider Directory", icon: Bike },
+  { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
+  { href: "/performance", label: "Rider Performance", icon: BarChart3 },
+  { href: "/pickup-realtime", label: "Live Pickup", icon: PackagePlus },
+  { href: "/lmhub-inventory", label: "Pickup Backlog", icon: PackageOpen },
+  { href: "/inventory-delivery", label: "Delivery Backlog", icon: Truck },
+  { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
+  { href: "/notes", label: "Notes", icon: ListChecks },
+  { href: "/off-schedule", label: "Time Off", icon: ListChecks },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/violations", label: "Violations", icon: ListChecks },
+  { href: "/route-sheet", label: "Operations Sheets", icon: ListChecks },
+  { href: "/imports", label: "Data Import", icon: PackagePlus },
+  { href: "/data-sources", label: "Data Sources", icon: Activity },
+  { href: "/settings", label: "Members", icon: UsersRound },
+  { href: "/user-activity", label: "Activity Log", icon: Activity },
 ];
 
 const mobileNavItems = navItems.slice(0, 4);
 const volumeItems = [
-  { href: "/volume/delivery", label: "Delivery", icon: Truck },
-  { href: "/volume/pickup", label: "Pickup", icon: PackagePlus },
+  { href: "/volume/delivery", label: "Delivery Volume", icon: Truck },
+  { href: "/volume/pickup", label: "Pickup Volume", icon: PackagePlus },
 ];
 const pickupItems = [
-  { href: "/pickup-management", view: null, label: "Quản lý PUP", icon: ListChecks },
-  { href: "/pickup-management?view=replacement", view: "replacement", label: "Thế pick", icon: Truck },
+  { href: "/pickup-management", view: null, label: "Pickup Points", icon: ListChecks },
+  { href: "/pickup-management?view=replacement", view: "replacement", label: "Pickup Coverage", icon: Truck },
 ];
 const returnItems = [
-  { href: "/return-orders", view: null, label: "Hàng trả", icon: PackageSearch },
+  { href: "/return-orders", view: null, label: "Return Orders", icon: PackageSearch },
 ];
 const toolItems = [
-  { href: "/zones", label: "Khu vực", icon: PencilRuler },
+  { href: "/zones", label: "Zones", icon: PencilRuler },
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
@@ -103,11 +103,11 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const [moduleSelection, setModuleSelection] = useState<{ pathname: string; module: WorkspaceModule } | null>(null);
   const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
   const modules = [
-    { id: "operations" as const, label: "Vận hành", icon: LayoutGrid },
-    { id: "team" as const, label: "Đội ngũ", icon: UsersRound },
-    ...(!memberToolRestricted ? [{ id: "routes" as const, label: "Bản đồ & tuyến", icon: Map }] : []),
-    { id: "data" as const, label: "Excel & dữ liệu", icon: Table2 },
-    { id: "settings" as const, label: "Quản trị", icon: Settings2 },
+    { id: "operations" as const, label: "Operations", icon: LayoutGrid },
+    { id: "team" as const, label: "Workforce", icon: UsersRound },
+    ...(!memberToolRestricted ? [{ id: "routes" as const, label: "Maps & Routes", icon: Map }] : []),
+    { id: "data" as const, label: "Data Management", icon: Table2 },
+    { id: "settings" as const, label: "Administration", icon: Settings2 },
   ];
   const moduleItems = selectedModule === "team" ? workspaceItems.filter((item) => teamPaths.includes(item.href))
     : selectedModule === "routes" ? visibleToolItems
@@ -161,7 +161,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   return (
     <div className={cn("app-shell-technical", !sidebarOpen && "is-sidebar-collapsed")}>
       <div className="app-navigation" id="operations-sidebar">
-        <nav className="app-module-rail" aria-label="Chọn module">
+        <nav className="app-module-rail" aria-label="Select workspace">
           <Link href="/dashboard" className="app-rail-brand" aria-label={`${APP_NAME} — Dashboard`}><SddMark /></Link>
           {modules.map((module) => {
             const Icon = module.icon;
@@ -170,24 +170,24 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
         </nav>
         <aside className="app-sidebar" id="operations-module-panel" aria-label={modules.find((module) => module.id === selectedModule)?.label} aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
           <Link href="/dashboard" className="app-sidebar-brand" aria-label={`${APP_NAME} — Dashboard`}><AppBrand inverse /></Link>
-          <div className="app-sidebar-context"><span>Địa bàn</span><strong>Khu vực 1–5</strong></div>
+          <div className="app-sidebar-context"><span>Coverage</span><strong>Areas 1–5</strong></div>
           <SidebarNavigation moduleKey={selectedModule} activeKey={`${pathname}:${searchParams.get("view") ?? ""}`} open={sidebarOpen}>
-            <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Không gian vận hành" : modules.find((module) => module.id === selectedModule)?.label}</p>
+            <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Operations Workspace" : modules.find((module) => module.id === selectedModule)?.label}</p>
             {moduleItems.map((item) => {
               const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
               const Icon = item.icon;
               return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
             })}
             {selectedModule === "operations" ? <>
-              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Sản lượng</p>
+              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Volume</p>
               {volumeItems.map((item) => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={cn("app-nav-link", pathname === item.href && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
-              {visiblePickupItems.length ? <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Quản lý pickup</p> : null}
+              {visiblePickupItems.length ? <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Pickup Management</p> : null}
               {visiblePickupItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
-              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Hàng trả</p>
+              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Returns</p>
               {visibleReturnItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
             </> : null}
           </SidebarNavigation>
-          <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Khu vực 1–5</span></div>
+          <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Areas 1–5</span></div>
         </aside>
       </div>
 

@@ -45,7 +45,7 @@ export function SidebarNavigation({ children, moduleKey, activeKey, open }: {
     return () => { cancel(); preference.removeEventListener("change", cancel); };
   }, [moduleKey, open]);
 
-  return <nav ref={ref} className="app-sidebar-nav" aria-label="Điều hướng chính">
+  return <nav ref={ref} className="app-sidebar-nav" aria-label="Main navigation">
     <span className="app-sidebar-active-marker" aria-hidden="true" />
     {children}
   </nav>;
