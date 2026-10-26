@@ -1,5 +1,7 @@
 # Tồn pickup
 
+Worker `sdd-web-data` có cache bản ghi chuẩn hóa và khoảng phân trang theo station trong `data/pickup-inventory-{records,windows}-<station>.json`. Mỗi lượt vẫn kiểm trạng thái SPX mới, chỉ tái sử dụng bản ghi có fingerprint không đổi; đơn đã lấy/Onhold hoặc không còn trong nguồn được loại. Đọc tối đa 500 đơn/task mỗi trang (đã xác minh trực tiếp SPX), chia khoảng nhỏ trước khi phân trang, chạy song song với tối đa 12 HTTP request/client và dùng lại nhóm kết nối. Artifact có thời gian từng bước theo ms, số request theo endpoint và số đơn dùng cache. Cache tự cập nhật ở lượt worker tiếp theo, không cần thay đổi database.
+
 Trang này chỉ hiển thị **Assigned thực sự**, chưa Onhold và chưa Picked. Bỏ lựa chọn Created/Onhold trên trang. Worker đọc SPX status 2 cho toàn bộ backlog, kiểm thêm các cờ `on_hold_reason`, `pickup_on_hold_reason`, tên lý do Onhold và thời điểm đã lấy. Created không được suy thành Assigned chỉ vì điểm lấy hàng có task. Bước ghi từ chối mọi dòng không phải Assigned; snapshot 0 đơn chỉ được ghi sau khi đã xác nhận đọc đủ nguồn, để không giữ tồn cũ khi mọi đơn đã xử lý. Quy tắc nguồn ở `sdd-web-data/sdd_data/pickup_status.py`; kiểm tra hồi quy trong `tests/test_pickup_inventory.py` của sdd-web-data.
 
 - Tồn khu vực / zone: danh sách mã zone trực tiếp theo KV1–KV5, không còn bước nhóm theo phường. Tìm mã zone, lọc COT đơn và mức tồn; KPI và biểu đồ dùng cùng dữ liệu zone. Zone trống vẫn có nhóm Chưa có mã zone.

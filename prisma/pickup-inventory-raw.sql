@@ -14,6 +14,7 @@ create table if not exists public.pickup_48h_no_api2 (
   pickup_point_id text default '',
   pickup_point_name text default '',
   pickup_point_district text default '',
+  district text not null default '',
   full_address text default '',
   create_time text default '',
   status text default '',

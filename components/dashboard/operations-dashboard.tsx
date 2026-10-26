@@ -17,7 +17,7 @@ import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
 
 type PickupLive = { riders: PickupRider[]; riderSnapshotAt: string | null; snapshotAt: string | null; riderStale?: boolean };
 type PickupBacklog = { rows: { area: string; zone: string; cot: string; orders: number }[]; snapshotAt: string | null };
-type Source<T> = { data: T | null; error: string | null };
+type Source<T> = { data: T | null; error: string | null; loading?: boolean };
 export type DashboardOverviewData = {
   operations: Source<OperationsOverview>; performance: Source<PerformanceResult>;
   pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>;
@@ -34,38 +34,63 @@ export function OperationsDashboard() {
   const [updated, setUpdated] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const request = useRef(0);
+  const inFlight = useRef(false);
+  const sourceCache = useRef(new Map<string, { value: unknown; expiresAt: number; url: string }>());
   const root = useRef<HTMLDivElement>(null);
   useReportInitialDataLoading("dashboard", loading && !updated);
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = true) => {
+    if (!force && inFlight.current) return;
     controller.current?.abort();
     const abort = new AbortController(); controller.current = abort;
     const id = ++request.current;
+    inFlight.current = true;
     setLoading(true);
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
-    async function source<T>(url: string): Promise<Source<T>> {
+    async function source<K extends keyof DashboardOverviewData>(key: K, url: string, ttl: number) {
+      const publish = (result: DashboardOverviewData[K]) => {
+        if (id !== request.current || abort.signal.aborted) return;
+        setData(previous => ({ ...previous, [key]: { ...result, loading: false } }));
+      };
+      const cached = sourceCache.current.get(key);
+      const requestKey = `${today}:${url}`;
+      if (!force && cached && cached.url === requestKey && cached.expiresAt > Date.now()) {
+        publish({ data: cached.value, error: null } as DashboardOverviewData[K]);
+        return;
+      }
+      setData(previous => ({ ...previous, [key]: { ...previous[key], loading: true } }));
       try {
-        const res = await fetch(url, { cache: "no-store", signal: abort.signal });
+        const res = await fetch(url, { cache: "no-store", signal: AbortSignal.any([abort.signal, AbortSignal.timeout(45_000)]) });
         const payload = await res.json();
         if (!res.ok || payload.success === false) throw new Error(payload.error || "Không tải được dữ liệu");
-        return { data: payload as T, error: null };
+        if (id !== request.current || abort.signal.aborted) return;
+        // Keep only this mounted dashboard's five sources; never persist user data.
+        const partialFailure = payload.live?.error || payload.backlog?.error || payload.delivery?.error || payload.pickup?.error;
+        if (!partialFailure) sourceCache.current.set(key, { value: payload, expiresAt: Date.now() + ttl, url: requestKey });
+        publish({ data: payload, error: null } as DashboardOverviewData[K]);
       } catch (error) {
-        return { data: null, error: error instanceof Error ? error.message : "Không tải được dữ liệu" };
+        if (id !== request.current || abort.signal.aborted) return;
+        sourceCache.current.delete(key);
+        setData(previous => ({ ...previous, [key]: { ...previous[key], loading: false, error: error instanceof Error ? error.message : "Không tải được dữ liệu" } }));
       }
     }
-    const [operations, performance, pickup, pickupBacklog, volume] = await Promise.all([
-      source<OperationsOverview>("/api/dashboard/operations"),
-      source<PerformanceResult>(`/api/driver-performance?date=${today}&period=week&pageSize=25`),
-      source<PickupLive>("/api/pickup-realtime"),
-      source<PickupBacklog>("/api/pickup-inventory?view=zone-board&p_status=Assigned"),
-      source<DashboardVolumeData>("/api/dashboard/volume"),
+    // Remove expired payloads before starting the next refresh.
+    for (const [key, entry] of sourceCache.current) {
+      if (entry.expiresAt <= Date.now()) sourceCache.current.delete(key);
+    }
+    await Promise.all([
+      source("operations", "/api/dashboard/operations", 30_000),
+      source("performance", `/api/driver-performance?date=${today}&period=week&pageSize=25`, 300_000),
+      source("pickup", "/api/pickup-realtime", 30_000),
+      source("pickupBacklog", "/api/pickup-inventory?view=zone-board&p_status=Assigned", 30_000),
+      source("volume", "/api/dashboard/volume", 120_000),
     ]);
     if (id !== request.current || abort.signal.aborted) return;
-    setData({ operations, performance, pickup, pickupBacklog, volume });
+    inFlight.current = false;
     setUpdated(new Date().toISOString()); setLoading(false);
   }, []);
   useEffect(() => {
     const initial = setTimeout(() => void load(), 0);
-    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000);
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(false); }, 60_000);
     return () => { clearTimeout(initial); clearInterval(timer); controller.current?.abort(); };
   }, [load]);
   useDashboardSpotlight(root, { ready: !loading, version: updated ? Date.parse(updated) : 0, scope: "operations-overview" });
@@ -101,8 +126,8 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
   const pickupRate = pickup ? completionRate(pickup.picked, pickup.assigned) : null;
   const liveError = data.operations.error ?? data.operations.data?.live.error;
   const deliveryError = data.operations.error ?? data.operations.data?.backlog.error;
-  const issues = [liveError && "Live Dashboard", data.performance.error && "Rider Performance", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog"].filter(Boolean);
-  return <div className={s.dashboard} aria-busy={loading}>
+  const issues = [liveError && "Live Dashboard", data.performance.error && "Rider Performance", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume"].filter(Boolean);
+  return <div className={s.dashboard}>
     <header className={s.header}>
       <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
       <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
@@ -119,19 +144,19 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
     </section>
 
     <SectionTitle number="01" title="Volume Overview" sub="Sản lượng giao nhận · ngày gần nhất và xu hướng 7/14 ngày" />
-    <section id="volume-overview" aria-label="Tổng hợp Volume"><DashboardVolume source={data.volume} loading={loading}/></section>
+    <section id="volume-overview" aria-label="Tổng hợp Volume"><DashboardVolume source={data.volume} loading={data.volume.loading ?? loading}/></section>
 
     <SectionTitle number="02" title="Live Operations" sub="Tiến độ hiện tại" />
     <div className={s.twoColumns}>
       <Panel title="Delivery progress" eyebrow="LIVE DASHBOARD" href="/realtime-dashboard" icon={<Activity size={17}/>}>
-        <SourceStatus error={liveError} at={data.operations.data?.live.snapshotAt} loading={loading} />
+        <SourceStatus error={liveError} at={data.operations.data?.live.snapshotAt} loading={data.operations.loading ?? loading} />
         <div className={s.progressLead}><strong>{pct(liveRate)}</strong><span>Đã giao thành công<small>{data.operations.data?.live.workDate ? `Ngày vận hành ${dayLabel(data.operations.data.live.workDate)}` : "Chưa có ngày vận hành"}</small></span></div>
         <Progress done={live?.delivered} total={live?.assigned} tone="blue" label="Tỷ lệ giao thành công"/>
         <Metrics items={[["Đã gán",live?.assigned],["Đã giao",live?.delivered],["Đang giao",live?.delivering],["Failed",live?.failed]]}/>
         <div className={s.panelFooter}><span>{fmt(live?.riders)} rider có dữ liệu</span><span>{fmt(live?.idleRiders)} rider còn đơn và ngừng giao ≥60 phút</span></div>
       </Panel>
       <Panel title="Pickup progress" eyebrow="LIVE PICKUP" href="/pickup-realtime" icon={<PackageCheck size={17}/>}>
-        <SourceStatus error={data.pickup.error} at={pickupSource?.riderSnapshotAt} loading={loading} stale={pickupSource?.riderStale}/>
+        <SourceStatus error={data.pickup.error} at={pickupSource?.riderSnapshotAt} loading={data.pickup.loading ?? loading} stale={pickupSource?.riderStale}/>
         <div className={s.progressLead} data-tone="teal"><strong>{pct(pickupRate)}</strong><span>Đã lấy thành công<small>Tổng theo rider KV1–KV5</small></span></div>
         <Progress done={pickup?.picked} total={pickup?.assigned} tone="teal" label="Tỷ lệ lấy thành công"/>
         <Metrics items={[["Đã gán",pickup?.assigned],["Đã lấy",pickup?.picked],["Chờ lấy",pickup ? Math.max(0,pickup.assigned-pickup.picked-pickup.onhold) : null],["On Hold",pickup?.onhold]]}/>
@@ -151,7 +176,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
             const pickupRate = "missing" in row ? null : completionRate(row.pickup_picked,row.pickup_assigned);
             return <div key={row.date} className={s.trendDay}><div className={s.trendValues}><span>{pct(deliveryRate)}</span><span>{pct(pickupRate)}</span></div><div className={s.barPair} aria-hidden="true"><i data-tone="blue" style={{height:`${Math.min(100,Math.max(0,deliveryRate ?? 0))}%`}}/><i data-tone="teal" style={{height:`${Math.min(100,Math.max(0,pickupRate ?? 0))}%`}}/></div><span>{dayLabel(row.date)}</span></div>;
           })}
-          {!performance && <p className={s.empty}>{loading ? "Đang tải xu hướng…" : "Chưa có dữ liệu hiệu suất"}</p>}
+          {!performance && <p className={s.empty}>{(data.performance.loading ?? loading) ? "Đang tải xu hướng…" : "Chưa có dữ liệu hiệu suất"}</p>}
         </div>
         <p className={s.caption}>Tỷ lệ = số hoàn thành / số được gán. Ngày thiếu dữ liệu hiển thị “—”; tỷ lệ trên 100% giữ số thực và giới hạn chiều cao cột.</p>
       </Panel>
@@ -165,13 +190,13 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
     <SectionTitle number="04" title="Backlog Control" sub="Hai nguồn tồn độc lập · không cộng với đơn đang giao/đang lấy"/>
     <div className={s.twoColumns}>
       <Panel title="Pickup Backlog" eyebrow="ASSIGNED · CHỜ LẤY" href="/lmhub-inventory" icon={<Layers3 size={17}/>}>
-        <SourceStatus error={data.pickupBacklog.error} at={data.pickupBacklog.data?.snapshotAt} loading={loading}/>
+        <SourceStatus error={data.pickupBacklog.error} at={data.pickupBacklog.data?.snapshotAt} loading={data.pickupBacklog.loading ?? loading}/>
         <Metrics items={[["Tổng tồn",pickupBacklog?.total],["COT 1",pickupBacklog?.cot1],["COT 2",pickupBacklog?.cot2]]}/>
         <h3 className={s.listTitle}>Zone có nhiều tồn nhất</h3>
         <Ranking rows={pickupBacklog?.top ?? []} ready={!!pickupBacklog} empty="Chưa ghi nhận tồn pickup"/>
       </Panel>
       <Panel title="Delivery Backlog" eyebrow="TỒN GIAO HÀNG" href="/inventory-delivery" icon={<Truck size={17}/>}>
-        <SourceStatus error={deliveryError} at={data.operations.data?.backlog.snapshotAt} loading={loading}/>
+        <SourceStatus error={deliveryError} at={data.operations.data?.backlog.snapshotAt} loading={data.operations.loading ?? loading}/>
         <Metrics items={[["Tổng tồn",delivery?.total],["COT 1",delivery?.cot1],["COT 2",delivery?.cot2]]}/>
         {!!delivery?.unknownCot && <p className={s.caption}>{fmt(delivery.unknownCot)} đơn chưa xác định COT.</p>}
         <h3 className={s.listTitle}>Phường có nhiều tồn nhất</h3>

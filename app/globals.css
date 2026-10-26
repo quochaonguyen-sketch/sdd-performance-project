@@ -134,7 +134,7 @@ textarea {
  */
 .route-reveal-content {
   min-width: 0;
-  opacity: 0;
+  opacity: 1;
 }
 
 .route-reveal-content.is-loading {
@@ -145,7 +145,7 @@ textarea {
 }
 
 .route-reveal-content.is-ready {
-  animation: route-content-reveal var(--dur-long) var(--ease-out) both;
+  animation: none;
 }
 
 /* Shared, predictable height for viewport-centered modal panels. */

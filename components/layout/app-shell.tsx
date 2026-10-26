@@ -24,6 +24,7 @@ const navItems = [
   { href: "/pickup-realtime", label: "Live Pickup", icon: PackagePlus },
   { href: "/lmhub-inventory", label: "Pickup Backlog", icon: PackageOpen },
   { href: "/inventory-delivery", label: "Delivery Backlog", icon: Truck },
+  { href: "/backlog-history", label: "Backlog History", icon: BarChart3 },
   { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
   { href: "/notes", label: "Notes", icon: ListChecks },
   { href: "/off-schedule", label: "Time Off", icon: ListChecks },

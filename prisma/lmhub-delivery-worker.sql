@@ -54,7 +54,7 @@ $$;
 create or replace function public.publish_sdd_delivery_inventory(
   p_job_id uuid,p_worker_id text,p_snapshot_id text,p_snapshot_at timestamptz,
   p_rows jsonb,p_areas text[])
-returns integer language plpgsql security invoker set search_path = '' as $$
+returns integer language plpgsql security invoker set search_path = '' set statement_timeout = '60s' set work_mem = '16MB' as $$
 declare job public.lmhub_fetch_jobs; row_total integer;
 begin
   perform pg_catalog.pg_advisory_xact_lock(734291, 12);
@@ -77,7 +77,8 @@ begin
       or r.area is null or not r.area=any(p_areas) or r.status is distinct from 'LMHub_Received') then
     raise exception 'Invalid inventory row';
   end if;
-  if (select count(distinct r->>'shipment_id') from jsonb_array_elements(p_rows) r) <> row_total then
+  -- Sort only shipment IDs, not full JSON order objects (which spill to disk).
+  if (select count(distinct r.shipment_id) from jsonb_to_recordset(p_rows) as r(shipment_id text)) <> row_total then
     raise exception 'Duplicate inventory shipment';
   end if;
   insert into public.lmhub_inventory_rows(snapshot_id,snapshot_at,shipment_id,create_time,received_time,
@@ -90,7 +91,7 @@ begin
   delete from public.lmhub_inventory_rows where area=any(p_areas) and snapshot_id<>p_snapshot_id;
   update public.lmhub_fetch_jobs set status='DONE',snapshot_id=p_snapshot_id,row_count=row_total,
     message='Delivery · '||row_total||' đơn · snapshot '||p_snapshot_id,error_message=null,
-    finished_at=now(),updated_at=now() where id=p_job_id;
+    finished_at=clock_timestamp(),updated_at=clock_timestamp() where id=p_job_id;
   return row_total;
 end;
 $$;

@@ -55,7 +55,7 @@ export function useAppLoading() {
 }
 
 /**
- * Keeps the global rider loader visible for the first data request of a page.
+ * Reports initial requests to the non-blocking global progress bar.
  * Later manual/realtime refreshes keep using the page's local loading state.
  */
 export function useReportInitialDataLoading(scope: string, loading: boolean) {
@@ -68,10 +68,10 @@ export function useReportInitialDataLoading(scope: string, loading: boolean) {
     const shouldReport = loading && !completed.current;
 
     // Register the page request first, then release the route handoff. This
-    // guarantees that the shared loader never has an empty frame in between.
-    setAppLoading(key, shouldReport, shouldReport ? 0 : 220);
+    // keeps progress continuous during the route handoff.
+    setAppLoading(key, shouldReport);
     releaseRouteLoading();
 
-    return () => setAppLoading(key, false, 220);
+    return () => setAppLoading(key, false);
   }, [key, loading]);
 }

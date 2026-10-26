@@ -14,6 +14,8 @@ The source stores one JSON row with rider/group arrays and timestamps. Single-ro
 
 ## Display and refresh
 
+Worker optimization (26/10/2026): read SPX tasks, live orders, routes, and database reference data concurrently. The shared live reader uses verified 500-row pages and cached time boundaries, splits mutable lists into single-page windows, reuses page connections, and caps all nested requests at 12 concurrent HTTP requests per client. Tasks and order statuses are fetched fresh every run. Geography can reuse a local cache only when the project/station and inventory snapshot match; the snapshot head is rechecked after either cache or database reads. A changed snapshot forces a fresh read. `python -m sdd_data.pickup_realtime --once --dry-run` validates and writes a local artifact without database publication. Timings, request counts and geography cache hits are included in artifact stats.
+
 Five colored area cards, rider/zone tabs, COT/coverage/name/zone filters and 50 riders per page. Rider KPIs use the exact same rider filters and roster KV; geography KPIs on the zone tab use geography scope. Shared assignments can make the sum of rider assigned quantities exceed distinct order totals. Zone/ward filtering uses exact detail groups; incomplete legacy groups never imply full-rider quantities for one zone.
 
 When a legacy rider has no zone data, current Assigned/Onhold inventory RPC results supply zone/ward identities by exact rider code, without supplying quantities. Realtime routes take precedence. Source timestamps are shown separately.

@@ -14,8 +14,8 @@ export function NavigationPendingIndicator() {
   const loadingKey = `route:${instanceId}`;
 
   useEffect(() => {
-    setAppLoading(loadingKey, pending, pending ? 0 : 900);
-    return () => setAppLoading(loadingKey, false, 900);
+    setAppLoading(loadingKey, pending);
+    return () => setAppLoading(loadingKey, false);
   }, [loadingKey, pending]);
 
   return (

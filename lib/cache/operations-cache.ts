@@ -1,6 +1,7 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import type { AttendanceLog, Rider, RiderRegistryItem } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 
 type NoteStatus = "ACTIVE" | "ARCHIVED";
 
@@ -19,20 +20,14 @@ export type AttendanceSchedulePayload = {
   logs: AttendanceLog[];
 };
 
-type CacheEntry<T> = {
-  expiresAt: number;
-  value: T;
-};
-
-const ridersCache = new Map<string, CacheEntry<Rider[]>>();
-const riderRegistryCache = new Map<string, CacheEntry<RiderRegistryItem[]>>();
-const notesCache = new Map<string, CacheEntry<CachedPersonalNote[]>>();
-const attendanceCache = new Map<string, CacheEntry<AttendanceSchedulePayload>>();
-
 const RIDERS_CACHE_KEY = "all";
 const RIDERS_TTL_MS = 60_000;
 const NOTES_TTL_MS = 45_000;
 const ATTENDANCE_TTL_MS = 30_000;
+const ridersCache = new TtlCache<Rider[]>(RIDERS_TTL_MS, 1);
+const riderRegistryCache = new TtlCache<RiderRegistryItem[]>(RIDERS_TTL_MS, 1);
+const notesCache = new TtlCache<CachedPersonalNote[]>(NOTES_TTL_MS, 100);
+const attendanceCache = new TtlCache<AttendanceSchedulePayload>(ATTENDANCE_TTL_MS, 6);
 
 export function invalidateRidersCache() {
   ridersCache.clear();
@@ -50,79 +45,56 @@ export function invalidateAttendanceCache(month?: string) {
 }
 
 export async function getCachedRiders() {
-  const now = Date.now();
-  const cached = ridersCache.get(RIDERS_CACHE_KEY);
-  if (cached && cached.expiresAt > now) {
-    return { data: cached.value, cache: cacheState(cached) };
-  }
-
-  const riders = await fetchAll<Rider>((from, to) =>
+  const result = await ridersCache.load(RIDERS_CACHE_KEY, () => fetchAll<Rider>((from, to) =>
     createAdminClient()
       .from("riders")
       .select("*").in("kv", OPERATING_AREAS)
       .order("updated_at", { ascending: false })
       .range(from, to),
-  );
-
-  ridersCache.set(RIDERS_CACHE_KEY, { value: riders, expiresAt: now + RIDERS_TTL_MS });
-  return { data: riders, cache: cacheState<Rider[]>(undefined) };
+  ));
+  return { data: result.value, cache: cacheState(result) };
 }
 
 export async function getCachedRiderRegistry() {
-  const now = Date.now();
-  const cached = riderRegistryCache.get(RIDERS_CACHE_KEY);
-  if (cached && cached.expiresAt > now) {
-    return { data: cached.value, cache: cacheState(cached) };
-  }
-
-  const rows = await fetchAll<RiderRegistryRow>((from, to) =>
-    createAdminClient()
-      .from("riders")
-      .select(RIDER_REGISTRY_SELECT).in("kv", OPERATING_AREAS)
-      .order("updated_at", { ascending: false })
-      .range(from, to)
-      .overrideTypes<RiderRegistryRow[], { merge: false }>(),
-  );
-  const riders = rows.map(toRiderRegistryItem);
-
-  riderRegistryCache.set(RIDERS_CACHE_KEY, { value: riders, expiresAt: now + RIDERS_TTL_MS });
-  return { data: riders, cache: cacheState<RiderRegistryItem[]>(undefined) };
+  const result = await riderRegistryCache.load(RIDERS_CACHE_KEY, async () => {
+    const rows = await fetchAll<RiderRegistryRow>((from, to) =>
+      createAdminClient()
+        .from("riders")
+        .select(RIDER_REGISTRY_SELECT).in("kv", OPERATING_AREAS)
+        .order("updated_at", { ascending: false })
+        .range(from, to)
+        .overrideTypes<RiderRegistryRow[], { merge: false }>(),
+    );
+    return rows.map(toRiderRegistryItem);
+  });
+  return { data: result.value, cache: cacheState(result) };
 }
 
 export async function getCachedPersonalNotes(
   userId: string,
   fetchNotes: () => Promise<{ data: CachedPersonalNote[] | null; error: { message: string } | null }>,
 ) {
-  const now = Date.now();
-  const cached = notesCache.get(userId);
-  if (cached && cached.expiresAt > now) {
-    return { data: cached.value, error: null, cache: cacheState(cached) };
+  try {
+    const result = await notesCache.load(userId, async () => {
+      const { data, error } = await fetchNotes();
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    });
+    return { data: result.value, error: null, cache: cacheState(result) };
+  } catch (error) {
+    return { data: null, error: { message: error instanceof Error ? error.message : "Không tải được ghi chú" }, cache: { hit: false, expires_at: null } };
   }
-
-  const { data, error } = await fetchNotes();
-  if (error) return { data: null, error, cache: cacheState<CachedPersonalNote[]>(undefined) };
-
-  const notes = data ?? [];
-  notesCache.set(userId, { value: notes, expiresAt: now + NOTES_TTL_MS });
-  return { data: notes, error: null, cache: cacheState<CachedPersonalNote[]>(undefined) };
 }
 
 export async function getCachedAttendanceSchedule(month: string, load: () => Promise<AttendanceSchedulePayload>) {
-  const now = Date.now();
-  const cached = attendanceCache.get(month);
-  if (cached && cached.expiresAt > now) {
-    return { data: cached.value, cache: cacheState(cached) };
-  }
-
-  const payload = await load();
-  attendanceCache.set(month, { value: payload, expiresAt: now + ATTENDANCE_TTL_MS });
-  return { data: payload, cache: cacheState<AttendanceSchedulePayload>(undefined) };
+  const result = await attendanceCache.load(month, load);
+  return { data: result.value, cache: cacheState(result) };
 }
 
-function cacheState<T>(entry: CacheEntry<T> | undefined) {
+function cacheState(entry: { hit: boolean; expiresAt: number }) {
   return {
-    hit: Boolean(entry && entry.expiresAt > Date.now()),
-    expires_at: entry ? new Date(entry.expiresAt).toISOString() : null,
+    hit: entry.hit,
+    expires_at: new Date(entry.expiresAt).toISOString(),
   };
 }
 

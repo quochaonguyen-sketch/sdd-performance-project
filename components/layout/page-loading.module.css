@@ -1,0 +1,13 @@
+.loading { display: grid; gap: 20px; min-width: 0; padding-block: 8px; }
+.status { margin: 0; color: var(--color-muted); font-size: 14px; }
+.heading, .label, .value, .row { border-radius: var(--radius-control); background: var(--color-paper-3); }
+.heading { width: min(260px, 65%); height: 28px; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.card, .panel { padding: 20px; border: 1px solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-paper); }
+.card { display: grid; gap: 18px; min-height: 112px; }
+.label { width: 70%; height: 12px; }
+.value { width: 45%; height: 28px; }
+.panel { display: grid; gap: 18px; min-height: 300px; }
+.row { height: 20px; }
+.row:nth-child(even) { width: 82%; }
+@media (max-width: 768px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
