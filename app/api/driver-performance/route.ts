@@ -14,8 +14,8 @@ export async function GET(request: Request) {
 
   try {
     const filters = parsePerformanceFilters(new URL(request.url).searchParams);
-    const result = await getDriverPerformance(filters);
-    return NextResponse.json({ success: true, ...result });
+    const result = await getDriverPerformance(filters, new URL(request.url).searchParams.get("_r")??"");
+    return NextResponse.json({ success: true, ...result },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     return NextResponse.json(
       {

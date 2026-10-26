@@ -2,73 +2,38 @@ import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { buildRiderDaily,readDetailRange,summarizeRiderDaily,type DetailSource } from "@/lib/performance/rider-detail";
 
-const idSchema = z.string().uuid();
-
-async function getSession() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  return { admin: createAdminClient() };
+export async function GET(request:Request,context:{params:Promise<{id:string}>}){
+  try{return await readPerformance(request,context);}catch{return NextResponse.json({success:false,error:"Không thể tải hoặc xuất Performance. Vui lòng thử lại."},{status:503});}
 }
-
-function readDays(request: Request) {
-  const raw = new URL(request.url).searchParams.get("days");
-  const parsed = Number(raw ?? 45);
-  if (!Number.isFinite(parsed)) return 45;
-  return Math.min(180, Math.max(7, Math.trunc(parsed)));
-}
-
-function sinceDate(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - (days - 1));
-  return date.toISOString().slice(0, 10);
-}
-
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+async function readPerformance(request:Request,context:{params:Promise<{id:string}>}){
+  const session=await getCurrentUserContext();
+  if(!session)return NextResponse.json({success:false,error:"Chưa đăng nhập"},{status:401});
+  const {id}=await context.params;
+  if(!z.string().uuid().safeParse(id).success)return NextResponse.json({success:false,error:"Rider không hợp lệ"},{status:400});
+  const query=new URL(request.url).searchParams;
+  let range;
+  try{range=readDetailRange(query);}catch(error){return NextResponse.json({success:false,error:error instanceof Error?error.message:"Khoảng ngày không hợp lệ"},{status:400});}
+  const admin=createAdminClient();
+  const {data:rider,error:riderError}=await admin.from("riders").select("id,rider_code,full_name,avatar_url,kv,cot,status,pickup_district,pickup_ward,delivery_district,delivery_ward").in("kv",OPERATING_AREAS).eq("id",id).maybeSingle();
+  if(riderError)return NextResponse.json({success:false,error:"Không đọc được hồ sơ rider"},{status:503});
+  if(!rider)return NextResponse.json({success:false,error:"Không tìm thấy rider trong KV1–KV5"},{status:404});
+  const performance:DetailSource[]=[];
+  for(let offset=0;;offset+=500){
+    const {data,error}=await admin.from("driver_performance_daily").select("*").eq("driver_id",rider.rider_code).gte("report_date",range.from).lte("report_date",range.to).order("report_date",{ascending:false}).order("performance_id").range(offset,offset+499);
+    if(error)return NextResponse.json({success:false,error:"Không tải được dữ liệu Performance"},{status:503});
+    performance.push(...(data??[]));if((data?.length??0)<500)break;
   }
-
-  const { id } = await context.params;
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) {
-    return NextResponse.json({ success: false, error: "Rider không hợp lệ" }, { status: 400 });
+  const daily=buildRiderDaily(performance,rider.cot);
+  const headers={"Cache-Control":"private, no-store"};
+  if(query.get("export")==="xlsx"){
+    const {riderPerformanceWorkbook}=await import("@/lib/performance/rider-export");
+    const XLSX=await import("xlsx");const workbook=riderPerformanceWorkbook(rider,range,daily);
+    const buffer=XLSX.write(workbook,{type:"buffer",bookType:"xlsx",compression:true});
+    const code=rider.rider_code.replace(/[^a-zA-Z0-9_-]/g,"_");
+    return new Response(new Uint8Array(buffer),{headers:{...headers,"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="performance-${code}-${range.from}-${range.to}.xlsx"`}});
   }
-
-  const { data: rider, error: riderError } = await session.admin
-    .from("riders")
-    .select("id,rider_code,full_name,avatar_url,kv,cot,status,pickup_district,pickup_ward,delivery_district,delivery_ward").in("kv", OPERATING_AREAS)
-    .eq("id", parsedId.data)
-    .maybeSingle();
-
-  if (riderError) {
-    return NextResponse.json({ success: false, error: riderError.message }, { status: 400 });
-  }
-  if (!rider) {
-    return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
-  }
-
-  const days = readDays(request);
-  const { data, error } = await session.admin
-    .from("driver_performance_daily")
-    .select("*")
-    .eq("driver_id", rider.rider_code)
-    .gte("report_date", sinceDate(days))
-    .order("report_date", { ascending: false });
-
-  if (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-  }
-
-  return NextResponse.json({
-    success: true,
-    rider,
-    days,
-    performance: data ?? [],
-  });
+  return NextResponse.json({success:true,rider,range,performance,daily,summary:summarizeRiderDaily(daily)},{headers});
 }

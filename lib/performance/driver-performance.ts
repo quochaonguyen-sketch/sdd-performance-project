@@ -1,34 +1,15 @@
 import { cache } from "react";
 import { Prisma } from "@prisma/client";
-import { z } from "zod";
-import { prisma } from "@/lib/prisma/client";
+import { getPerformanceDatabase } from "./database";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 import { buildPerformanceAnalysis, shiftPerformanceDate, type PerformanceAnalysis, type PerformanceAnalysisInput } from "@/lib/performance/analysis";
 
-export const performanceSortSchema = z.enum(["area", "rider", "delivery", "pickup", "deliveryRate", "pickupRate", "convertedPickup", "total"]);
-export const performanceDirectionSchema = z.enum(["asc", "desc"]);
-export const performanceKvSchema = z.enum(["all", "KV1", "KV2", "KV3", "KV4", "KV5"]);
-export const performancePeriodSchema = z.enum(["day", "week", "month"]);
-
-export type PerformanceSortKey = z.infer<typeof performanceSortSchema>;
-export type PerformanceDirection = z.infer<typeof performanceDirectionSchema>;
-export type PerformanceKvFilter = z.infer<typeof performanceKvSchema>;
-export type PerformancePeriod = z.infer<typeof performancePeriodSchema>;
-
-export type PerformanceFilters = {
-  date: string;
-  period: PerformancePeriod;
-  q: string;
-  kv: PerformanceKvFilter;
-  district: string;
-  ward: string;
-  cot: string;
-  sort: PerformanceSortKey;
-  dir: PerformanceDirection;
-  page: number;
-  pageSize: number;
-};
+import type { PerformanceFilters,PerformancePeriod,PerformanceDirection,PerformanceSortKey } from "./filters";
+export {parsePerformanceFilters,todayString,performanceSortSchema,performanceDirectionSchema,performanceKvSchema,performancePeriodSchema} from "./filters";
+export type {PerformanceFilters,PerformancePeriod,PerformanceDirection,PerformanceSortKey,PerformanceKvFilter} from "./filters";
 
 export type PerformanceRow = {
+  rider_id?: string | null;
   report_date: string;
   driver_id: string;
   driver_name: string | null;
@@ -89,16 +70,6 @@ export type PerformanceResult = {
   };
 };
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-
-type SearchParamsLike = Record<string, string | string[] | undefined> | URLSearchParams;
-
-function getParam(params: SearchParamsLike, key: string) {
-  if (params instanceof URLSearchParams) return params.get(key) ?? undefined;
-  const value = params[key];
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function tryParseJson<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -106,10 +77,6 @@ function tryParseJson<T>(raw: string | null | undefined): T | null {
   } catch {
     return null;
   }
-}
-
-export function todayString() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 }
 
 function shiftDate(value: string, days: number) {
@@ -122,26 +89,6 @@ function periodRange(date: string, period: PerformancePeriod) {
   if (period === "week") return { start: shiftDate(date, -6), end: date };
   if (period === "month") return { start: `${date.slice(0, 7)}-01`, end: date };
   return { start: date, end: date };
-}
-
-export function parsePerformanceFilters(params: SearchParamsLike): PerformanceFilters {
-  const parsedDate = dateSchema.safeParse(getParam(params, "date"));
-  const rawPage = Number(getParam(params, "page") ?? 1);
-  const rawPageSize = Number(getParam(params, "pageSize") ?? 100);
-
-  return {
-    date: parsedDate.success ? parsedDate.data : todayString(),
-    period: performancePeriodSchema.catch("day").parse(getParam(params, "period")),
-    q: (getParam(params, "q") ?? "").trim().slice(0, 80),
-    kv: performanceKvSchema.catch("all").parse(getParam(params, "kv")),
-    district: (getParam(params, "district") ?? "all").trim().slice(0, 80) || "all",
-    ward: (getParam(params, "ward") ?? "all").trim().slice(0, 80) || "all",
-    cot: (getParam(params, "cot") ?? "all").trim().slice(0, 40) || "all",
-    sort: performanceSortSchema.catch("area").parse(getParam(params, "sort")),
-    dir: performanceDirectionSchema.catch("asc").parse(getParam(params, "dir")),
-    page: Math.max(1, Number.isFinite(rawPage) ? Math.trunc(rawPage) : 1),
-    pageSize: Math.min(200, Math.max(25, Number.isFinite(rawPageSize) ? Math.trunc(rawPageSize) : 100)),
-  };
 }
 
 function orderClause(sort: PerformanceSortKey, direction: PerformanceDirection) {
@@ -169,7 +116,14 @@ function orderClause(sort: PerformanceSortKey, direction: PerformanceDirection) 
   return Prisma.sql`final.delivery_delivered ${dir}, ${areaAsc}`;
 }
 
-export const getDriverPerformance = cache(async (filters: PerformanceFilters): Promise<PerformanceResult> => {
+const resultsCache=new TtlCache<PerformanceResult>(10000,24);
+type PerformanceMetadata={options:Array<{delivery_district:string|null;cot:string|null}>;wardOptions:Array<{delivery_ward:string|null}>;wardOnHoldRows:Array<{delivery_ward:string|null;delivery_district:string|null;delivery_assigned:number;delivery_delivered:number}>};
+const metadataCache=new TtlCache<PerformanceMetadata>(30000,24);
+export const getDriverPerformance=cache(async(filters:PerformanceFilters,revision=""):Promise<PerformanceResult>=>{
+  return (await resultsCache.load(JSON.stringify([filters,revision]),()=>loadDriverPerformance(filters,revision))).value;
+});
+async function loadDriverPerformance(filters:PerformanceFilters,revision:string):Promise<PerformanceResult>{
+  const prisma=await getPerformanceDatabase();
   const orderBy = orderClause(filters.sort, filters.dir);
   const offset = (filters.page - 1) * filters.pageSize;
   const { start, end } = periodRange(filters.date, filters.period);
@@ -197,13 +151,17 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         or r.pickup_district ilike ${likeQuery}
         or r.delivery_district ilike ${likeQuery}
         or r.delivery_ward ilike ${likeQuery}
+        or r.pickup_ward ilike ${likeQuery}
+        or r.point_name ilike ${likeQuery}
+        or r.route_name ilike ${likeQuery}
       )`
     : Prisma.empty;
 
-  const rows = await prisma.$queryRaw<
+  const rowsPromise = prisma.$queryRaw<
     Array<{
       report_date: Date;
       driver_id: string;
+      rider_id: string | null;
       driver_name: string | null;
       rider_name: string | null;
       kv: string | null;
@@ -236,13 +194,17 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
   >`
     with rider_scope as (
       select
+        id,
         rider_code,
         full_name,
         kv,
         cot,
         pickup_district,
         delivery_district,
-        delivery_ward
+        delivery_ward,
+        pickup_ward,
+        point_name,
+        (select z.name from public.zones z where z.id=riders.zone_id) as route_name
       from public.riders
       where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
         ${kvClause}
@@ -253,6 +215,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       select
         ${reportDateSelect} as report_date,
         p.driver_id,
+        max(r.id::text) as rider_id,
         max(p.driver_name) as driver_name,
         max(r.full_name) as rider_name,
         max(r.kv) as kv,
@@ -272,7 +235,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
         sum(coalesce(p.pickup_picked_cot1, 0))::bigint as pickup_picked_cot1,
         sum(coalesce(p.pickup_assigned_cot2, 0))::bigint as pickup_assigned_cot2,
         sum(coalesce(p.pickup_picked_cot2, 0))::bigint as pickup_picked_cot2,
-        max(p.cot_breakdown::text) as cot_breakdown_raw
+        null::text as cot_breakdown_raw
       from public.driver_performance_daily p
       join rider_scope r on r.rider_code = p.driver_id
       where p.report_date between ${start}::date and ${end}::date
@@ -312,78 +275,41 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
     offset ${offset}
   `;
 
-  const options = await prisma.$queryRaw<Array<{ delivery_district: string | null; cot: string | null }>>`
+  const metadataPromise=metadataCache.load(JSON.stringify([revision,start,end,filters.kv,filters.district]),()=>prisma.$queryRaw<PerformanceMetadata[]>`
     with rider_scope as (
-      select
-        rider_code,
-        cot,
-        delivery_district
-      from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
-        ${kvClause}
-    )
-    select distinct
-      nullif(trim(r.delivery_district), '') as delivery_district,
-      nullif(trim(coalesce(nullif(trim(r.cot), ''), nullif(trim(p.cot), ''))), '') as cot
-    from public.driver_performance_daily p
-    join rider_scope r on r.rider_code = p.driver_id
-    where p.report_date between ${start}::date and ${end}::date
-    order by delivery_district asc nulls last, cot asc nulls last
-  `;
-
-  const wardOptions = await prisma.$queryRaw<Array<{ delivery_ward: string | null }>>`
-    with rider_scope as (
-      select
-        rider_code,
-        delivery_district,
-        delivery_ward
-      from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
-        ${kvClause}
-        ${districtClause}
-    )
-    select distinct
-      nullif(trim(r.delivery_ward), '') as delivery_ward
-    from public.driver_performance_daily p
-    join rider_scope r on r.rider_code = p.driver_id
-    where p.report_date between ${start}::date and ${end}::date
-    order by delivery_ward asc nulls last
-  `;
-
-  const wardOnHoldRows = await prisma.$queryRaw<
-    Array<{ delivery_ward: string | null; delivery_district: string | null; delivery_assigned: bigint; delivery_delivered: bigint }>
-  >`
-    with rider_scope as (
-      select
-        rider_code,
-        delivery_district,
-        delivery_ward
-      from public.riders
-      where upper(coalesce(kv, '')) in ('KV1', 'KV2', 'KV3', 'KV4', 'KV5')
-        ${kvClause}
-        ${districtClause}
-    )
+      select rider_code,cot,delivery_district,delivery_ward from public.riders
+      where upper(coalesce(kv,'')) in ('KV1','KV2','KV3','KV4','KV5') ${kvClause}
+    ), scoped as (
+      select p.delivery_assigned,p.delivery_delivered,r.delivery_district,r.delivery_ward,
+        nullif(trim(coalesce(nullif(trim(r.cot),''),nullif(trim(p.cot),''))),'') as cot
+      from public.driver_performance_daily p join rider_scope r on r.rider_code=p.driver_id
+      where p.report_date between ${start}::date and ${end}::date
+    ), eligible as (select * from scoped where true ${districtClause})
     select
-      max(r.delivery_ward) as delivery_ward,
-      max(r.delivery_district) as delivery_district,
-      sum(coalesce(p.delivery_assigned, 0))::bigint as delivery_assigned,
-      sum(coalesce(p.delivery_delivered, 0))::bigint as delivery_delivered
-    from public.driver_performance_daily p
-    join rider_scope r on r.rider_code = p.driver_id
-    where p.report_date between ${start}::date and ${end}::date
-    group by r.delivery_ward, r.delivery_district
-  `;
+      coalesce((select jsonb_agg(to_jsonb(o)) from (
+        select distinct nullif(trim(delivery_district),'') as delivery_district,cot from scoped
+        order by delivery_district nulls last,cot nulls last
+      ) o),'[]'::jsonb) as options,
+      coalesce((select jsonb_agg(to_jsonb(w)) from (
+        select distinct nullif(trim(delivery_ward),'') as delivery_ward from eligible order by delivery_ward nulls last
+      ) w),'[]'::jsonb) as "wardOptions",
+      coalesce((select jsonb_agg(to_jsonb(h)) from (
+        select max(delivery_ward) as delivery_ward,max(delivery_district) as delivery_district,
+          sum(coalesce(delivery_assigned,0)) as delivery_assigned,sum(coalesce(delivery_delivered,0)) as delivery_delivered
+        from eligible group by delivery_ward,delivery_district
+      ) h),'[]'::jsonb) as "wardOnHoldRows"
+  `.then(([metadata])=>metadata??{options:[],wardOptions:[],wardOnHoldRows:[]})).then(entry=>entry.value);
 
   // Charts aggregate the full filtered scope, independently of table pagination.
   // Daily mode adds six preceding dates for context; week/month use the selected range.
   const trendStart = filters.period === "day" ? shiftPerformanceDate(end, -6) : start;
-  const [aggregates] = await prisma.$queryRaw<PerformanceAnalysisInput[]>`
+  const aggregatesPromise = prisma.$queryRaw<PerformanceAnalysisInput[]>`
     with rider_scope as (
-      select rider_code,full_name,kv,cot,pickup_district,delivery_district,delivery_ward
+      select rider_code,full_name,kv,cot,pickup_district,delivery_district,delivery_ward,pickup_ward,point_name,(select z.name from public.zones z where z.id=riders.zone_id) as route_name
       from public.riders where upper(coalesce(kv,'')) in ('KV1','KV2','KV3','KV4','KV5')
       ${kvClause} ${districtClause} ${wardClause}
     ), scoped as (
-      select p.*,upper(r.kv) as analytics_area,lower(replace(coalesce(nullif(trim(r.cot),''),nullif(trim(p.cot),''),''),' ','')) as analytics_cot from public.driver_performance_daily p
+      select p.report_date,p.driver_id,p.delivery_assigned,p.delivery_delivered,p.pickup_assigned,p.pickup_picked,upper(r.kv) as analytics_area,lower(replace(coalesce(nullif(trim(r.cot),''),nullif(trim(p.cot),''),''),' ','')) as analytics_cot from public.driver_performance_daily p
       join rider_scope r on r.rider_code=p.driver_id
       where p.report_date between ${trendStart}::date and ${end}::date ${cotClause} ${searchClause}
     ), selected as (select * from scoped where report_date between ${start}::date and ${end}::date),
@@ -408,12 +334,16 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       (select jsonb_agg(to_jsonb(areas)) from areas) as areas,
       (select jsonb_agg(to_jsonb(rider_totals)-'driver_id') from rider_totals) as riders
   `;
+  const [rows,metadata,aggregateRows]=await Promise.all([rowsPromise,metadataPromise,aggregatesPromise]);
+  const {options,wardOptions,wardOnHoldRows}=metadata;
+  const [aggregates]=aggregateRows;
   const analysis = buildPerformanceAnalysis(aggregates ?? { daily: [], areas: [], riders: [] }, trendStart, end);
   return {
     filters,
     rows: rows.map((row) => ({
       report_date: row.report_date.toISOString().slice(0, 10),
       driver_id: row.driver_id,
+      rider_id: row.rider_id,
       driver_name: row.driver_name,
       rider_name: row.rider_name,
       kv: row.kv,
@@ -465,7 +395,7 @@ export const getDriverPerformance = cache(async (filters: PerformanceFilters): P
       ),
     },
   };
-});
+}
 
 function decimalToNumber(value: Prisma.Decimal | null | undefined) {
   if (value === null || value === undefined) return null;

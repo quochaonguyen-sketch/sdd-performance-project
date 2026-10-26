@@ -1,6 +1,6 @@
 # Quy đổi Pick trên bảng Performance
 
-Bảng dùng mẫu Cân đối do người dùng chốt: Rider 14%, KV/COT 7%, khu vực 15%, Deli 17%, Pick 17%, Convert Pick 10%, Total 8%, tỷ trọng 12%. Badge COT 1/COT 2 đầy đủ, xếp dọc, có nền/viền xanh và vàng như bản cũ. Bỏ hai cột tỷ lệ hoàn thành Deli/Pick; giữ Convert Pick, Total và tỷ trọng Deli/Pick quy đổi.
+Bảng dùng mẫu Cân đối do người dùng chốt, điều chỉnh độ rộng ngày 26/10: Rider 15%, KV/COT 7%, khu vực 13%, Deli 15%, Pick 11%, Convert Pick 11%, Total 13%, tỷ trọng 15%. Deli/Pick và badge căn đầu cột để giảm khoảng trống sau Khu vực. Badge COT 1/COT 2 đầy đủ, xếp dọc, có nền/viền xanh và vàng như bản cũ. Bỏ hai cột tỷ lệ hoàn thành Deli/Pick; giữ Convert Pick, Total và tỷ trọng Deli/Pick quy đổi.
 
 - Deli dùng delivery_delivered, Pick dùng pickup_picked (số đã hoàn thành).
 - Convert Pick = ceil(Pick / 3). Total = Deli + Convert Pick.

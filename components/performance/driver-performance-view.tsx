@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
+
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, PackageCheck, RefreshCcw, Search, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +15,7 @@ import { PerformanceAnalysis } from "./performance-analysis";
 import analysisStyles from "./performance-analysis.module.css";
 import tableStyles from "./performance-table.module.css";
 import { performanceConversion } from "@/lib/performance/conversion";
+import { parsePerformanceFilters } from "@/lib/performance/filters";
 import { allocateCotRemainder } from "@/lib/performance/cot-allocation";
 import {
   type PerformanceDirection,
@@ -48,34 +51,73 @@ const emptyOptions: PerformanceResult["options"] = {
   wards: [],
 };
 
-export function DriverPerformanceView({ result, filters, error, loadedKey }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-  const [clientLoading, setClientLoading] = useState(false);
-  const rows = result?.rows ?? [];
-  const summary = result?.summary ?? emptySummary;
-  const options = result?.options ?? emptyOptions;
-  const pageCount = Math.max(1, Math.ceil(summary.groups / filters.pageSize));
-  const isLoading = isPending || clientLoading;
+const StableAnalysis=memo(PerformanceAnalysis);
 
-  const updateParams = useCallback<UpdateParams>((mutator) => {
-    const params = new URLSearchParams(searchParams.toString());
-    mutator(params);
-    const nextUrl = `${pathname}?${params.toString()}`;
-    const currentUrl = `${pathname}?${searchParams.toString()}`;
-    if (nextUrl === currentUrl) return;
-    setClientLoading(true);
-    startTransition(() => {
-      router.replace(nextUrl, { scroll: false });
+export function DriverPerformanceView({ result:initialResult, filters:initialFilters, error:initialError, loadedKey }: Props) {
+  const pathname=usePathname();
+  const searchParams=useSearchParams();
+  const propsKeyRef=useRef(loadedKey);
+  const paramsRef=useRef(new URLSearchParams(searchParams.toString()));
+  const controllerRef=useRef<AbortController|null>(null);
+  const requestRef=useRef(0);
+  const [result,setResult]=useState(initialResult);
+  const [filters,setFilters]=useState(initialFilters);
+  const [error,setError]=useState(initialError);
+  const [clientLoading,setClientLoading]=useState(!initialResult&&!initialError);
+  const [isPending,startTransition]=useTransition();
+  const rows=result?.rows??[];
+  const summary=result?.summary??emptySummary;
+  const options=result?.options??emptyOptions;
+  const pageCount=Math.max(1,Math.ceil(summary.groups/filters.pageSize));
+  const isLoading=clientLoading||isPending;
+
+  const loadParams=useCallback(async(params:URLSearchParams)=>{
+    controllerRef.current?.abort();
+    const controller=new AbortController();controllerRef.current=controller;
+    const request=++requestRef.current;
+    paramsRef.current=new URLSearchParams(params);
+    setFilters(parsePerformanceFilters(params));setClientLoading(true);setError(null);
+    try{
+      const response=await fetch(`/api/driver-performance?${params}`,{cache:"no-store",signal:controller.signal});
+      const payload=await response.json();
+      if(!response.ok||!payload.success)throw Error(payload.error??"Không tải được Performance");
+      if(!controller.signal.aborted&&request===requestRef.current)startTransition(()=>setResult(previous=>!controller.signal.aborted&&request===requestRef.current?payload:previous));
+    }catch(caught){if(!controller.signal.aborted&&request===requestRef.current)setError(caught instanceof Error?caught.message:"Không tải được dữ liệu");}
+    finally{if(!controller.signal.aborted&&request===requestRef.current)setClientLoading(false);}
+  },[]);
+
+  const updateParams=useCallback<UpdateParams>(mutator=>{
+    const params=new URLSearchParams(paramsRef.current);mutator(params);
+    if(params.toString()===paramsRef.current.toString())return;
+    window.history.replaceState(null,"",`${pathname}?${params}`);
+    void loadParams(params);
+  },[loadParams,pathname]);
+
+  useEffect(()=>{
+    const sync=()=>{if(window.location.pathname===pathname)void loadParams(new URLSearchParams(window.location.search));};
+    window.addEventListener("popstate",sync);
+    return()=>{window.removeEventListener("popstate",sync);controllerRef.current?.abort();};
+  },[loadParams,pathname]);
+
+  useEffect(()=>{
+    if(propsKeyRef.current===loadedKey)return;
+    let active=true;
+    void Promise.resolve().then(()=>{
+      if(!active)return;
+      propsKeyRef.current=loadedKey;
+      controllerRef.current?.abort();++requestRef.current;
+      paramsRef.current=new URLSearchParams(window.location.search);
+      setFilters(initialFilters);setResult(initialResult);setError(initialError);setClientLoading(false);
     });
-  }, [pathname, router, searchParams]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setClientLoading(false), 0);
-    return () => window.clearTimeout(timer);
-  }, [loadedKey]);
+    return()=>{active=false;};
+  },[loadedKey,initialFilters,initialResult,initialError]);
+  useEffect(()=>{
+    if(initialResult||initialError)return;
+    let active=true;
+    void Promise.resolve().then(()=>{if(active)void loadParams(new URLSearchParams(window.location.search));});
+    return()=>{active=false;};
+  },[loadedKey,initialResult,initialError,loadParams]);
+  const selectArea=useCallback((area:string)=>updateParams(params=>{params.set("kv",area);params.delete("district");params.delete("ward");params.set("page","1");}),[updateParams]);
 
   function changeSort(sort: PerformanceSortKey) {
     updateParams((params) => {
@@ -123,9 +165,9 @@ export function DriverPerformanceView({ result, filters, error, loadedKey }: Pro
         </div>
       ) : null}
 
-      <PerformanceKpiCards summary={summary} isLoading={isLoading} />
+      <PerformanceKpiCards summary={summary} isLoading={isLoading&&!result} />
 
-      <PerformanceAnalysis analysis={result?.analysis} isLoading={isLoading} onArea={area => updateParams(params => { params.set("kv", area); params.delete("district"); params.delete("ward"); params.set("page", "1"); })} />
+      <StableAnalysis analysis={result?.analysis} isLoading={isLoading&&!result} onArea={selectArea} />
 
       <RiderPerformanceTable
         rows={rows}
@@ -193,7 +235,7 @@ function PerformanceFilters({
         else params.delete("q");
         params.set("page", "1");
       });
-    }, 350);
+    }, 250);
     return () => window.clearTimeout(timer);
   }, [filters.q, queryInput, updateParams]);
 
@@ -297,7 +339,7 @@ function PerformanceFilters({
         </label>
 
         <label className="block" htmlFor="performance-search">
-          <span className="perf-field-label">Tìm rider / quận / phường / COT</span>
+          <span className="perf-field-label">Tìm rider / tuyến / địa bàn / COT</span>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
             <Input
@@ -305,7 +347,7 @@ function PerformanceFilters({
               className="pl-9"
               value={queryInput}
               onChange={(event) => setQueryInput(event.target.value)}
-              placeholder="Tên, ID, KV, COT, quận, phường..."
+              placeholder="Tên, ID, tuyến, điểm pickup, quận, phường..."
               aria-describedby="performance-search-help"
             />
           </div>
@@ -418,14 +460,14 @@ function RiderPerformanceTable({
 
         <table className={tableStyles.table}>
           <caption className="sr-only">Bảng performance Deli Pick rider KV1–KV5</caption>
-          <colgroup>{[14,7,15,17,17,10,8,12].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
+          <colgroup>{[15,7,13,15,11,11,13,15].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
           <thead className="perf-table-thead">
             <tr>
               <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className={tableStyles.riderHeading} />
               <th scope="col" className={tableStyles.kvHeading}>KV / COT</th>
               <SortHeader label="Khu vực" sortKey="area" current={filters} onSort={onSort} />
-              <SortHeader label="Deli" sortKey="delivery" current={filters} onSort={onSort} align="right" />
-              <SortHeader label="Pick" sortKey="pickup" current={filters} onSort={onSort} align="right" />
+              <SortHeader label="Deli" sortKey="delivery" current={filters} onSort={onSort} />
+              <SortHeader label="Pick" sortKey="pickup" current={filters} onSort={onSort} />
               <SortHeader label="Convert Pick" sortKey="convertedPickup" current={filters} onSort={onSort} align="right" />
               <SortHeader label="Total" sortKey="total" current={filters} onSort={onSort} align="right" />
               <th scope="col" className={tableStyles.shareHeading}>Tỷ trọng Deli / Pick QĐ</th>
@@ -447,7 +489,7 @@ function RiderPerformanceTable({
                 </td>
               </tr>
             ) : (
-              rows.map(row => <PerformanceTableRow key={`${row.report_date}-${row.driver_id}`} row={row} />)
+              rows.map(row => <StablePerformanceRow key={`${row.report_date}-${row.driver_id}`} row={row} />)
             )}
           </tbody>
         </table>
@@ -465,6 +507,8 @@ function RiderPerformanceTable({
   );
 }
 
+const StablePerformanceRow=memo(PerformanceTableRow);
+
 function PerformanceTableRow({ row }: { row: PerformanceRow }) {
   const converted = performanceConversion(row.delivery_delivered, row.pickup_picked);
   const deliPercent = converted.deliveryShare === null ? null : Math.round(converted.deliveryShare*10)/10;
@@ -474,7 +518,7 @@ function PerformanceTableRow({ row }: { row: PerformanceRow }) {
   const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
   return <tr className={tableStyles.row}>
     <th scope="row" className={tableStyles.identity}>
-      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_name??row.driver_name??"Chưa map rider"}</strong>
+      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?from=${row.report_date}&to=${row.report_date}&origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}</strong>
       <small>{row.driver_id}</small>
     </th>
     <td className={tableStyles.kvCell}><strong>{row.kv??"—"}</strong><span data-cot={cot.startsWith("cot1")?"1":cot.startsWith("cot2")?"2":"unknown"}>{row.cot||"—"}</span></td>
@@ -646,8 +690,8 @@ function SortHeader({ label, sortKey, current, onSort, align, className }: { lab
   const Icon = current.sort !== sortKey ? ArrowUpDown : current.dir === "asc" ? ArrowUp : ArrowDown;
   const directionLabel = current.sort === sortKey ? (current.dir === "asc" ? "tăng dần" : "giảm dần") : "chưa sắp xếp";
   return (
-    <th scope="col" className={cn("px-4 py-3 font-semibold", className)} aria-sort={current.sort === sortKey ? (current.dir === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className={cn("flex items-center gap-1 hover:text-[var(--color-ink)]", align === "right" && "ml-auto")} onClick={() => onSort(sortKey)} aria-label={`Sắp xếp ${label}, hiện ${directionLabel}`}>
+    <th scope="col" className={cn(tableStyles.sortHeader, className)} data-align={align ?? "left"} aria-sort={current.sort === sortKey ? (current.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className={tableStyles.sortButton} onClick={() => onSort(sortKey)} aria-label={`Sắp xếp ${label}, hiện ${directionLabel}`}>
         {label}
         <Icon size={13} />
       </button>
