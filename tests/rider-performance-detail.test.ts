@@ -1,8 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
-import { buildRiderDaily,readDetailRange,summarizeRiderDaily } from "../lib/performance/rider-detail.ts";
+import { buildRiderDaily,readDetailRange,riderPerformanceLookup,detailToday,detailShift,summarizeRiderDaily } from "../lib/performance/rider-detail.ts";
 import { riderPerformanceWorkbook } from "../lib/performance/rider-export.ts";
+test("detail opens at seven inclusive days and still respects explicit ranges",()=>{
+  const to=detailToday();assert.deepEqual(readDetailRange(new URLSearchParams()),{from:detailShift(to,-6),to});
+  assert.deepEqual(readDetailRange(new URLSearchParams({from:"2026-10-01",to:"2026-10-26"})),{from:"2026-10-01",to:"2026-10-26"});
+});
+test("rider switching supports exact driver codes and existing UUID links",()=>{
+  assert.deepEqual(riderPerformanceLookup(" 158197 "),{column:"rider_code",value:"158197"});
+  const id="12345678-1234-4234-8234-123456789012";assert.deepEqual(riderPerformanceLookup(id),{column:"id",value:id});
+  for(const value of ["","id.eq.x,kv.eq.KV6","../123","a".repeat(41)])assert.throws(()=>riderPerformanceLookup(value));
+});
 
 test("validates inclusive date ranges including leap days",()=>{
   assert.deepEqual(readDetailRange(new URLSearchParams({from:"2024-02-29",to:"2024-03-01"})),{from:"2024-02-29",to:"2024-03-01"});

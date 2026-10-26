@@ -1,19 +1,24 @@
-.header { padding:16px 18px; align-items:center; gap:14px; }
+.header { padding:16px 18px; align-items:center; gap:14px; flex-wrap:wrap; }
 .header :global(.perf-table-title) { font-size:17px; font-weight:650; letter-spacing:-.3px; }
 .header :global(.perf-table-sub) { font-size:11px; margin-top:5px; line-height:1.5; }
-.headerActions { display:flex; align-items:center; gap:14px; flex-shrink:0; }
+.headerActions { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:14px; flex-shrink:0; max-width:100%; }
 .formula { position:relative; color:var(--color-muted); font-size:11px; }
 .formula summary { cursor:pointer; list-style:none; white-space:nowrap; }
 .formula summary::-webkit-details-marker { display:none; }
 .formula[open] summary { color:var(--color-accent); }
 .formula p { position:absolute; right:0; top:24px; z-index:40; width:310px; max-width:80vw; margin:0; padding:14px; border:1px solid var(--color-rule); border-radius:10px; background:var(--color-paper); box-shadow:0 8px 24px #0f172a18; font-size:12px; line-height:1.9; color:var(--color-ink); }
-.table { width:100%; min-width:1080px; table-layout:fixed; border-collapse:separate; border-spacing:0; text-align:left; font-size:12px; }
+.table { width:100%; min-width:1180px; table-layout:fixed; border-collapse:separate; border-spacing:0; text-align:left; font-size:12px; }
 .table thead { text-transform:none; letter-spacing:0; background:var(--color-paper-2); }
-.table thead th { padding:11px 9px; font-size:11px; font-weight:600; vertical-align:middle; }
-.table thead button { width:100%; font-size:11px; white-space:nowrap; }
+.table thead th { padding:12px 9px; font-size:11px; font-weight:600; vertical-align:middle; line-height:1.4; overflow-wrap:anywhere; }
+.table thead button { width:100%; min-width:0; font-size:11px; white-space:normal; text-align:inherit; line-height:1.4; }
 .sortButton { display:flex; align-items:center; justify-content:flex-start; gap:4px; }
+.sortButton>span { min-width:0; overflow-wrap:anywhere; }
+.sortButton>svg { flex-shrink:0; }
 .sortButton:hover { color:var(--color-ink); }
+.headingSubtitle { display:block; margin-top:4px; font-size:10px; font-weight:400; line-height:1.4; white-space:normal; text-align:left; }
 .sortHeader[data-align="right"] .sortButton { justify-content:flex-end; }
+.sortHeader[data-align="center"] .sortButton { justify-content:center; text-align:center; }
+.compactNumber { text-align:center; font-variant-numeric:tabular-nums; }
 .table thead th:first-child { position:sticky; left:0; z-index:12; background:var(--color-paper-2); }
 .row { background:var(--color-paper); transition:background .12s ease; }
 .row:hover { background:var(--color-accent-soft); }

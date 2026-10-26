@@ -5,7 +5,7 @@ import Link from "next/link";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, PackageCheck, RefreshCcw, Search, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays,Download, PackageCheck, RefreshCcw, Search, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { cn } from "@/utils/cn";
 import { PerformanceAnalysis } from "./performance-analysis";
 import analysisStyles from "./performance-analysis.module.css";
 import tableStyles from "./performance-table.module.css";
+import filterStyles from "./performance-filters.module.css";
 import { performanceConversion } from "@/lib/performance/conversion";
 import { parsePerformanceFilters } from "@/lib/performance/filters";
 import { allocateCotRemainder } from "@/lib/performance/cot-allocation";
@@ -64,6 +65,7 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
   const [filters,setFilters]=useState(initialFilters);
   const [error,setError]=useState(initialError);
   const [clientLoading,setClientLoading]=useState(!initialResult&&!initialError);
+  const [exporting,setExporting]=useState(false);
   const [isPending,startTransition]=useTransition();
   const rows=result?.rows??[];
   const summary=result?.summary??emptySummary;
@@ -146,6 +148,18 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
       params.set("_r", String(Date.now()));
     });
   }
+  async function exportExcel(){
+    setExporting(true);setError(null);
+    const params=new URLSearchParams(paramsRef.current);params.set("export","xlsx");params.delete("page");params.delete("pageSize");
+    const selected=parsePerformanceFilters(params);
+    try{
+      const response=await fetch(`/api/driver-performance?${params}`,{cache:"no-store"});
+      if(!response.ok){const payload=await response.json();throw Error(payload.error??"Không xuất được Excel");}
+      const url=URL.createObjectURL(await response.blob()),anchor=document.createElement("a");
+      anchor.href=url;anchor.download=`rider-performance-${selected.start}-${selected.end}.xlsx`;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(caught){setError(caught instanceof Error?caught.message:"Không xuất được Excel");}
+    finally{setExporting(false);}
+  }
 
   return (
     <div className={cn("perf-page mx-auto max-w-[1600px]", analysisStyles.page)}>
@@ -178,6 +192,8 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         onSort={changeSort}
         onPageChange={changePage}
         onPageSizeChange={changePageSize}
+        onExport={exportExcel}
+        exporting={exporting}
       />
     </div>
   );
@@ -265,14 +281,12 @@ function PerformanceFilters({
   }
 
   return (
-    <section className="perf-filters" aria-label="Bộ lọc performance">
-      <div className="perf-filters-period">
-        <div className="perf-filters-label">
-          <span>Chu kỳ thống kê</span>
-          <small>Ngày, tuần gần nhất hoặc tháng hiện tại</small>
-        </div>
+    <section className={cn("perf-filters",filterStyles.panel)} aria-label="Bộ lọc performance">
+      <div className={filterStyles.timeRow}>
+        <div className={filterStyles.periodControl}>
+        <span className="perf-field-label">Thời gian thống kê</span>
         <div className="perf-period-toggle" role="group" aria-label="Chọn chu kỳ thống kê">
-          {(["day", "week", "month"] as const).map((period) => (
+          {(["day", "week", "month", "range"] as const).map((period) => (
             <button
               key={period}
               type="button"
@@ -281,6 +295,8 @@ function PerformanceFilters({
               onClick={() =>
                 updateParams((params) => {
                   params.set("period", period);
+                  if(period==="range"){params.set("start",filters.start);params.set("end",filters.end);}
+                  else {params.delete("start");params.delete("end");}
                   params.set("page", "1");
                 })
               }
@@ -289,17 +305,17 @@ function PerformanceFilters({
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="perf-filters-grid">
-        <label className="block" htmlFor="performance-date">
+        </div>
+        {filters.period==="range"?<PerformanceDateRange key={`${filters.start}:${filters.end}`} start={filters.start} end={filters.end} updateParams={updateParams}/>:<label className={filterStyles.singleDate} htmlFor="performance-date">
           <span className="perf-field-label">Chọn ngày</span>
           <div className="relative">
             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
             <Input id="performance-date" type="date" className="pl-9" value={filters.date} onChange={(event) => changeDate(event.target.value)} aria-label="Chọn ngày xem performance" />
           </div>
-        </label>
+        </label>}
+      </div>
 
+      <div className={filterStyles.grid}>
         <label className="block" htmlFor="performance-kv">
           <span className="perf-field-label">Khu</span>
           <Select id="performance-kv" value={filters.kv} onChange={(event) => changeFilter("kv", event.target.value)} aria-label="Lọc theo khu">
@@ -338,8 +354,8 @@ function PerformanceFilters({
           </Select>
         </label>
 
-        <label className="block" htmlFor="performance-search">
-          <span className="perf-field-label">Tìm rider / tuyến / địa bàn / COT</span>
+        <label className={filterStyles.search} htmlFor="performance-search">
+          <span className="perf-field-label">Tìm kiếm rider / tuyến</span>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
             <Input
@@ -354,13 +370,29 @@ function PerformanceFilters({
           <span id="performance-search-help" className="sr-only">Tìm kiếm tự động sau khi ngừng gõ.</span>
         </label>
 
-        <Button type="button" className="perf-refresh" variant="secondary" disabled={isLoading} onClick={onRefresh}>
+        <Button type="button" className={filterStyles.refresh} variant="secondary" disabled={isLoading} onClick={onRefresh}>
           <RefreshCcw size={16} className={isLoading ? "animate-spin" : undefined} />
           Tải lại
         </Button>
       </div>
     </section>
   );
+}
+
+function PerformanceDateRange({start,end,updateParams}:{start:string;end:string;updateParams:UpdateParams}){
+  const [from,setFrom]=useState(start),[to,setTo]=useState(end),[error,setError]=useState("");
+  return <form className={filterStyles.dateRange} onSubmit={event=>{
+    event.preventDefault();
+    try{
+      parsePerformanceFilters(new URLSearchParams({period:"range",start:from,end:to}));setError("");
+      updateParams(params=>{params.set("period","range");params.set("start",from);params.set("end",to);params.set("date",to);params.set("page","1");});
+    }catch(caught){setError(caught instanceof Error?caught.message:"Khoảng ngày không hợp lệ");}
+  }}>
+    <label><span className="perf-field-label">Từ ngày</span><Input type="date" required value={from} max={to||undefined} onChange={event=>setFrom(event.target.value)} aria-label="Performance từ ngày"/></label>
+    <label><span className="perf-field-label">Đến ngày</span><Input type="date" required value={to} min={from||undefined} onChange={event=>setTo(event.target.value)} aria-label="Performance đến ngày"/></label>
+    <Button type="submit"><CalendarDays size={16}/>Xem dữ liệu</Button>
+    {error&&<p className={filterStyles.error} role="alert">{error}</p>}
+  </form>;
 }
 
 function PerformanceKpiCards({
@@ -380,14 +412,14 @@ function PerformanceKpiCards({
           icon={<Truck size={18} />}
           title="Tỷ lệ giao thành công"
           primary={formatRate(deliRate)}
-          secondary={`${formatNumber(summary.delivery_delivered)} / ${formatNumber(summary.delivery_assigned)} đơn phân`}
+          secondary={`${formatNumber(summary.delivery_delivered)} Total Delivered / ${formatNumber(summary.delivery_assigned)} Total Assigned Deli`}
           rate={deliRate}
         />
         <KpiCard
           icon={<PackageCheck size={18} />}
           title="Tỷ lệ lấy thành công"
           primary={formatRate(pickRate)}
-          secondary={`${formatNumber(summary.pickup_picked)} / ${formatNumber(summary.pickup_assigned)} đơn phân`}
+          secondary={`${formatNumber(summary.pickup_picked)} Total Picked / ${formatNumber(summary.pickup_assigned)} Total Assigned Pick`}
           rate={pickRate}
         />
       </div>
@@ -407,6 +439,8 @@ function RiderPerformanceTable({
   onSort,
   onPageChange,
   onPageSizeChange,
+  onExport,
+  exporting,
 }: {
   rows: PerformanceRow[];
   summary: PerformanceSummary;
@@ -416,6 +450,8 @@ function RiderPerformanceTable({
   onSort: (sort: PerformanceSortKey) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
+  onExport:()=>void;
+  exporting:boolean;
 }) {
   const filterText = useMemo(() => {
     const parts = [
@@ -439,9 +475,10 @@ function RiderPerformanceTable({
 
         </div>
         <div className={tableStyles.headerActions}>
+          <Button type="button" variant="secondary" disabled={isLoading||exporting} onClick={onExport} title="Xuất toàn bộ rider theo khoảng ngày và bộ lọc đang chọn"><Download size={16}/>{exporting?"Đang xuất…":"Xuất Excel"}</Button>
           <details className={tableStyles.formula}>
             <summary>Cách tính ⓘ</summary>
-            <p>Convert Pick = số đã pick / 3, làm tròn lên.<br/>Total = Deli + Convert Pick.<br/>Tỷ trọng = Deli / Total và Convert Pick / Total.<br/>Số sau dấu / là số được phân. Badge COT 1 / COT 2 là số hoàn thành / số được phân theo từng COT.<br/>Phần chưa phân loại được cộng vào COT chính của rider.</p>
+            <p>Convert Pick = Total Picked / 3, làm tròn lên.<br/>Total = Total Delivered + Convert Pick.<br/>Tỷ trọng = Total Delivered / Total và Convert Pick / Total.<br/>Deli: Total Delivered / Total Assigned Deli.<br/>Pick: Total Picked / Total Assigned Pick.<br/>Badge COT 1 / COT 2 dùng cùng thứ tự trên theo từng COT.<br/>Phần chưa phân loại được cộng vào COT chính của rider.</p>
           </details>
           {isLoading ? <span className="perf-badge is-loading">Đang tải dữ liệu...</span> : null}
           <span className="perf-badge">
@@ -460,16 +497,16 @@ function RiderPerformanceTable({
 
         <table className={tableStyles.table}>
           <caption className="sr-only">Bảng performance Deli Pick rider KV1–KV5</caption>
-          <colgroup>{[15,7,13,15,11,11,13,15].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
+          <colgroup>{[14,7,13,18,16,9,8,15].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
           <thead className="perf-table-thead">
             <tr>
               <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className={tableStyles.riderHeading} />
               <th scope="col" className={tableStyles.kvHeading}>KV / COT</th>
               <SortHeader label="Khu vực" sortKey="area" current={filters} onSort={onSort} />
-              <SortHeader label="Deli" sortKey="delivery" current={filters} onSort={onSort} />
-              <SortHeader label="Pick" sortKey="pickup" current={filters} onSort={onSort} />
-              <SortHeader label="Convert Pick" sortKey="convertedPickup" current={filters} onSort={onSort} align="right" />
-              <SortHeader label="Total" sortKey="total" current={filters} onSort={onSort} align="right" />
+              <SortHeader label="Total Delivered" subtitle="/ Total Assigned Deli" sortKey="delivery" current={filters} onSort={onSort} />
+              <SortHeader label="Total Picked" subtitle="/ Total Assigned Pick" sortKey="pickup" current={filters} onSort={onSort} />
+              <SortHeader label="Convert Pick" sortKey="convertedPickup" current={filters} onSort={onSort} align="center" />
+              <SortHeader label="Total" sortKey="total" current={filters} onSort={onSort} align="center" />
               <th scope="col" className={tableStyles.shareHeading}>Tỷ trọng Deli / Pick QĐ</th>
             </tr>
           </thead>
@@ -518,15 +555,15 @@ function PerformanceTableRow({ row }: { row: PerformanceRow }) {
   const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
   return <tr className={tableStyles.row}>
     <th scope="row" className={tableStyles.identity}>
-      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?from=${row.report_date}&to=${row.report_date}&origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}</strong>
+      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}</strong>
       <small>{row.driver_id}</small>
     </th>
     <td className={tableStyles.kvCell}><strong>{row.kv??"—"}</strong><span data-cot={cot.startsWith("cot1")?"1":cot.startsWith("cot2")?"2":"unknown"}>{row.cot||"—"}</span></td>
     <td className={tableStyles.locality}><strong title={row.delivery_district??undefined}>{row.delivery_district??"Chưa có quận giao"}</strong><small title={locality}>{locality||"Chưa có phường"}</small></td>
     <td className={tableStyles.number}><ProductionCell primaryCot={row.cot} completed={row.delivery_delivered} assigned={row.delivery_assigned} c1={row.delivery_delivered_cot1} a1={row.delivery_assigned_cot1} c2={row.delivery_delivered_cot2} a2={row.delivery_assigned_cot2}/></td>
     <td className={tableStyles.number}><ProductionCell primaryCot={row.cot} completed={row.pickup_picked} assigned={row.pickup_assigned} c1={row.pickup_picked_cot1} a1={row.pickup_assigned_cot1} c2={row.pickup_picked_cot2} a2={row.pickup_assigned_cot2}/></td>
-    <td className={tableStyles.number}><strong className={tableStyles.converted} title={`${formatNumber(row.pickup_picked)} / 3, làm tròn lên`}>{formatNumber(converted.convertedPickup)}</strong></td>
-    <td className={tableStyles.number}><strong className={tableStyles.total}>{formatNumber(converted.total)}</strong></td>
+    <td className={tableStyles.compactNumber}><strong className={tableStyles.converted} title={`${formatNumber(row.pickup_picked)} / 3, làm tròn lên`}>{formatNumber(converted.convertedPickup)}</strong></td>
+    <td className={tableStyles.compactNumber}><strong className={tableStyles.total}>{formatNumber(converted.total)}</strong></td>
     <td className={tableStyles.share}>
       {deliPercent===null||pickPercent===null?<span className={tableStyles.muted}>—</span>:<div title={`Deli ${percent(deliPercent)} · Pick quy đổi ${percent(pickPercent)}`}>
         <div className={tableStyles.shareLabels}><span>{percent(deliPercent)}</span><span>{percent(pickPercent)}</span></div>
@@ -629,7 +666,7 @@ function KpiCard({
     <Card className="perf-kpi">
       <div className="perf-kpi-top">
         <span className="perf-kpi-icon">{icon}</span>
-        <span className="text-xs text-[var(--color-muted)]">Hoàn thành / được phân</span>
+        <span className="text-xs text-[var(--color-muted)]">Completed / Assigned</span>
       </div>
       <div className="perf-kpi-body">
         <p className="perf-kpi-title">{title}</p>
@@ -686,13 +723,13 @@ function EmptyState({ filters }: { filters: PerformanceFilters }) {
   );
 }
 
-function SortHeader({ label, sortKey, current, onSort, align, className }: { label: string; sortKey: PerformanceSortKey; current: PerformanceFilters; onSort: (key: PerformanceSortKey) => void; align?: "right"; className?: string }) {
+function SortHeader({ label, subtitle, sortKey, current, onSort, align, className }: { label: string; subtitle?:string; sortKey: PerformanceSortKey; current: PerformanceFilters; onSort: (key: PerformanceSortKey) => void; align?: "right"|"center"; className?: string }) {
   const Icon = current.sort !== sortKey ? ArrowUpDown : current.dir === "asc" ? ArrowUp : ArrowDown;
   const directionLabel = current.sort === sortKey ? (current.dir === "asc" ? "tăng dần" : "giảm dần") : "chưa sắp xếp";
   return (
     <th scope="col" className={cn(tableStyles.sortHeader, className)} data-align={align ?? "left"} aria-sort={current.sort === sortKey ? (current.dir === "asc" ? "ascending" : "descending") : "none"}>
       <button type="button" className={tableStyles.sortButton} onClick={() => onSort(sortKey)} aria-label={`Sắp xếp ${label}, hiện ${directionLabel}`}>
-        {label}
+        <span>{label}{subtitle&&<small className={tableStyles.headingSubtitle}>{subtitle}</small>}</span>
         <Icon size={13} />
       </button>
     </th>
@@ -706,10 +743,11 @@ function pageWindow(page: number, pageCount: number) {
 }
 
 function periodLabel(period: PerformancePeriod) {
-  return period === "day" ? "Ngày" : period === "week" ? "Tuần" : "Tháng";
+  return period === "day" ? "Ngày" : period === "week" ? "Tuần" : period==="month"?"Tháng":"Khoảng ngày";
 }
 
 function periodScopeLabel(filters: PerformanceFilters) {
+  if(filters.period==="range")return `Từ ${formatDate(filters.start)} đến ${formatDate(filters.end)}`;
   if (filters.period === "week") return `Tuần đến ${formatDate(filters.date)}`;
   if (filters.period === "month") return `Tháng ${filters.date.slice(0, 7)}`;
   return `Ngày ${formatDate(filters.date)}`;

@@ -19,13 +19,13 @@ export function PerformanceAnalysis({ analysis, isLoading, onArea }: { analysis?
     <section className={styles.panel}>
       <div className={styles.panelTop}><ChartHeading icon={<ChartNoAxesCombined size={19} />} title="Xu hướng tỷ lệ hoàn thành" description={`${dateLabel(analysis.start)}–${dateLabel(analysis.end)} · cùng bộ lọc khu vực, địa bàn, COT rider và tìm kiếm`} /><div className={styles.legend}><span><i className={styles.deliDot} />Deli</span><span><i className={styles.pickDot} />Pick</span></div></div>
       <TrendChart key={`${analysis.start}:${analysis.end}`} daily={analysis.daily} />
-      <p className={styles.method}>Mỗi ngày dùng dữ liệu đồng bộ gần nhất; ngày đang diễn ra có thể chưa đủ. Đường ngắt tại ngày thiếu dữ liệu. Tỷ lệ = tổng hoàn thành / tổng được phân.</p>
+      <p className={styles.method}>Mỗi ngày dùng dữ liệu đồng bộ gần nhất; ngày đang diễn ra có thể chưa đủ. Đường ngắt tại ngày thiếu dữ liệu. Deli = Total Delivered / Total Assigned Deli; Pick = Total Picked / Total Assigned Pick.</p>
     </section>
     <div className={styles.twoColumns}>
       <section className={styles.panel}>
         <ChartHeading icon={<Grid2X2 size={18} />} title="Hiệu suất theo khu × COT" description="Nhóm theo COT rider · COT1 đã gộp 1.1 + 1.2" />
         <CotMatrix areas={analysis.areas} onArea={onArea} />
-        <p className={styles.method}>Ô hiển thị tỷ lệ và hoàn thành / được phân. Bấm tên khu để lọc; ô không có đơn phân hiển thị “—”.</p>
+        <p className={styles.method}>Ô hiển thị tỷ lệ và Total Delivered / Total Assigned Deli hoặc Total Picked / Total Assigned Pick. Bấm tên khu để lọc; ô không có đơn phân hiển thị “—”.</p>
       </section>
       <section className={styles.panel}>
         <ChartHeading icon={<Users size={18} />} title="Phân bố hiệu suất rider" description="Số rider theo tỷ lệ giao trong kỳ đang chọn" />
@@ -88,7 +88,7 @@ function TrendChart({ daily }: { daily: Analysis["daily"] }) {
       <strong>{active ? dateLabel(active.date) : "—"}</strong>
       {!active || "missing" in active ? <span>Chưa có dữ liệu</span> : <><span><i className={styles.deliDot} />Deli <b>{percent(rate(active, "delivery"))}</b><small>{number(active.delivery_delivered)} / {number(active.delivery_assigned)}</small></span><span><i className={styles.pickDot} />Pick <b>{percent(rate(active, "pickup"))}</b><small>{number(active.pickup_picked)} / {number(active.pickup_assigned)}</small></span><span>{number(active.riders)} rider</span></>}
     </div>
-    <details className={styles.dataDetails}><summary>Xem số liệu từng ngày</summary><div className={styles.tableScroll}><table><thead><tr><th>Ngày</th><th>Deli hoàn thành / phân</th><th>Tỷ lệ giao</th><th>Pick hoàn thành / phân</th><th>Tỷ lệ lấy</th></tr></thead><tbody>{daily.map(row => <DailyRow key={row.date} row={row} />)}</tbody></table></div></details>
+    <details className={styles.dataDetails}><summary>Xem số liệu từng ngày</summary><div className={styles.tableScroll}><table><thead><tr><th>Ngày</th><th>Total Delivered / Total Assigned Deli</th><th>Tỷ lệ giao</th><th>Total Picked / Total Assigned Pick</th><th>Tỷ lệ lấy</th></tr></thead><tbody>{daily.map(row => <DailyRow key={row.date} row={row} />)}</tbody></table></div></details>
   </div>;
 }
 

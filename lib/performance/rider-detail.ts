@@ -6,6 +6,12 @@ export type DetailCounts=Record<typeof detailCounters[number],number>;
 export type DetailSource={report_date:string;cot?:string|null}&Partial<Record<typeof detailCounters[number],number|null>>;
 export type RiderDaily=DetailCounts&ReturnType<typeof performanceConversion>&{date:string};
 export type DetailRange={from:string;to:string};
+export function riderPerformanceLookup(value:string):{column:"id"|"rider_code";value:string}{
+  const code=value.trim();
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code))return {column:"id",value:code};
+  if(/^[A-Za-z0-9_-]{1,40}$/.test(code))return {column:"rider_code",value:code};
+  throw new Error("ID rider không hợp lệ.");
+}
 export function detailToday(){return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Ho_Chi_Minh"}).format(new Date());}
 export function detailShift(day:string,days:number){const d=new Date(`${day}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 function validDay(day:string){return /^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day))&&new Date(day).toISOString().slice(0,10)===day;}
@@ -16,7 +22,7 @@ export function readDetailRange(query:URLSearchParams):DetailRange {
     if((Date.parse(to)-Date.parse(from))/86400000>3660)throw new Error("Chọn khoảng tối đa 10 năm mỗi lần.");
     return {from,to};
   }
-  const n=Number(query.get("days")??45),days=Number.isFinite(n)?Math.max(7,Math.min(180,Math.trunc(n))):45;
+  const n=Number(query.get("days")??7),days=Number.isFinite(n)?Math.max(7,Math.min(180,Math.trunc(n))):7;
   const end=detailToday();return {from:detailShift(end,-days+1),to:end};
 }
 const emptyCounts=()=>Object.fromEntries(detailCounters.map(key=>[key,0])) as DetailCounts;

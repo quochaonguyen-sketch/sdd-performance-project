@@ -1,9 +1,8 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
-import { buildRiderDaily,readDetailRange,summarizeRiderDaily,type DetailSource } from "@/lib/performance/rider-detail";
+import { buildRiderDaily,readDetailRange,riderPerformanceLookup,summarizeRiderDaily,type DetailSource } from "@/lib/performance/rider-detail";
 
 export async function GET(request:Request,context:{params:Promise<{id:string}>}){
   try{return await readPerformance(request,context);}catch{return NextResponse.json({success:false,error:"Không thể tải hoặc xuất Performance. Vui lòng thử lại."},{status:503});}
@@ -12,12 +11,13 @@ async function readPerformance(request:Request,context:{params:Promise<{id:strin
   const session=await getCurrentUserContext();
   if(!session)return NextResponse.json({success:false,error:"Chưa đăng nhập"},{status:401});
   const {id}=await context.params;
-  if(!z.string().uuid().safeParse(id).success)return NextResponse.json({success:false,error:"Rider không hợp lệ"},{status:400});
+  let lookup;
+  try{lookup=riderPerformanceLookup(id);}catch{return NextResponse.json({success:false,error:"ID rider không hợp lệ"},{status:400});}
   const query=new URL(request.url).searchParams;
   let range;
   try{range=readDetailRange(query);}catch(error){return NextResponse.json({success:false,error:error instanceof Error?error.message:"Khoảng ngày không hợp lệ"},{status:400});}
   const admin=createAdminClient();
-  const {data:rider,error:riderError}=await admin.from("riders").select("id,rider_code,full_name,avatar_url,kv,cot,status,pickup_district,pickup_ward,delivery_district,delivery_ward").in("kv",OPERATING_AREAS).eq("id",id).maybeSingle();
+  const {data:rider,error:riderError}=await admin.from("riders").select("id,rider_code,full_name,avatar_url,kv,cot,status,pickup_district,pickup_ward,delivery_district,delivery_ward").in("kv",OPERATING_AREAS).eq(lookup.column,lookup.value).maybeSingle();
   if(riderError)return NextResponse.json({success:false,error:"Không đọc được hồ sơ rider"},{status:503});
   if(!rider)return NextResponse.json({success:false,error:"Không tìm thấy rider trong KV1–KV5"},{status:404});
   const performance:DetailSource[]=[];

@@ -11,3 +11,14 @@ test("invalid controls cannot become raw SQL sorting or unbounded page sizes",()
   const filters=parsePerformanceFilters({sort:"invalid",dir:"invalid",page:"-5",pageSize:"999999",q:"a".repeat(100)});
   assert.equal(filters.sort,"area");assert.equal(filters.dir,"asc");assert.equal(filters.page,1);assert.equal(filters.pageSize,200);assert.equal(filters.q.length,80);
 });
+test("custom inclusive ranges preserve both endpoints and reject malformed dates",()=>{
+  const filters=parsePerformanceFilters({period:"range",start:"2026-10-23",end:"2026-10-26"});
+  assert.equal(filters.start,"2026-10-23");assert.equal(filters.end,"2026-10-26");assert.equal(filters.date,filters.end);assert.equal(filters.period,"range");
+  for(const pair of [{start:"2026-10-27",end:"2026-10-26"},{start:"2026-02-30",end:"2026-03-01"},{start:"2026-01-01"},{start:"2000-01-01",end:"2026-01-01"}])assert.throws(()=>parsePerformanceFilters({period:"range",...pair}),RangeError);
+  assert.equal(parsePerformanceFilters({period:"range",start:"2024-02-29",end:"2024-02-29"}).start,"2024-02-29");
+});
+test("day week and month retain their existing inclusive ranges",()=>{
+  assert.equal(parsePerformanceFilters({date:"2026-10-26",period:"week"}).start,"2026-10-20");
+  assert.equal(parsePerformanceFilters({date:"2026-10-26",period:"month"}).start,"2026-10-01");
+  assert.equal(parsePerformanceFilters({date:"2026-10-26"}).end,"2026-10-26");
+});

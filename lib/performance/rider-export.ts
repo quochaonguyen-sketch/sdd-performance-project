@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import { summarizeRiderDaily,type RiderDaily,type DetailRange } from "./rider-detail.ts";
 
 export function riderPerformanceWorkbook(rider:{rider_code:string;full_name:string|null;kv:string|null;cot:string|null},range:DetailRange,daily:RiderDaily[]){
-  const headers=["Ngày","Deli đã giao","Deli được phân","Deli COT1 giao","Deli COT1 phân","Deli COT2 giao","Deli COT2 phân","Pick đã lấy","Pick được phân","Pick COT1 lấy","Pick COT1 phân","Pick COT2 lấy","Pick COT2 phân","Convert Pick","Total","% Deli","% Pick quy đổi"];
+  const headers=["Ngày","Total Delivered","Total Assigned Deli","Total Delivered COT 1","Total Assigned Deli COT 1","Total Delivered COT 2","Total Assigned Deli COT 2","Total Picked","Total Assigned Pick","Total Picked COT 1","Total Assigned Pick COT 1","Total Picked COT 2","Total Assigned Pick COT 2","Convert Pick","Total","% Deli","% Pick quy đổi"];
   const ordered=[...daily].sort((a,b)=>a.date.localeCompare(b.date));
   const summary=summarizeRiderDaily(daily);
   const toValues=(r:Omit<RiderDaily,"date">)=>[r.delivery_delivered,r.delivery_assigned,r.delivery_delivered_cot1,r.delivery_assigned_cot1,r.delivery_delivered_cot2,r.delivery_assigned_cot2,r.pickup_picked,r.pickup_assigned,r.pickup_picked_cot1,r.pickup_assigned_cot1,r.pickup_picked_cot2,r.pickup_assigned_cot2,r.convertedPickup,r.total,r.deliveryShare===null?null:r.deliveryShare/100,r.pickupShare===null?null:r.pickupShare/100];
@@ -26,7 +26,7 @@ export function riderPerformanceWorkbook(rider:{rider_code:string;full_name:stri
     ws[`O${total}`]={t:"n",f:`B${total}+N${total}`,v:summary.total};
     if(summary.total){ws[`P${total}`]={t:"n",f:`B${total}/O${total}`,v:summary.deliveryShare!/100,z:"0.0%"};ws[`Q${total}`]={t:"n",f:`N${total}/O${total}`,v:summary.pickupShare!/100,z:"0.0%"};}
   }
-  ws["!cols"]=headers.map((_,i)=>({wch:i===0?15:i>=15?18:19}));
+  ws["!cols"]=headers.map((_,i)=>({wch:i===0?15:i>=15?18:28}));
   ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:16}},{s:{r:3,c:0},e:{r:3,c:16}}];
   if(daily.length)ws["!autofilter"]={ref:`A6:Q${last}`};
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Performance");

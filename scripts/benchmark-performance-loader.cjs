@@ -11,7 +11,7 @@
  const client=new PrismaClient({...(url?{datasources:{db:{url}}}:{}),log:[{emit:'event',level:'query'}]});global.prisma=client;global.performanceReadClient=client;
  const queries=[];client.$on('query',e=>queries.push(e.duration));
  try{
-  const {getDriverPerformance,parsePerformanceFilters}=load('../lib/performance/driver-performance.ts');
+  const {getDriverPerformance,getDriverPerformanceExport,parsePerformanceFilters}=load('../lib/performance/driver-performance.ts');
   for(const q of ['', 'Toàn', 'Phường', 'Toàn']){
    queries.length=0;const start=performance.now();const result=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26',q}));
    console.log(JSON.stringify({q:q||'(all)',ms:Math.round(performance.now()-start),queries:queries.length,queryMs:[...queries],rows:result.rows.length,groups:result.summary.groups}));
@@ -21,5 +21,18 @@
   const totals=result.rows.map(r=>r.delivery_delivered+Math.ceil(r.pickup_picked/3));
   if(totals.some((n,i)=>i>0&&n>totals[i-1])||result.rows.some(r=>!r.rider_id))throw Error('Sorting or drilldown regression');
   console.log('Total sorting and rider drilldown verified on real data.');
+  const range=await getDriverPerformance(parsePerformanceFilters({period:'range',start:'2026-10-23',end:'2026-10-26',q:'158197'}));
+  const [expected]=await client.$queryRaw`select sum(delivery_delivered)::int as deli,sum(pickup_picked)::int as pick from public.driver_performance_daily where driver_id='158197' and report_date between '2026-10-23'::date and '2026-10-26'::date`;
+  if(range.rows.length!==1||range.rows[0].delivery_delivered!==expected.deli||range.rows[0].pickup_picked!==expected.pick||range.analysis.start!=='2026-10-23'||range.analysis.end!=='2026-10-26'||range.analysis.daily.length!==4)throw Error('Inclusive custom range regression');
+  console.log(JSON.stringify({customRangeVerified:true,from:range.filters.start,to:range.filters.end,deli:expected.deli,pick:expected.pick,total:expected.deli+Math.ceil(expected.pick/3)}));
+  const all=await getDriverPerformanceExport(parsePerformanceFilters({date:'2026-10-26',page:'2',pageSize:'25'}));
+  if(all.rows.length!==all.summary.groups||all.rows.length<=100)throw Error('Export did not include all pages');
+  const {performanceListWorkbook}=load('../lib/performance/list-export.ts');const XLSX=await import('xlsx');
+  const bytes=XLSX.write(performanceListWorkbook(all.filters,all.rows),{type:'buffer',bookType:'xlsx'});
+  const sheet=XLSX.read(bytes,{type:'buffer'}).Sheets.Performance,totalRow=8+all.rows.length;
+  if(sheet[`N${totalRow}`].v!==all.summary.pickup_picked||sheet[`H${totalRow}`].v!==all.summary.delivery_delivered||sheet[`F2`].v!==all.rows.length)throw Error('Export totals mismatch');
+  const filtered=await getDriverPerformanceExport(parsePerformanceFilters({period:'range',start:'2026-10-23',end:'2026-10-26',q:'158197',kv:range.rows[0].kv,district:range.rows[0].delivery_district,cot:range.rows[0].cot}));
+  if(filtered.rows.length!==1||filtered.rows[0].driver_id!=='158197'||filtered.rows[0].pickup_picked!==expected.pick)throw Error('Filtered export scope mismatch');
+  console.log(JSON.stringify({allPagesExportVerified:true,riders:all.rows.length,bytes:bytes.length,filteredRangeExportVerified:true}));
  }finally{await client.$disconnect();}
 })().catch(e=>{console.error(e.message);process.exitCode=1;});

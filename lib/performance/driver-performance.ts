@@ -4,7 +4,7 @@ import { getPerformanceDatabase } from "./database";
 import { TtlCache } from "@/lib/cache/ttl-cache";
 import { buildPerformanceAnalysis, shiftPerformanceDate, type PerformanceAnalysis, type PerformanceAnalysisInput } from "@/lib/performance/analysis";
 
-import type { PerformanceFilters,PerformancePeriod,PerformanceDirection,PerformanceSortKey } from "./filters";
+import type { PerformanceFilters,PerformanceDirection,PerformanceSortKey } from "./filters";
 export {parsePerformanceFilters,todayString,performanceSortSchema,performanceDirectionSchema,performanceKvSchema,performancePeriodSchema} from "./filters";
 export type {PerformanceFilters,PerformancePeriod,PerformanceDirection,PerformanceSortKey,PerformanceKvFilter} from "./filters";
 
@@ -79,18 +79,6 @@ function tryParseJson<T>(raw: string | null | undefined): T | null {
   }
 }
 
-function shiftDate(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function periodRange(date: string, period: PerformancePeriod) {
-  if (period === "week") return { start: shiftDate(date, -6), end: date };
-  if (period === "month") return { start: `${date.slice(0, 7)}-01`, end: date };
-  return { start: date, end: date };
-}
-
 function orderClause(sort: PerformanceSortKey, direction: PerformanceDirection) {
   const dir = direction === "asc" ? Prisma.sql`asc nulls last` : Prisma.sql`desc nulls last`;
   const areaAsc = Prisma.sql`
@@ -122,11 +110,14 @@ const metadataCache=new TtlCache<PerformanceMetadata>(30000,24);
 export const getDriverPerformance=cache(async(filters:PerformanceFilters,revision=""):Promise<PerformanceResult>=>{
   return (await resultsCache.load(JSON.stringify([filters,revision]),()=>loadDriverPerformance(filters,revision))).value;
 });
-async function loadDriverPerformance(filters:PerformanceFilters,revision:string):Promise<PerformanceResult>{
+export function getDriverPerformanceExport(filters:PerformanceFilters):Promise<PerformanceResult>{
+  return loadDriverPerformance(filters,"",true);
+}
+async function loadDriverPerformance(filters:PerformanceFilters,revision:string,allRows=false):Promise<PerformanceResult>{
   const prisma=await getPerformanceDatabase();
   const orderBy = orderClause(filters.sort, filters.dir);
   const offset = (filters.page - 1) * filters.pageSize;
-  const { start, end } = periodRange(filters.date, filters.period);
+  const { start, end } = filters;
   const reportDateSelect = filters.period === "day"
     ? Prisma.sql`p.report_date::date`
     : Prisma.sql`${end}::date`;
@@ -271,8 +262,7 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string)
     from final
     cross join totals
     order by ${orderBy}, final.delivery_delivered desc, final.pickup_picked desc, final.driver_id asc
-    limit ${filters.pageSize}
-    offset ${offset}
+    ${allRows?Prisma.empty:Prisma.sql`limit ${filters.pageSize} offset ${offset}`}
   `;
 
   const metadataPromise=metadataCache.load(JSON.stringify([revision,start,end,filters.kv,filters.district]),()=>prisma.$queryRaw<PerformanceMetadata[]>`

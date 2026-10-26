@@ -1,6 +1,10 @@
 # Quy đổi Pick trên bảng Performance
 
-Bảng dùng mẫu Cân đối do người dùng chốt, điều chỉnh độ rộng ngày 26/10: Rider 15%, KV/COT 7%, khu vực 13%, Deli 15%, Pick 11%, Convert Pick 11%, Total 13%, tỷ trọng 15%. Deli/Pick và badge căn đầu cột để giảm khoảng trống sau Khu vực. Badge COT 1/COT 2 đầy đủ, xếp dọc, có nền/viền xanh và vàng như bản cũ. Bỏ hai cột tỷ lệ hoàn thành Deli/Pick; giữ Convert Pick, Total và tỷ trọng Deli/Pick quy đổi.
+Nút Xuất Excel cạnh Danh sách rider tải toàn bộ kết quả phù hợp khoảng ngày, Khu, Quận giao, Phường, COT, từ khóa và thứ tự sắp xếp hiện tại; bỏ giới hạn phân trang. API GET /api/driver-performance?export=xlsx dùng cùng kiểm tra đăng nhập và cùng truy vấn tổng hợp với bảng, trả file private/no-store. Workbook ghi rõ bộ lọc, ID/tên rider, địa bàn, sản lượng và COT, Convert Pick, Total, tỷ trọng. Dòng tổng cộng cộng Convert Pick của từng rider (không lấy ceil trên tổng Pick của nhiều rider); các công thức có cached values. Chuỗi tên/ID giữ kiểu text. File rỗng vẫn có tiêu đề và tổng 0.
+
+Rider Performance có chế độ Khoảng ngày: chọn Từ ngày / Đến ngày và Xem dữ liệu. URL dùng period=range&start=YYYY-MM-DD&end=YYYY-MM-DD; lấy cả hai ngày đầu/cuối, kiểm tra ngày thực và thứ tự, tối đa 10 năm như trang chi tiết. Bảng/KPI/biểu đồ cùng phạm vi; mỗi rider gộp sản lượng trong kỳ, Pick/3 làm tròn một lần. Bấm tên rider mở trang chi tiết mặc định 7 ngày gần nhất; vẫn chọn lại được khoảng ngày và xuất Excel. Chế độ Ngày/Tuần/Tháng vẫn hoạt động như trước.
+
+Bảng dùng mẫu Cân đối do người dùng chốt, điều chỉnh độ rộng ngày 26/10: Rider 14%, KV/COT 7%, khu vực 13%, Total Delivered 18%, Total Picked 16%, Convert Pick 9%, Total 8%, tỷ trọng 15%. Deli/Pick và badge căn đầu cột để giảm khoảng trống sau Khu vực. Badge COT 1/COT 2 đầy đủ, xếp dọc, có nền/viền xanh và vàng như bản cũ. Bỏ hai cột tỷ lệ hoàn thành Deli/Pick; giữ Convert Pick, Total và tỷ trọng Deli/Pick quy đổi.
 
 - Deli dùng delivery_delivered, Pick dùng pickup_picked (số đã hoàn thành).
 - Convert Pick = ceil(Pick / 3). Total = Deli + Convert Pick.
