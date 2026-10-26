@@ -11,6 +11,9 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 import { PerformanceAnalysis } from "./performance-analysis";
 import analysisStyles from "./performance-analysis.module.css";
+import tableStyles from "./performance-table.module.css";
+import { performanceConversion } from "@/lib/performance/conversion";
+import { allocateCotRemainder } from "@/lib/performance/cot-allocation";
 import {
   type PerformanceDirection,
   type PerformanceFilters,
@@ -387,12 +390,17 @@ function RiderPerformanceTable({
 
   return (
     <section className="perf-table" aria-busy={isLoading}>
-      <div className="perf-table-head">
+      <div className={cn("perf-table-head", tableStyles.header)}>
         <div>
           <h2 className="perf-table-title">Danh sách rider</h2>
           <p className="perf-table-sub">{filterText}</p>
+
         </div>
-        <div className="flex items-center gap-2">
+        <div className={tableStyles.headerActions}>
+          <details className={tableStyles.formula}>
+            <summary>Cách tính ⓘ</summary>
+            <p>Convert Pick = số đã pick / 3, làm tròn lên.<br/>Total = Deli + Convert Pick.<br/>Tỷ trọng = Deli / Total và Convert Pick / Total.<br/>Số sau dấu / là số được phân. Badge COT 1 / COT 2 là số hoàn thành / số được phân theo từng COT.<br/>Phần chưa phân loại được cộng vào COT chính của rider.</p>
+          </details>
           {isLoading ? <span className="perf-badge is-loading">Đang tải dữ liệu...</span> : null}
           <span className="perf-badge">
             {formatNumber(rows.length)} / {formatNumber(summary.groups)} dòng
@@ -408,44 +416,38 @@ function RiderPerformanceTable({
           </div>
         ) : null}
 
-        <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-left text-sm">
+        <table className={tableStyles.table}>
           <caption className="sr-only">Bảng performance Deli Pick rider KV1–KV5</caption>
+          <colgroup>{[14,7,15,17,17,10,8,12].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup>
           <thead className="perf-table-thead">
             <tr>
-              <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className="w-[24%]" />
-              <th scope="col" className="px-4 py-3 font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <span>KV / COT</span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-normal">
-                    <span className="rounded bg-blue-100 px-1.5 py-0.2 text-blue-700 dark:bg-blue-950 dark:text-blue-300">COT1</span>
-                    <span className="rounded bg-amber-100 px-1.5 py-0.2 text-amber-700 dark:bg-amber-950 dark:text-amber-300">COT2</span>
-                  </span>
-                </div>
-              </th>
+              <SortHeader label="Rider" sortKey="rider" current={filters} onSort={onSort} className={tableStyles.riderHeading} />
+              <th scope="col" className={tableStyles.kvHeading}>KV / COT</th>
               <SortHeader label="Khu vực" sortKey="area" current={filters} onSort={onSort} />
               <SortHeader label="Deli" sortKey="delivery" current={filters} onSort={onSort} align="right" />
-              <SortHeader label="Tỉ lệ deli" sortKey="deliveryRate" current={filters} onSort={onSort} align="right" />
               <SortHeader label="Pick" sortKey="pickup" current={filters} onSort={onSort} align="right" />
-              <SortHeader label="Tỉ lệ pick" sortKey="pickupRate" current={filters} onSort={onSort} align="right" />
+              <SortHeader label="Convert Pick" sortKey="convertedPickup" current={filters} onSort={onSort} align="right" />
+              <SortHeader label="Total" sortKey="total" current={filters} onSort={onSort} align="right" />
+              <th scope="col" className={tableStyles.shareHeading}>Tỷ trọng Deli / Pick QĐ</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && rows.length === 0 ? (
               Array.from({ length: 8 }, (_, index) => (
                 <tr key={index} className="h-16 animate-pulse">
-                  <td colSpan={7} className="px-4">
+                  <td colSpan={8} className="px-4">
                     <div className="h-4 rounded bg-[var(--color-paper-2)]" />
                   </td>
                 </tr>
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <EmptyState filters={filters} />
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => <PerformanceTableRow key={`${row.report_date}-${row.driver_id}`} row={row} index={index} />)
+              rows.map(row => <PerformanceTableRow key={`${row.report_date}-${row.driver_id}`} row={row} />)
             )}
           </tbody>
         </table>
@@ -463,163 +465,43 @@ function RiderPerformanceTable({
   );
 }
 
-function CotBadge({ cot }: { cot: string | null | undefined }) {
-  if (!cot || !cot.trim()) {
-    return <span className="text-xs text-[var(--color-muted)]">—</span>;
-  }
-  const clean = cot.trim();
-  const lower = clean.toLowerCase();
-  const isCot1 = lower.startsWith("cot 1") || lower === "cot1";
-  const isCot2 = lower.startsWith("cot 2") || lower === "cot2";
-
-  if (isCot1) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300">
-        <span className="size-1.5 rounded-full bg-blue-500" />
-        {clean}
-      </span>
-    );
-  }
-
-  if (isCot2) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 shadow-sm dark:border-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
-        <span className="size-1.5 rounded-full bg-amber-500" />
-        {clean}
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-      {clean}
-    </span>
-  );
+function PerformanceTableRow({ row }: { row: PerformanceRow }) {
+  const converted = performanceConversion(row.delivery_delivered, row.pickup_picked);
+  const deliPercent = converted.deliveryShare === null ? null : Math.round(converted.deliveryShare*10)/10;
+  const pickPercent = deliPercent === null ? null : 100-deliPercent;
+  const percent = (value: number) => value.toLocaleString("vi-VN",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
+  const cot = (row.cot??"").replace(/\s/g,"").toLowerCase();
+  const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
+  return <tr className={tableStyles.row}>
+    <th scope="row" className={tableStyles.identity}>
+      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_name??row.driver_name??"Chưa map rider"}</strong>
+      <small>{row.driver_id}</small>
+    </th>
+    <td className={tableStyles.kvCell}><strong>{row.kv??"—"}</strong><span data-cot={cot.startsWith("cot1")?"1":cot.startsWith("cot2")?"2":"unknown"}>{row.cot||"—"}</span></td>
+    <td className={tableStyles.locality}><strong title={row.delivery_district??undefined}>{row.delivery_district??"Chưa có quận giao"}</strong><small title={locality}>{locality||"Chưa có phường"}</small></td>
+    <td className={tableStyles.number}><ProductionCell primaryCot={row.cot} completed={row.delivery_delivered} assigned={row.delivery_assigned} c1={row.delivery_delivered_cot1} a1={row.delivery_assigned_cot1} c2={row.delivery_delivered_cot2} a2={row.delivery_assigned_cot2}/></td>
+    <td className={tableStyles.number}><ProductionCell primaryCot={row.cot} completed={row.pickup_picked} assigned={row.pickup_assigned} c1={row.pickup_picked_cot1} a1={row.pickup_assigned_cot1} c2={row.pickup_picked_cot2} a2={row.pickup_assigned_cot2}/></td>
+    <td className={tableStyles.number}><strong className={tableStyles.converted} title={`${formatNumber(row.pickup_picked)} / 3, làm tròn lên`}>{formatNumber(converted.convertedPickup)}</strong></td>
+    <td className={tableStyles.number}><strong className={tableStyles.total}>{formatNumber(converted.total)}</strong></td>
+    <td className={tableStyles.share}>
+      {deliPercent===null||pickPercent===null?<span className={tableStyles.muted}>—</span>:<div title={`Deli ${percent(deliPercent)} · Pick quy đổi ${percent(pickPercent)}`}>
+        <div className={tableStyles.shareLabels}><span>{percent(deliPercent)}</span><span>{percent(pickPercent)}</span></div>
+        <div className={tableStyles.shareBar} role="img" aria-label={`Deli ${percent(deliPercent)}, Pick quy đổi ${percent(pickPercent)}`}><span style={{width:`${converted.deliveryShare}%`}}/><span style={{width:`${converted.pickupShare}%`}}/></div>
+      </div>}
+    </td>
+  </tr>;
 }
 
-function PerformanceTableRow({ row, index }: { row: PerformanceRow; index: number }) {
-  const deliRate = row.delivery_rate;
-  const pickRate = row.pickup_rate;
-
-  const cotClean = (row.cot ?? "").trim().toLowerCase();
-  const isCot1 = cotClean.startsWith("cot 1") || cotClean === "cot1";
-  const isCot2 = cotClean.startsWith("cot 2") || cotClean === "cot2";
-
-  const hasDeliCot = row.delivery_assigned_cot1 > 0 || row.delivery_assigned_cot2 > 0;
-  const hasPickCot = row.pickup_assigned_cot1 > 0 || row.pickup_assigned_cot2 > 0;
-
-  return (
-    <tr
-      className={cn(
-        "transition hover:bg-[var(--color-accent-soft)]",
-        index % 2 === 1 ? "bg-[var(--color-paper-2)]" : "bg-[var(--color-paper)]",
-        isCot1 && "border-l-4 border-l-blue-500",
-        isCot2 && "border-l-4 border-l-amber-500"
-      )}
-    >
-      <th scope="row" className="px-4 py-3 text-left">
-        <p className="max-w-72 truncate font-bold text-[var(--color-ink)]" title={row.rider_name ?? row.driver_name ?? row.driver_id}>
-          {row.rider_name ?? row.driver_name ?? "Chưa map rider"}
-        </p>
-        <p className="font-mono text-xs font-normal text-[var(--color-muted)]">{row.driver_id}</p>
-      </th>
-      <td className="px-4 py-3">
-        <p className="font-bold text-[var(--color-ink-2)]">{row.kv ?? "—"}</p>
-        <div className="mt-1">
-          <CotBadge cot={row.cot} />
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <p className="max-w-56 truncate font-semibold text-[var(--color-ink-2)]" title={row.delivery_district ?? undefined}>{row.delivery_district ?? "Chưa có quận giao"}</p>
-        <span className="mt-1 inline-flex max-w-56 truncate rounded-full bg-[var(--color-paper-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-muted)]" title={row.delivery_ward ?? undefined}>
-          {row.delivery_ward ?? "Chưa có phường"}
-        </span>
-        <span className="mt-1 inline-flex max-w-56 truncate rounded-full bg-[var(--color-paper-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-muted)]" title={row.pickup_district ?? undefined}>
-          Pick: {row.pickup_district ?? "—"}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-right">
-        <p className="font-black tabular-nums text-[var(--color-ink)]">{formatNumber(row.delivery_delivered)}</p>
-        <p className="text-xs text-[var(--color-muted)]">/ {formatNumber(row.delivery_assigned)} phân</p>
-        {hasDeliCot ? (
-          <div className="mt-1.5 flex flex-col items-end gap-1">
-            {row.delivery_assigned_cot1 > 0 && (
-              <span className="inline-flex items-center rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                <span className="flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-blue-500" />
-                  COT 1: {formatNumber(row.delivery_delivered_cot1)}/{formatNumber(row.delivery_assigned_cot1)}
-                </span>
-              </span>
-            )}
-            {row.delivery_assigned_cot2 > 0 && (
-              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                <span className="size-1.5 rounded-full bg-amber-500" />
-                COT 2: {formatNumber(row.delivery_delivered_cot2)}/{formatNumber(row.delivery_assigned_cot2)}
-              </span>
-            )}
-          </div>
-        ) : (
-          row.delivery_assigned > 0 && (
-            <div className="mt-1.5 flex flex-col items-end">
-              {isCot1 ? (
-                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  <span className="size-1.5 rounded-full bg-blue-500" />
-                  COT 1: {formatNumber(row.delivery_delivered)}/{formatNumber(row.delivery_assigned)}
-                </span>
-              ) : isCot2 ? (
-                <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                  <span className="size-1.5 rounded-full bg-amber-500" />
-                  COT 2: {formatNumber(row.delivery_delivered)}/{formatNumber(row.delivery_assigned)}
-                </span>
-              ) : null}
-            </div>
-          )
-        )}
-      </td>
-      <td className="px-4 py-3 text-right">
-        <ProgressMetric value={deliRate} />
-      </td>
-      <td className="px-4 py-3 text-right">
-        <p className="font-black tabular-nums text-[var(--color-ink)]">{formatNumber(row.pickup_picked)}</p>
-        <p className="text-xs text-[var(--color-muted)]">/ {formatNumber(row.pickup_assigned)} phân</p>
-        {hasPickCot ? (
-          <div className="mt-1.5 flex flex-col items-end gap-1">
-            {row.pickup_assigned_cot1 > 0 && (
-              <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                <span className="size-1.5 rounded-full bg-blue-500" />
-                COT 1: {formatNumber(row.pickup_picked_cot1)}/{formatNumber(row.pickup_assigned_cot1)}
-              </span>
-            )}
-            {row.pickup_assigned_cot2 > 0 && (
-              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                <span className="size-1.5 rounded-full bg-amber-500" />
-                COT 2: {formatNumber(row.pickup_picked_cot2)}/{formatNumber(row.pickup_assigned_cot2)}
-              </span>
-            )}
-          </div>
-        ) : (
-          row.pickup_assigned > 0 && (
-            <div className="mt-1.5 flex flex-col items-end">
-              {isCot1 ? (
-                <span className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  <span className="size-1.5 rounded-full bg-blue-500" />
-                  COT 1: {formatNumber(row.pickup_picked)}/{formatNumber(row.pickup_assigned)}
-                </span>
-              ) : isCot2 ? (
-                <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                  <span className="size-1.5 rounded-full bg-amber-500" />
-                  COT 2: {formatNumber(row.pickup_picked)}/{formatNumber(row.pickup_assigned)}
-                </span>
-              ) : null}
-            </div>
-          )
-        )}
-      </td>
-      <td className="px-4 py-3 text-right">
-        <ProgressMetric value={pickRate} />
-      </td>
-    </tr>
-  );
+function ProductionCell({primaryCot,...values}:{primaryCot:string|null;completed:number;assigned:number;c1:number;a1:number;c2:number;a2:number}) {
+  const {completed,assigned,c1,a1,c2,a2}=allocateCotRemainder(values,primaryCot);
+  return <div className={tableStyles.production}>
+    <div className={tableStyles.productionTotal}><strong>{formatNumber(completed)}</strong><span>/ {formatNumber(assigned)}</span></div>
+    <div className={tableStyles.cots}>
+      {(a1>0||c1>0)&&<span className={tableStyles.cot1} title={`COT 1: ${formatNumber(c1)} hoàn thành / ${formatNumber(a1)} được phân`}>COT 1: {formatNumber(c1)}/{formatNumber(a1)}</span>}
+      {(a2>0||c2>0)&&<span className={tableStyles.cot2} title={`COT 2: ${formatNumber(c2)} hoàn thành / ${formatNumber(a2)} được phân`}>COT 2: {formatNumber(c2)}/{formatNumber(a2)}</span>}
+      {assigned===0&&<span className={tableStyles.muted}>—</span>}
+    </div>
+  </div>;
 }
 
 function PaginationControls({
@@ -729,15 +611,6 @@ function ContextStat({ label, value, sub }: { label: string; value: string; sub?
   );
 }
 
-function ProgressMetric({ value }: { value: number | null }) {
-  return (
-    <div className="ml-auto w-32">
-      <p className={cn("mb-1 text-sm font-black tabular-nums", scoreTextClass(value))}>{formatRate(value)}</p>
-      <ProgressBar value={value} />
-    </div>
-  );
-}
-
 function ProgressBar({ value }: { value: number | null }) {
   const safeValue = Math.max(0, Math.min(100, value ?? 0));
   return (
@@ -818,14 +691,6 @@ function scoreTone(value: number | null | undefined): "blue" | "emerald" | "slat
   if (value >= 90) return "emerald";
   if (value >= 70) return "amber";
   return "red";
-}
-
-function scoreTextClass(value: number | null | undefined) {
-  const tone = scoreTone(value);
-  if (tone === "emerald") return "text-[var(--color-success)]";
-  if (tone === "amber") return "text-[var(--color-warning)]";
-  if (tone === "red") return "text-[var(--color-error)]";
-  return "text-[var(--color-muted)]";
 }
 
 function scoreBarClass(value: number | null | undefined) {

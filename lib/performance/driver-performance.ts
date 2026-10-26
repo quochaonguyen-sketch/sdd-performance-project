@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma/client";
 import { buildPerformanceAnalysis, shiftPerformanceDate, type PerformanceAnalysis, type PerformanceAnalysisInput } from "@/lib/performance/analysis";
 
-export const performanceSortSchema = z.enum(["area", "rider", "delivery", "pickup", "deliveryRate", "pickupRate"]);
+export const performanceSortSchema = z.enum(["area", "rider", "delivery", "pickup", "deliveryRate", "pickupRate", "convertedPickup", "total"]);
 export const performanceDirectionSchema = z.enum(["asc", "desc"]);
 export const performanceKvSchema = z.enum(["all", "KV1", "KV2", "KV3", "KV4", "KV5"]);
 export const performancePeriodSchema = z.enum(["day", "week", "month"]);
@@ -162,6 +162,8 @@ function orderClause(sort: PerformanceSortKey, direction: PerformanceDirection) 
   if (sort === "area") return direction === "asc" ? areaAsc : areaDesc;
   if (sort === "rider") return Prisma.sql`coalesce(final.rider_name, final.driver_name, final.driver_id) ${dir}, ${areaAsc}`;
   if (sort === "pickup") return Prisma.sql`final.pickup_picked ${dir}, ${areaAsc}`;
+  if (sort === "convertedPickup") return Prisma.sql`ceil(final.pickup_picked::numeric / 3) ${dir}, ${areaAsc}`;
+  if (sort === "total") return Prisma.sql`(final.delivery_delivered + ceil(final.pickup_picked::numeric / 3)) ${dir}, ${areaAsc}`;
   if (sort === "deliveryRate") return Prisma.sql`final.delivery_rate ${dir}, ${areaAsc}`;
   if (sort === "pickupRate") return Prisma.sql`final.pickup_rate ${dir}, ${areaAsc}`;
   return Prisma.sql`final.delivery_delivered ${dir}, ${areaAsc}`;
