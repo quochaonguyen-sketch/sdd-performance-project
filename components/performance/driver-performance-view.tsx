@@ -5,7 +5,7 @@ import Link from "next/link";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays,Download, PackageCheck, RefreshCcw, Search, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays,Download, PackageCheck, RefreshCcw, Search,SlidersHorizontal, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -163,7 +163,9 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
 
   return (
     <div className={cn("perf-page mx-auto max-w-[1600px]", analysisStyles.page)}>
-      <PageHeader />
+      <PageHeader filters={filters} />
+
+      <PerformanceKpiCards summary={summary} isLoading={isLoading&&!result} />
 
       <PerformanceFilters
         filters={filters}
@@ -179,10 +181,6 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         </div>
       ) : null}
 
-      <PerformanceKpiCards summary={summary} isLoading={isLoading&&!result} />
-
-      <StableAnalysis analysis={result?.analysis} isLoading={isLoading&&!result} onArea={selectArea} />
-
       <RiderPerformanceTable
         rows={rows}
         summary={summary}
@@ -195,28 +193,31 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         onExport={exportExcel}
         exporting={exporting}
       />
+      <div className={analysisStyles.sectionTitle}><div><span>PHÂN TÍCH HIỆU SUẤT</span><h2>Hiểu rõ hơn về sản lượng</h2></div><p>Xu hướng, khu vực và phân bố rider theo cùng bộ lọc.</p></div>
+      <StableAnalysis analysis={result?.analysis} isLoading={isLoading&&!result} onArea={selectArea} />
     </div>
   );
 }
 
-function PageHeader() {
+function PageHeader({filters}:{filters:PerformanceFilters}) {
   return (
     <header className="perf-header">
       <div className="perf-header-top">
         <span className="perf-mark">
-          <BarChart3 size={22} />
+          <BarChart3 size={24} aria-hidden="true" />
         </span>
         <div className="perf-header-copy">
-          <p className="perf-kicker">Rider Operations · KV1–KV5</p>
-          <h1 className="perf-title">Phân tích hiệu suất Deli / Pick</h1>
+          <p className="perf-kicker">RIDER OPERATIONS / ANALYTICS</p>
+          <h1 className="perf-title">Rider Performance</h1>
           <p className="perf-desc">
-            Theo dõi xu hướng hoàn thành, so sánh khu vực × COT và phân tích hiệu suất rider.
+            Theo dõi sản lượng, đối chiếu COT và phân tích hiệu suất từng rider.
           </p>
         </div>
       </div>
       <div className="perf-scope">
-        <span>Ngữ cảnh</span>
-        <strong>Rider KV1–KV5 · Biểu đồ tính trên toàn bộ dữ liệu theo bộ lọc</strong>
+        <span><CalendarDays size={15} aria-hidden="true"/>Kỳ đang xem</span>
+        <strong>{formatDate(filters.start)} — {formatDate(filters.end)}</strong>
+        <small>{filters.kv==="all"?"Toàn bộ KV1–KV5":filters.kv} · {periodLabel(filters.period)}</small>
       </div>
     </header>
   );
@@ -279,9 +280,11 @@ function PerformanceFilters({
       params.set("page", "1");
     });
   }
+  const activeCount=[filters.kv,filters.district,filters.ward,filters.cot].filter(value=>value!=="all").length+(filters.q?1:0);
 
   return (
     <section className={cn("perf-filters",filterStyles.panel)} aria-label="Bộ lọc performance">
+      <div className={filterStyles.heading}><div><SlidersHorizontal size={17} aria-hidden="true"/><h2>Bộ lọc dữ liệu</h2>{activeCount>0&&<span>{activeCount} đang áp dụng</span>}</div><button type="button" disabled={!activeCount} onClick={()=>updateParams(params=>{for(const key of ["kv","district","ward","cot","q"])params.delete(key);params.set("page","1");})}>Đặt lại bộ lọc</button></div>
       <div className={filterStyles.timeRow}>
         <div className={filterStyles.periodControl}>
         <span className="perf-field-label">Thời gian thống kê</span>
@@ -375,6 +378,7 @@ function PerformanceFilters({
           Tải lại
         </Button>
       </div>
+      <div className={filterStyles.caption}><span>Kết quả và file Excel dùng cùng khoảng ngày, bộ lọc đang áp dụng.</span><span role="status" aria-live="polite">{isLoading?"Đang cập nhật dữ liệu…":"Bấm tên rider để xem chi tiết"}</span></div>
     </section>
   );
 }
@@ -408,23 +412,25 @@ function PerformanceKpiCards({
   return (
     <section className={cn("perf-kpis", isLoading && "is-loading")} aria-label="Chỉ số tổng quan">
       <div className="perf-kpi-grid">
+        <KpiCard icon={<Truck size={19} aria-hidden="true"/>} title="Total Delivered" primary={isLoading?"—":formatNumber(summary.delivery_delivered)} secondary={isLoading?"Đang tải sản lượng…":`${formatNumber(summary.delivery_assigned)} Total Assigned Deli`}/>
+        <KpiCard icon={<PackageCheck size={19} aria-hidden="true"/>} title="Total Picked" primary={isLoading?"—":formatNumber(summary.pickup_picked)} secondary={isLoading?"Đang tải sản lượng…":`${formatNumber(summary.pickup_assigned)} Total Assigned Pick`}/>
         <KpiCard
-          icon={<Truck size={18} />}
-          title="Tỷ lệ giao thành công"
-          primary={formatRate(deliRate)}
-          secondary={`${formatNumber(summary.delivery_delivered)} Total Delivered / ${formatNumber(summary.delivery_assigned)} Total Assigned Deli`}
+          icon={<Truck size={19} aria-hidden="true" />}
+          title="Delivery Success Rate"
+          primary={isLoading?"—":formatRate(deliRate)}
+          secondary={isLoading?"Đang tải tỷ lệ…":`${formatNumber(summary.delivery_delivered)} / ${formatNumber(summary.delivery_assigned)} · Completed / Assigned`}
           rate={deliRate}
         />
         <KpiCard
-          icon={<PackageCheck size={18} />}
-          title="Tỷ lệ lấy thành công"
-          primary={formatRate(pickRate)}
-          secondary={`${formatNumber(summary.pickup_picked)} Total Picked / ${formatNumber(summary.pickup_assigned)} Total Assigned Pick`}
+          icon={<PackageCheck size={19} aria-hidden="true" />}
+          title="Pickup Success Rate"
+          primary={isLoading?"—":formatRate(pickRate)}
+          secondary={isLoading?"Đang tải tỷ lệ…":`${formatNumber(summary.pickup_picked)} / ${formatNumber(summary.pickup_assigned)} · Completed / Assigned`}
           rate={pickRate}
         />
       </div>
       <div className="perf-kpi-context" aria-label="Thông tin dữ liệu đang xem">
-        <ContextStat label="Rider có dữ liệu" value={formatNumber(summary.active_riders)} sub="Toàn bộ phạm vi lọc · Tỷ lệ tính từ tổng hoàn thành / tổng được phân" />
+        <ContextStat label="Rider có dữ liệu" value={isLoading?"—":formatNumber(summary.active_riders)} sub="Tổng quan tính trên toàn bộ kết quả theo bộ lọc" />
       </div>
     </section>
   );
@@ -475,7 +481,7 @@ function RiderPerformanceTable({
 
         </div>
         <div className={tableStyles.headerActions}>
-          <Button type="button" variant="secondary" disabled={isLoading||exporting} onClick={onExport} title="Xuất toàn bộ rider theo khoảng ngày và bộ lọc đang chọn"><Download size={16}/>{exporting?"Đang xuất…":"Xuất Excel"}</Button>
+          <Button type="button" className={tableStyles.exportButton} disabled={isLoading||exporting} aria-busy={exporting} onClick={onExport} title="Xuất toàn bộ rider theo khoảng ngày và bộ lọc đang chọn"><Download size={16} aria-hidden="true"/>{exporting?"Đang xuất…":"Xuất Excel"}</Button>
           <details className={tableStyles.formula}>
             <summary>Cách tính ⓘ</summary>
             <p>Convert Pick = Total Picked / 3, làm tròn lên.<br/>Total = Total Delivered + Convert Pick.<br/>Tỷ trọng = Total Delivered / Total và Convert Pick / Total.<br/>Deli: Total Delivered / Total Assigned Deli.<br/>Pick: Total Picked / Total Assigned Pick.<br/>Badge COT 1 / COT 2 dùng cùng thứ tự trên theo từng COT.<br/>Phần chưa phân loại được cộng vào COT chính của rider.</p>
@@ -487,7 +493,7 @@ function RiderPerformanceTable({
         </div>
       </div>
 
-      <div className="relative max-h-[68vh] overflow-auto [scrollbar-gutter:stable]">
+      <div className={cn("relative max-h-[68vh] overflow-auto [scrollbar-gutter:stable]",tableStyles.scrollArea)} tabIndex={0} role="region" aria-label="Bảng sản lượng rider, cuộn ngang để xem các cột">
         {isLoading ? (
           <div className="perf-loading-bar">
             <span className="size-3 animate-spin rounded-full border-2 border-[var(--color-accent-soft)] border-t-[var(--color-accent)]" />
@@ -660,13 +666,13 @@ function KpiCard({
   title: string;
   primary: string;
   secondary: string;
-  rate: number | null;
+  rate?: number | null;
 }) {
   return (
     <Card className="perf-kpi">
       <div className="perf-kpi-top">
         <span className="perf-kpi-icon">{icon}</span>
-        <span className="text-xs text-[var(--color-muted)]">Completed / Assigned</span>
+        <span className="text-xs text-[var(--color-muted)]">{rate===undefined?"Sản lượng trong kỳ":"Hiệu suất trong kỳ"}</span>
       </div>
       <div className="perf-kpi-body">
         <p className="perf-kpi-title">{title}</p>
@@ -675,9 +681,9 @@ function KpiCard({
           <p className="perf-kpi-secondary">{secondary}</p>
         </div>
       </div>
-      <div className="perf-kpi-foot">
+      {rate!==undefined&&<div className="perf-kpi-foot">
         <ProgressBar value={rate} />
-      </div>
+      </div>}
     </Card>
   );
 }
