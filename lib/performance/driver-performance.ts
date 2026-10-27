@@ -107,6 +107,7 @@ function orderClause(sort: PerformanceSortKey, direction: PerformanceDirection) 
 const resultsCache=new TtlCache<PerformanceResult>(10000,24);
 type PerformanceMetadata={options:Array<{delivery_district:string|null;cot:string|null}>;wardOptions:Array<{delivery_ward:string|null}>;wardOnHoldRows:Array<{delivery_ward:string|null;delivery_district:string|null;delivery_assigned:number;delivery_delivered:number}>};
 const metadataCache=new TtlCache<PerformanceMetadata>(30000,24);
+const aggregatesCache=new TtlCache<PerformanceAnalysisInput[]>(10000,24);
 export const getDriverPerformance=cache(async(filters:PerformanceFilters,revision=""):Promise<PerformanceResult>=>{
   return (await resultsCache.load(JSON.stringify([filters,revision]),()=>loadDriverPerformance(filters,revision))).value;
 });
@@ -175,12 +176,6 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
       cot_breakdown_raw: string | null;
       delivery_rate: Prisma.Decimal | null;
       pickup_rate: Prisma.Decimal | null;
-      total_groups: bigint | null;
-      total_delivery_assigned: Prisma.Decimal | null;
-      total_delivery_delivered: Prisma.Decimal | null;
-      total_pickup_assigned: Prisma.Decimal | null;
-      total_pickup_picked: Prisma.Decimal | null;
-      total_active_riders: bigint | null;
     }>
   >`
     with rider_scope as (
@@ -240,27 +235,9 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
         case when delivery_assigned > 0 then delivery_delivered::numeric / delivery_assigned * 100 end as delivery_rate,
         case when pickup_assigned > 0 then pickup_picked::numeric / pickup_assigned * 100 end as pickup_rate
       from grouped
-    ),
-    totals as (
-      select
-        count(*)::bigint as total_groups,
-        coalesce(sum(delivery_assigned), 0) as total_delivery_assigned,
-        coalesce(sum(delivery_delivered), 0) as total_delivery_delivered,
-        coalesce(sum(pickup_assigned), 0) as total_pickup_assigned,
-        coalesce(sum(pickup_picked), 0) as total_pickup_picked,
-        count(distinct driver_id)::bigint as total_active_riders
-      from final
     )
-    select
-      final.*,
-      totals.total_groups,
-      totals.total_delivery_assigned,
-      totals.total_delivery_delivered,
-      totals.total_pickup_assigned,
-      totals.total_pickup_picked,
-      totals.total_active_riders
+    select final.*
     from final
-    cross join totals
     order by ${orderBy}, final.delivery_delivered desc, final.pickup_picked desc, final.driver_id asc
     ${allRows?Prisma.empty:Prisma.sql`limit ${filters.pageSize} offset ${offset}`}
   `;
@@ -293,7 +270,8 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
   // Charts aggregate the full filtered scope, independently of table pagination.
   // Daily mode adds six preceding dates for context; week/month use the selected range.
   const trendStart = filters.period === "day" ? shiftPerformanceDate(end, -6) : start;
-  const aggregatesPromise = prisma.$queryRaw<PerformanceAnalysisInput[]>`
+  // Pagination and sorting do not change chart totals; refresh revisions bypass this cache.
+  const aggregatesPromise = aggregatesCache.load(JSON.stringify([revision,start,end,trendStart,filters.kv,filters.district,filters.ward,filters.cot,filters.q]),()=>prisma.$queryRaw<PerformanceAnalysisInput[]>`
     with rider_scope as (
       select rider_code,full_name,kv,cot,pickup_district,delivery_district,delivery_ward,pickup_ward,point_name,(select z.name from public.zones z where z.id=riders.zone_id) as route_name
       from public.riders where upper(coalesce(kv,'')) in ('KV1','KV2','KV3','KV4','KV5')
@@ -323,11 +301,16 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
     ) select (select jsonb_agg(to_jsonb(daily)) from daily) as daily,
       (select jsonb_agg(to_jsonb(areas)) from areas) as areas,
       (select jsonb_agg(to_jsonb(rider_totals)-'driver_id') from rider_totals) as riders
-  `;
+  `).then(entry=>entry.value);
   const [rows,metadata,aggregateRows]=await Promise.all([rowsPromise,metadataPromise,aggregatesPromise]);
   const {options,wardOptions,wardOnHoldRows}=metadata;
   const [aggregates]=aggregateRows;
   const analysis = buildPerformanceAnalysis(aggregates ?? { daily: [], areas: [], riders: [] }, trendStart, end);
+  const lastPage=Math.max(1,Math.ceil(analysis.riderCount/filters.pageSize));
+  if(!allRows&&filters.page>lastPage){
+    if(analysis.riderCount>0)return loadDriverPerformance({...filters,page:lastPage},revision);
+    filters={...filters,page:1};
+  }
   return {
     filters,
     rows: rows.map((row) => ({

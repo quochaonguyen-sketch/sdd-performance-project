@@ -12,16 +12,20 @@ export function ReturnWorkspace({initialData,initialNow,initialError=""}:{initia
   const [filters,setFilters]=useState({...EMPTY_RETURN_FILTERS}),[page,setPage]=useState(1),[selected,setSelected]=useState<string|null>(null),[notice,setNotice]=useState("");
   const [now,setNow]=useState(initialNow);
   const inFlight=useRef(false), mounted=useRef(true), request=useRef<AbortController|null>(null), noticeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const snapshotAt=useRef(initialData.snapshotAt);
   const detailRef=useRef<HTMLDialogElement>(null), detailTrigger=useRef<HTMLButtonElement|null>(null);
   const refresh=useCallback(async()=>{
     if(inFlight.current) return;
     inFlight.current=true;setLoading(true);
     const controller=new AbortController();request.current=controller;
     try {
-      const response=await fetch("/api/return-orders",{cache:"no-store",signal:controller.signal});
+      const headers:Record<string,string>={};
+      if(snapshotAt.current)headers["If-None-Match"]=JSON.stringify(snapshotAt.current);
+      const response=await fetch("/api/return-orders",{cache:"no-store",signal:controller.signal,headers});
+      if(response.status===304){if(mounted.current){setNow(Date.now());setError("");}return;}
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||"Không tải được dữ liệu.");
-      if(mounted.current){setData({rows:body.rows,snapshotAt:body.snapshotAt});setNow(Date.now());setError("");}
+      if(mounted.current){snapshotAt.current=body.snapshotAt;setData({rows:body.rows,snapshotAt:body.snapshotAt});setNow(Date.now());setError("");}
     } catch(e) {if(mounted.current&&!(e instanceof Error&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Không tải được dữ liệu.");}
     finally {inFlight.current=false;if(mounted.current)setLoading(false);}
   },[]);

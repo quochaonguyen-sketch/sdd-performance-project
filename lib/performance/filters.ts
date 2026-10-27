@@ -66,7 +66,7 @@ export function parsePerformanceFilters(params: SearchParamsLike): PerformanceFi
     cot: (getParam(params, "cot") ?? "all").trim().slice(0, 40) || "all",
     sort: performanceSortSchema.catch("area").parse(getParam(params, "sort")),
     dir: performanceDirectionSchema.catch("asc").parse(getParam(params, "dir")),
-    page: Math.max(1, Number.isFinite(rawPage) ? Math.trunc(rawPage) : 1),
+    page: Math.min(100000, Math.max(1, Number.isFinite(rawPage) ? Math.trunc(rawPage) : 1)),
     pageSize: Math.min(200, Math.max(25, Number.isFinite(rawPageSize) ? Math.trunc(rawPageSize) : 100)),
   };
 }

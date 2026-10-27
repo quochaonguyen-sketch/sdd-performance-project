@@ -15,6 +15,25 @@
   for(const q of ['', 'Toàn', 'Phường', 'Toàn']){
    queries.length=0;const start=performance.now();const result=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26',q}));
    console.log(JSON.stringify({q:q||'(all)',ms:Math.round(performance.now()-start),queries:queries.length,queryMs:[...queries],rows:result.rows.length,groups:result.summary.groups}));
+   if(!q){
+    const assert=await import('node:assert/strict');
+    for(const controls of [{page:'2'},{sort:'pickup',dir:'desc'}]){
+     queries.length=0;
+     const next=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26',...controls}));
+     assert.deepEqual(next.summary,result.summary);assert.deepEqual(next.analysis,result.analysis);
+     assert.equal(queries.length,1,'Only table rows should be queried when paging or sorting');
+     console.log(JSON.stringify({controls,queries:queries.length,totalsAndChartsUnchanged:true}));
+    }
+    queries.length=0;
+    const refreshed=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26'}),'audit-refresh');
+    assert.equal(queries.length,3,'Manual refresh must reload rows, metadata and charts');
+    assert.deepEqual(refreshed.summary,result.summary);
+    const beyond=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26',page:'100000'}));
+    assert.equal(beyond.filters.page,Math.ceil(result.summary.groups/beyond.filters.pageSize));assert.ok(beyond.rows.length);
+    const empty=await getDriverPerformance(parsePerformanceFilters({date:'2026-10-26',page:'100000',q:'__nonexistent_audit_rider__'}));
+    assert.equal(empty.filters.page,1);assert.equal(empty.summary.groups,0);assert.equal(empty.rows.length,0);
+    console.log('Refresh bypass, last-page recovery and empty results verified.');
+   }
   }
   const filters=parsePerformanceFilters({date:'2026-10-25',sort:'total',dir:'desc'});
   const result=await getDriverPerformance(filters);

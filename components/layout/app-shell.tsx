@@ -16,16 +16,22 @@ import { OffRequestNotifications } from "@/components/layout/off-request-notific
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
 import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
 
+const volumeItems = [
+  { href: "/volume/delivery", label: "Delivery Volume", icon: Truck },
+  { href: "/volume/pickup", label: "Pickup Volume", icon: PackagePlus },
+];
+
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
-  { href: "/performance", label: "Rider Performance", icon: BarChart3 },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/lmhub-inventory", label: "Pickup Backlog", icon: PackageOpen },
   { href: "/inventory-delivery", label: "Delivery Backlog", icon: Truck },
   { href: "/backlog-history", label: "Backlog History", icon: BarChart3 },
+  ...volumeItems,
+  { href: "/performance", label: "Rider Performance", icon: BarChart3 },
   { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
   { href: "/notes", label: "Notes", icon: ListChecks },
   { href: "/off-schedule", label: "Time Off", icon: ListChecks },
@@ -41,13 +47,11 @@ const navItems = [
 const navigationGroups = [
   { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime"] },
   { label: "Backlog", icon: PackageOpen, paths: ["/lmhub-inventory", "/inventory-delivery", "/backlog-history"] },
+  { label: "Volume", icon: Truck, paths: volumeItems.map(item => item.href) },
+  { label: "Pickup Management", icon: ListChecks, paths: ["/pickup-management", "/pickup-management?view=replacement"] },
 ];
 
-const mobileNavItems = navItems.slice(0, 4);
-const volumeItems = [
-  { href: "/volume/delivery", label: "Delivery Volume", icon: Truck },
-  { href: "/volume/pickup", label: "Pickup Volume", icon: PackagePlus },
-];
+const mobileNavItems = navItems.filter(item => ["/dashboard", "/realtime-dashboard", "/riders", "/team"].includes(item.href));
 const pickupItems = [
   { href: "/pickup-management", view: null, label: "Pickup Points", icon: ListChecks },
   { href: "/pickup-management?view=replacement", view: "replacement", label: "Pickup Coverage", icon: Truck },
@@ -94,11 +98,10 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => item.href === "/settings" || item.href === "/user-activity" && user.role === "admin");
   const moreNavItems = [
-    ...volumeItems,
     ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
+    ...visibleReturnItems,
     ...visiblePickupItems,
     ...visibleToolItems,
-    ...visibleReturnItems,
     ...systemItems,
   ];
   const pickupActive = pathname.startsWith("/pickup-management");
@@ -126,8 +129,8 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     ? returnItems.find((item) => item.view === searchParams.get("view")) ?? returnItems[0]
     : pickupActive
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
-      : [...navItems, ...volumeItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  const splitItems = [...navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href)), ...volumeItems]
+      : [...navItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const splitItems = navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href))
     .filter((item) => item.href !== pathname && (item.href !== "/user-activity" || user.role === "admin") && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
@@ -179,7 +182,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           <Link href="/dashboard" className="app-sidebar-brand" aria-label={`${APP_NAME} — Dashboard`}><AppBrand inverse /></Link>
           <div className="app-sidebar-context"><span>Coverage</span><strong>Areas 1–5</strong></div>
           <SidebarNavigation moduleKey={selectedModule} activeKey={`${pathname}:${searchParams.get("view") ?? ""}`} open={sidebarOpen}>
-            <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Operations Workspace" : modules.find((module) => module.id === selectedModule)?.label}</p>
+            <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Monitoring & Analytics" : modules.find((module) => module.id === selectedModule)?.label}</p>
             {moduleItems.map((item) => {
               const group = navigationGroups.find(group => group.paths.includes(item.href));
               if (group) {
@@ -194,12 +197,11 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
               return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
             })}
             {selectedModule === "operations" ? <>
-              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Volume</p>
-              {volumeItems.map((item) => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={cn("app-nav-link", pathname === item.href && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
-              {visiblePickupItems.length ? <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Pickup Management</p> : null}
-              {visiblePickupItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
-              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Returns</p>
+              <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Operations Management</p>
               {visibleReturnItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+              {visiblePickupItems.length ? <NavigationGroup key={`pickup:${pathname}:${searchParams.get("view") ?? ""}`} label="Pickup Management" icon={ListChecks} active={visiblePickupItems.some(item => isNavigationItemActive(item, pathname, searchParams.get("view")))}>
+                {visiblePickupItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+              </NavigationGroup> : null}
             </> : null}
           </SidebarNavigation>
           <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Areas 1–5</span></div>
@@ -254,7 +256,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             if (group) {
               if (group.paths[0] !== item.href) return null;
               const items = moreNavItems.filter(child => group.paths.includes(child.href));
-              return <NavigationGroup key={`mobile:${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))} mobile>
+              return <NavigationGroup key={`mobile:${group.label}:${pathname}:${searchParams.get("view") ?? ""}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))} mobile>
                 {items.map(child => <Link key={child.href} href={child.href} onClick={() => setMoreOpen(false)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-more-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={17} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
               </NavigationGroup>;
             }

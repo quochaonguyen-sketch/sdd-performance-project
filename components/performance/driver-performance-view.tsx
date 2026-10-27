@@ -78,12 +78,21 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
     const controller=new AbortController();controllerRef.current=controller;
     const request=++requestRef.current;
     paramsRef.current=new URLSearchParams(params);
-    setFilters(parsePerformanceFilters(params));setClientLoading(true);setError(null);
+    setClientLoading(true);setError(null);
     try{
+      setFilters(parsePerformanceFilters(params));
       const response=await fetch(`/api/driver-performance?${params}`,{cache:"no-store",signal:controller.signal});
       const payload=await response.json();
       if(!response.ok||!payload.success)throw Error(payload.error??"Không tải được Performance");
-      if(!controller.signal.aborted&&request===requestRef.current)startTransition(()=>setResult(previous=>!controller.signal.aborted&&request===requestRef.current?payload:previous));
+      if(!controller.signal.aborted&&request===requestRef.current){
+        if(params.get("page")!==String(payload.filters.page)){
+          params.set("page",String(payload.filters.page));
+          paramsRef.current=new URLSearchParams(params);
+          window.history.replaceState(null,"",`${window.location.pathname}?${params}`);
+        }
+        setFilters(payload.filters);
+        startTransition(()=>setResult(previous=>!controller.signal.aborted&&request===requestRef.current?payload:previous));
+      }
     }catch(caught){if(!controller.signal.aborted&&request===requestRef.current)setError(caught instanceof Error?caught.message:"Không tải được dữ liệu");}
     finally{if(!controller.signal.aborted&&request===requestRef.current)setClientLoading(false);}
   },[]);

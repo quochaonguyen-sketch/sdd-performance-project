@@ -10,6 +10,8 @@ test("client and server share normalized performance filter values",()=>{
 test("invalid controls cannot become raw SQL sorting or unbounded page sizes",()=>{
   const filters=parsePerformanceFilters({sort:"invalid",dir:"invalid",page:"-5",pageSize:"999999",q:"a".repeat(100)});
   assert.equal(filters.sort,"area");assert.equal(filters.dir,"asc");assert.equal(filters.page,1);assert.equal(filters.pageSize,200);assert.equal(filters.q.length,80);
+  assert.equal(parsePerformanceFilters({page:"1e100"}).page,100000);
+  assert.equal(parsePerformanceFilters({page:"Infinity"}).page,1);
 });
 test("custom inclusive ranges preserve both endpoints and reject malformed dates",()=>{
   const filters=parsePerformanceFilters({period:"range",start:"2026-10-23",end:"2026-10-26"});
