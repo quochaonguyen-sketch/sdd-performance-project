@@ -53,5 +53,15 @@
   const filtered=await getDriverPerformanceExport(parsePerformanceFilters({period:'range',start:'2026-10-23',end:'2026-10-26',q:'158197',kv:range.rows[0].kv,district:range.rows[0].delivery_district,cot:range.rows[0].cot}));
   if(filtered.rows.length!==1||filtered.rows[0].driver_id!=='158197'||filtered.rows[0].pickup_picked!==expected.pick)throw Error('Filtered export scope mismatch');
   console.log(JSON.stringify({allPagesExportVerified:true,riders:all.rows.length,bytes:bytes.length,filteredRangeExportVerified:true}));
+  const dailyFilters=parsePerformanceFilters({period:'range',start:'2026-10-23',end:'2026-10-26',q:'158197'});
+  const daily=await getDriverPerformanceExport(dailyFilters,'daily');
+  const expectedDaily=await client.$queryRaw`select to_char(report_date,'YYYY-MM-DD') as day,sum(delivery_delivered)::int as deli,sum(pickup_picked)::int as pick from public.driver_performance_daily where driver_id='158197' and report_date between '2026-10-23'::date and '2026-10-26'::date group by report_date order by report_date`;
+  const actualDaily=daily.rows.map(row=>({day:row.report_date,deli:row.delivery_delivered,pick:row.pickup_picked}));
+  (await import('node:assert/strict')).deepEqual(actualDaily,expectedDaily);
+  const combined=performanceListWorkbook(dailyFilters,range.rows),dailyBook=performanceListWorkbook(dailyFilters,daily.rows,'daily');
+  XLSX.utils.book_append_sheet(combined,dailyBook.Sheets['Theo ngay'],'Theo ngay');
+  const reopened=XLSX.read(XLSX.write(combined,{type:'buffer',bookType:'xlsx'}),{type:'buffer'});
+  if(reopened.SheetNames.length!==2||reopened.Sheets['Theo ngay'].A8.v!==expectedDaily[0].day)throw Error('Daily or combined workbook regression');
+  console.log(JSON.stringify({dailyExportMatchesDatabase:true,days:daily.rows.length,combinedSheets:reopened.SheetNames}));
  }finally{await client.$disconnect();}
 })().catch(e=>{console.error(e.message);process.exitCode=1;});

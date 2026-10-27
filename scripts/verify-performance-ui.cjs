@@ -24,6 +24,8 @@
   assert.ok(html.includes('/riders/'+sample.rider_id+'/performance?origin=performance'));
   assert.ok(html.indexOf('Danh sách rider')<html.indexOf('Hiểu rõ hơn về sản lượng'));
   if(period==='range'){assert.ok(html.includes('Performance từ ngày'));assert.ok(html.includes('Performance đến ngày'));}
+  for(const label of ['Xuất báo cáo Excel','Tổng hợp cả kỳ','Chi tiết từng ngày','Cả hai báo cáo','Tải file Excel'])assert.ok(html.includes(label),`Export dialog missing ${label}`);
+  assert.ok(html.includes('name="performance-export-mode"'));
   console.log(period+': controls, metrics, COT badges, drilldown, export and analysis verified.');
  }
  const {buildRiderDaily,summarizeRiderDaily}=load('../lib/performance/rider-detail.ts');

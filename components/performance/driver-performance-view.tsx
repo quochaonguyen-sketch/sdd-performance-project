@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 import { PerformanceAnalysis } from "./performance-analysis";
+import { PerformanceExportDialog, type PerformanceExportMode } from "./performance-export-dialog";
 import analysisStyles from "./performance-analysis.module.css";
 import tableStyles from "./performance-table.module.css";
 import filterStyles from "./performance-filters.module.css";
@@ -66,6 +67,8 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
   const [error,setError]=useState(initialError);
   const [clientLoading,setClientLoading]=useState(!initialResult&&!initialError);
   const [exporting,setExporting]=useState(false);
+  const [exportOpen,setExportOpen]=useState(false);
+  const [exportError,setExportError]=useState<string|null>(null);
   const [isPending,startTransition]=useTransition();
   const rows=result?.rows??[];
   const summary=result?.summary??emptySummary;
@@ -157,16 +160,19 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
       params.set("_r", String(Date.now()));
     });
   }
-  async function exportExcel(){
-    setExporting(true);setError(null);
+  async function exportExcel(mode:PerformanceExportMode){
+    if(exporting)return;
+    setExporting(true);setExportError(null);
     const params=new URLSearchParams(paramsRef.current);params.set("export","xlsx");params.delete("page");params.delete("pageSize");
+    params.set("exportMode",mode);
     const selected=parsePerformanceFilters(params);
     try{
       const response=await fetch(`/api/driver-performance?${params}`,{cache:"no-store"});
       if(!response.ok){const payload=await response.json();throw Error(payload.error??"Không xuất được Excel");}
       const url=URL.createObjectURL(await response.blob()),anchor=document.createElement("a");
-      anchor.href=url;anchor.download=`rider-performance-${selected.start}-${selected.end}.xlsx`;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-    }catch(caught){setError(caught instanceof Error?caught.message:"Không xuất được Excel");}
+      anchor.href=url;anchor.download=`rider-performance-${mode}-${selected.start}-${selected.end}.xlsx`;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setExportOpen(false);
+    }catch(caught){setExportError(caught instanceof Error?caught.message:"Không xuất được Excel");}
     finally{setExporting(false);}
   }
 
@@ -199,11 +205,12 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         onSort={changeSort}
         onPageChange={changePage}
         onPageSizeChange={changePageSize}
-        onExport={exportExcel}
+        onExport={()=>{setExportError(null);setExportOpen(true);}}
         exporting={exporting}
       />
       <div className={analysisStyles.sectionTitle}><div><span>PHÂN TÍCH HIỆU SUẤT</span><h2>Hiểu rõ hơn về sản lượng</h2></div><p>Xu hướng, khu vực và phân bố rider theo cùng bộ lọc.</p></div>
       <StableAnalysis analysis={result?.analysis} isLoading={isLoading&&!result} onArea={selectArea} />
+      <PerformanceExportDialog open={exportOpen} filters={filters} exporting={exporting} error={exportError} onClose={()=>{if(!exporting)setExportOpen(false);}} onExport={mode=>void exportExcel(mode)}/>
     </div>
   );
 }

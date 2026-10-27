@@ -25,3 +25,20 @@ test("total sums rider conversions, COT fallback and percentages match the table
 test("an empty export has headings and numeric zeros without invalid formulas",()=>{
   const ws=sheet([]);assert.equal(ws.F2.v,0);assert.equal(ws.A8.v,"Tổng cộng");assert.equal(ws.U8.v,0);assert.equal(ws.U8.f,undefined);assert.equal(ws.V8,undefined);
 });
+
+test("daily export keeps dates, safe IDs and shifted Excel formulas for each rider/day",()=>{
+ const daily=[{...row,report_date:'2026-10-25'},{...row,report_date:'2026-10-26',pickup_picked:4}];
+ const wb=performanceListWorkbook(filters,daily,'daily');
+ const ws=XLSX.read(XLSX.write(wb,{type:'buffer',bookType:'xlsx'}),{type:'buffer',cellNF:true}).Sheets['Theo ngay'];
+ assert.equal(ws.A7.v,'Ngày');assert.equal(ws.A8.v,'2026-10-25');assert.equal(ws.A9.v,'2026-10-26');
+ assert.equal(ws.B8.v,'00123');assert.equal(ws.C8.f,undefined);assert.equal(ws.C8.t,'s');
+ assert.equal(ws.U8.f,'ROUNDUP(O8/3,0)');assert.equal(ws.U9.v,2);assert.equal(ws.V8.f,'I8+U8');
+ assert.equal(ws.U10.f,'SUM(U8:U9)');assert.equal(ws.U10.v,3);assert.equal(ws.V10.v,23);
+ assert.equal(ws.W10.f,'I10/V10');assert.equal(ws.X10.f,'U10/V10');
+ assert.equal(ws['!autofilter']?.ref,'A7:X9');assert.equal(ws.C2.v,filters.start);assert.equal(ws.E2.v,filters.end);
+});
+
+test("daily empty export retains headings without inventing zero-production days",()=>{
+ const wb=performanceListWorkbook(filters,[],'daily'),ws=wb.Sheets['Theo ngay'];
+ assert.equal(ws.A7.v,'Ngày');assert.equal(ws.B8.v,'Tổng cộng');assert.equal(ws.U8.v,0);assert.equal(ws.U8.f,undefined);
+});

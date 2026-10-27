@@ -41,24 +41,27 @@ export async function POST(request: Request) {
   }
   const kind = normalizeLmhubKind(requestedKind);
 
-  const { data: lastLog } = await session.admin
-    .from("activity_logs")
-    .select("created_at")
-    .eq("entity_type", "lmhub_inventory")
-    .eq("action", "queued")
-    .contains("raw_data", { kind })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (lastLog?.created_at && Date.now() - new Date(lastLog.created_at).getTime() < LMHUB_COOLDOWN_MS) {
-    const wait = Math.ceil((LMHUB_COOLDOWN_MS - (Date.now() - new Date(lastLog.created_at).getTime())) / 1000);
-    return NextResponse.json({
-      success: true,
-      queued: false,
-      cooldown: true,
-      retryAfterSec: wait,
-      message: `Chống spam: 1 phút chỉ chạy 1 lần cùng loại. Đợi ${wait}s rồi bấm lại.`,
-    });
+  // Không áp dụng cơ chế cooldown 1 phút đối với tồn Delivery theo yêu cầu vận hành
+  if (kind !== "delivery") {
+    const { data: lastLog } = await session.admin
+      .from("activity_logs")
+      .select("created_at")
+      .eq("entity_type", "lmhub_inventory")
+      .eq("action", "queued")
+      .contains("raw_data", { kind })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastLog?.created_at && Date.now() - new Date(lastLog.created_at).getTime() < LMHUB_COOLDOWN_MS) {
+      const wait = Math.ceil((LMHUB_COOLDOWN_MS - (Date.now() - new Date(lastLog.created_at).getTime())) / 1000);
+      return NextResponse.json({
+        success: true,
+        queued: false,
+        cooldown: true,
+        retryAfterSec: wait,
+        message: `Chống spam: 1 phút chỉ chạy 1 lần cùng loại. Đợi ${wait}s rồi bấm lại.`,
+      });
+    }
   }
 
   try {

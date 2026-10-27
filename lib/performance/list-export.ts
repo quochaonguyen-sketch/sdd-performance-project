@@ -3,8 +3,8 @@ import type { PerformanceFilters,PerformanceRow } from "./driver-performance";
 import { allocateCotRemainder } from "./cot-allocation.ts";
 import { performanceConversion } from "./conversion.ts";
 
-/** One row per rider in the selected period, using the same rounding and COT rules as the table. */
-export function performanceListWorkbook(filters:PerformanceFilters,rows:PerformanceRow[]){
+/** Rider totals or rider/day rows, using the table's rounding and COT rules. */
+export function performanceListWorkbook(filters:PerformanceFilters,rows:PerformanceRow[],mode:"summary"|"daily"="summary"){
   const headers=["Mã rider","Tên rider","KV","COT chính","Quận giao","Phường giao","Quận pickup","Total Delivered","Total Assigned Deli","Total Delivered COT 1","Total Assigned Deli COT 1","Total Delivered COT 2","Total Assigned Deli COT 2","Total Picked","Total Assigned Pick","Total Picked COT 1","Total Assigned Pick COT 1","Total Picked COT 2","Total Assigned Pick COT 2","Convert Pick","Total","% Deli","% Pick quy đổi"];
   const values=rows.map(row=>{
     const d=allocateCotRemainder({assigned:row.delivery_assigned,completed:row.delivery_delivered,a1:row.delivery_assigned_cot1,c1:row.delivery_delivered_cot1,a2:row.delivery_assigned_cot2,c2:row.delivery_delivered_cot2},row.cot);
@@ -37,5 +37,28 @@ export function performanceListWorkbook(filters:PerformanceFilters,rows:Performa
   ws["!cols"]=headers.map((_,i)=>({wch:i===1?28:i<7?18:28}));
   ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:22}},{s:{r:4,c:0},e:{r:4,c:22}}];
   if(rows.length)ws["!autofilter"]={ref:`A7:W${last}`};
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Performance");return wb;
+  const wb=XLSX.utils.book_new();
+  if(mode==="daily"){
+    // Build the existing formulas first, then shift their references one column for the date.
+    const daily:XLSX.WorkSheet={};
+    for(const [address,cell] of Object.entries(ws)){
+      if(address.startsWith("!"))continue;
+      const position=XLSX.utils.decode_cell(address);
+      const shifted={...cell};
+      if(shifted.f)shifted.f=shifted.f.replace(/\b([A-Z]+)(\d+)\b/g,(_:string,col:string,row:string)=>`${XLSX.utils.encode_col(XLSX.utils.decode_col(col)+1)}${row}`);
+      daily[XLSX.utils.encode_cell({r:position.r,c:position.c+1})]=shifted;
+    }
+    daily.A7={t:"s",v:"Ngày"};
+    rows.forEach((row,i)=>{daily[`A${i+8}`]={t:"s",v:row.report_date};});
+    daily.A1={t:"s",v:"RIDER PERFORMANCE · CHI TIẾT THEO NGÀY"};
+    delete daily.B1;
+    daily.B2={t:"s",v:"Từ ngày"};daily.F2={t:"s",v:"Số dòng rider/ngày"};
+    daily.B5={t:"s",v:"Mỗi dòng là một rider/ngày có dữ liệu. Convert Pick làm tròn lên riêng từng ngày, nên tổng quy đổi có thể khác bảng tổng hợp cả kỳ."};
+    daily['!ref']=`A1:X${totalRow}`;
+    daily['!cols']=[{wch:14},...ws['!cols']!];
+    daily['!merges']=[{s:{r:0,c:0},e:{r:0,c:23}},{s:{r:4,c:1},e:{r:4,c:23}}];
+    if(rows.length)daily['!autofilter']={ref:`A7:X${last}`};
+    XLSX.utils.book_append_sheet(wb,daily,"Theo ngay");
+  }else XLSX.utils.book_append_sheet(wb,ws,"Performance");
+  return wb;
 }

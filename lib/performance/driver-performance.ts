@@ -111,18 +111,18 @@ const aggregatesCache=new TtlCache<PerformanceAnalysisInput[]>(10000,24);
 export const getDriverPerformance=cache(async(filters:PerformanceFilters,revision=""):Promise<PerformanceResult>=>{
   return (await resultsCache.load(JSON.stringify([filters,revision]),()=>loadDriverPerformance(filters,revision))).value;
 });
-export function getDriverPerformanceExport(filters:PerformanceFilters):Promise<PerformanceResult>{
-  return loadDriverPerformance(filters,"",true);
+export function getDriverPerformanceExport(filters:PerformanceFilters,mode:"summary"|"daily"="summary"):Promise<PerformanceResult>{
+  return loadDriverPerformance(filters,"",true,mode==="daily");
 }
-async function loadDriverPerformance(filters:PerformanceFilters,revision:string,allRows=false):Promise<PerformanceResult>{
+async function loadDriverPerformance(filters:PerformanceFilters,revision:string,allRows=false,dailyRows=false):Promise<PerformanceResult>{
   const prisma=await getPerformanceDatabase();
   const orderBy = orderClause(filters.sort, filters.dir);
   const offset = (filters.page - 1) * filters.pageSize;
   const { start, end } = filters;
-  const reportDateSelect = filters.period === "day"
+  const reportDateSelect = filters.period === "day" || dailyRows
     ? Prisma.sql`p.report_date::date`
     : Prisma.sql`${end}::date`;
-  const groupBy = filters.period === "day"
+  const groupBy = filters.period === "day" || dailyRows
     ? Prisma.sql`p.report_date, p.driver_id`
     : Prisma.sql`p.driver_id`;
   const likeQuery = `%${filters.q}%`;
@@ -238,7 +238,7 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
     )
     select final.*
     from final
-    order by ${orderBy}, final.delivery_delivered desc, final.pickup_picked desc, final.driver_id asc
+    order by ${dailyRows?Prisma.sql`final.report_date asc,`:Prisma.empty} ${orderBy}, final.delivery_delivered desc, final.pickup_picked desc, final.driver_id asc
     ${allRows?Prisma.empty:Prisma.sql`limit ${filters.pageSize} offset ${offset}`}
   `;
 

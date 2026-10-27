@@ -13,13 +13,24 @@ export async function GET(request: Request) {
   }
 
   try {
-    const filters = parsePerformanceFilters(new URL(request.url).searchParams);
-    if(new URL(request.url).searchParams.get("export")==="xlsx"){
-      const result=await getDriverPerformanceExport(filters);
+    const params=new URL(request.url).searchParams;
+    const filters = parsePerformanceFilters(params);
+    if(params.get("export")==="xlsx"){
+      const mode=params.get("exportMode")??"summary";
+      if(!["summary","daily","both"].includes(mode))throw new RangeError("Chọn kiểu xuất tổng hợp, theo ngày hoặc cả hai.");
+      const [summary,daily]=await Promise.all([
+        mode!=="daily"?getDriverPerformanceExport(filters):null,
+        mode!=="summary"?getDriverPerformanceExport(filters,"daily"):null,
+      ]);
       const {performanceListWorkbook}=await import("@/lib/performance/list-export");
       const XLSX=await import("xlsx");
-      const buffer=XLSX.write(performanceListWorkbook(filters,result.rows),{type:"buffer",bookType:"xlsx",compression:true});
-      return new Response(new Uint8Array(buffer),{headers:{"Cache-Control":"private, no-store","Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="rider-performance-${filters.start}-${filters.end}.xlsx"`}});
+      const workbook=summary?performanceListWorkbook(filters,summary.rows):performanceListWorkbook(filters,daily!.rows,"daily");
+      if(summary&&daily){
+        const details=performanceListWorkbook(filters,daily.rows,"daily");
+        XLSX.utils.book_append_sheet(workbook,details.Sheets["Theo ngay"],"Theo ngay");
+      }
+      const buffer=XLSX.write(workbook,{type:"buffer",bookType:"xlsx",compression:true});
+      return new Response(new Uint8Array(buffer),{headers:{"Cache-Control":"private, no-store","Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="rider-performance-${mode}-${filters.start}-${filters.end}.xlsx"`}});
     }
     const result = await getDriverPerformance(filters, new URL(request.url).searchParams.get("_r")??"");
     return NextResponse.json({ success: true, ...result },{headers:{"Cache-Control":"private, no-store"}});
