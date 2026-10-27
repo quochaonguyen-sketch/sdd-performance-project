@@ -191,6 +191,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .app-sidebar .app-nav-link.is-active:hover { background: var(--ops-active); color: var(--color-accent); }
 .app-sidebar-foot { display: flex; align-items: center; justify-content: start; gap: 8px; padding: 16px 20px; border-color: var(--color-rule); color: var(--color-muted); font: 11px/18px var(--font-body); letter-spacing: 0; text-transform: none; }
 .app-sidebar-foot svg { flex: none; }
+.app-sidebar-feedback { flex-shrink: 0; margin: 0 12px; padding-top: 8px; border-top: 1px solid var(--color-rule); }
 .app-shell-technical.is-sidebar-collapsed .app-navigation { display: none; }
 .app-shell-content { min-width: 0; }
 .app-header { min-height: 56px; gap: 12px; padding: 8px 20px; border: 0; background: var(--ops-frame); backdrop-filter: none; }
@@ -199,6 +200,10 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .app-header-kicker span { padding-left: 12px; color: var(--color-muted); }
 .app-header-title-row > span { font-size: 13px; font-weight: 500; }
 .app-header-account { gap: 8px; }
+.app-feedback-link { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; border: 1px solid var(--color-rule); border-radius: 8px; color: var(--color-ink-2); transition: background 160ms ease, color 160ms ease; }
+.app-feedback-link:hover { background: var(--color-accent-soft); color: var(--color-accent); }
+.app-feedback-link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .app-feedback-link { transition: none; } }
 .app-header :is(.app-sidebar-toggle,.app-theme-toggle,.app-split-toggle,.app-signout) { height: 32px; min-height: 32px; background: transparent; border: 0; border-radius: 6px; color: var(--color-ink-2); box-shadow: none; }
 .app-header :is(.app-sidebar-toggle,.app-theme-toggle) { width: 32px; }
 .app-header :is(.app-sidebar-toggle,.app-theme-toggle,.app-split-toggle,.app-signout):hover { background: var(--ops-active); color: var(--color-ink); }

@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS, isOperatingArea } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,10 +53,10 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [cot, setCot] = useState<CotFilter>("all");
+  const [cot, setCot] = useRememberedState<CotFilter>("pickup-inventory-view:cot", "all");
   const [heat, setHeat] = useState<HeatFilter>("all");
 
-  const [areaFilter, setAreaFilter] = useState<"all" | Area>("all");
+  const [areaFilter, setAreaFilter] = useRememberedState<"all" | Area>("pickup-inventory-view:areaFilter", "all");
 
   const [showCharts, setShowCharts] = useState(false);
 

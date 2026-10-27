@@ -8,6 +8,7 @@ import "./realtime.css";
 import "./navigation-motion.css";
 import { IBM_Plex_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { WebVitalsReporter } from "@/components/layout/web-vitals-reporter";
 
 const plex = IBM_Plex_Sans({ subsets: ["latin", "vietnamese"], weight: ["400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
 const themeBootScript = `(()=>{try{const saved=localStorage.getItem("rider-ops-theme");const dark=saved? saved==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",dark);document.documentElement.dataset.theme=dark?"dark":"light"}catch{}})()`;
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="vi" suppressHydrationWarning className={cn("font-sans", plex.variable)}>
       <body>
+        <WebVitalsReporter />
         {children}
         <Script id="rider-ops-theme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </body>

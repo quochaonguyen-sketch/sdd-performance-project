@@ -1,5 +1,6 @@
 /* LMHub Inventory · ops dashboard with stock charts */
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { Select } from "@/components/ui/select";
@@ -48,11 +49,11 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [cot, setCot] = useState<CotFilter>("all");
+  const [cot, setCot] = useRememberedState<CotFilter>("lmhub-inventory-view:cot", "all");
   const [heat, setHeat] = useState<HeatFilter>("all");
-  const [areaFilter, setAreaFilter] = useState("all");
-  const [districtFilter, setDistrictFilter] = useState("all");
-  const [wardFilter, setWardFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useRememberedState("lmhub-inventory-view:areaFilter", "all");
+  const [districtFilter, setDistrictFilter] = useRememberedState("lmhub-inventory-view:districtFilter", "all");
+  const [wardFilter, setWardFilter] = useRememberedState("lmhub-inventory-view:wardFilter", "all");
   const [selected, setSelected] = useState<InventoryFocus | null>(null);
   const [page, setPage] = useState(1);
   const [queueing, setQueueing] = useState(false);

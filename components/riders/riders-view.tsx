@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -129,17 +130,17 @@ export function RidersView({
   const [districts, setDistricts] = useState<DistrictDefinition[]>(hcmDistricts);
   const [registry, setRegistry] = useState<RiderRegistryData>(initialData);
   const [riders, setRiders] = useState<Rider[]>(initialData.riders);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("riders-view:query", "");
   const debouncedQuery = useDebouncedValue(query, RIDER_SEARCH_DEBOUNCE_MS);
   const isDesktopLayout = useDesktopLayout();
-  const [kv, setKv] = useState("all");
-  const [cot, setCot] = useState("all");
-  const [pickupDistrict, setPickupDistrict] = useState("all");
-  const [pickupWard, setPickupWard] = useState("all");
-  const [deliveryDistrict, setDeliveryDistrict] = useState("all");
-  const [deliveryWard, setDeliveryWard] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [shift, setShift] = useState("all");
+  const [kv, setKv] = useRememberedState("riders-view:kv", "all");
+  const [cot, setCot] = useRememberedState("riders-view:cot", "all");
+  const [pickupDistrict, setPickupDistrict] = useRememberedState("riders-view:pickupDistrict", "all");
+  const [pickupWard, setPickupWard] = useRememberedState("riders-view:pickupWard", "all");
+  const [deliveryDistrict, setDeliveryDistrict] = useRememberedState("riders-view:deliveryDistrict", "all");
+  const [deliveryWard, setDeliveryWard] = useRememberedState("riders-view:deliveryWard", "all");
+  const [status, setStatus] = useRememberedState("riders-view:status", "all");
+  const [shift, setShift] = useRememberedState("riders-view:shift", "all");
   const [sort, setSort] = useState<{ key: RiderSortKey; direction: "asc" | "desc" }>({ key: "updated", direction: "desc" });
   const [page, setPage] = useState(1);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());

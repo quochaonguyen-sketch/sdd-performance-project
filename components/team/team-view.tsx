@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Plus, Search, Upload, UsersRound, X } from "lucide-react";
@@ -18,9 +19,9 @@ const emptyStaff = (): Staff => ({ id: crypto.randomUUID(), full_name: "", ops_i
 
 export function TeamView({ canEdit }: { canEdit: boolean }) {
   const [tab, setTab] = useState<"directory" | "schedule" | "analysis" | "templates">("directory");
-  const [date, setDate] = useState(vietnamToday);
+  const [date, setDate] = useRememberedState("team-view:date", vietnamToday());
   const [period, setPeriod] = useState<"week" | "month">("week");
-  const [area, setArea] = useState("all"), [role, setRole] = useState("all"), [status, setStatus] = useState("current"), [query, setQuery] = useState("");
+  const [area, setArea] = useRememberedState("team-view:area", "all"), [role, setRole] = useRememberedState("team-view:role", "all"), [status, setStatus] = useRememberedState("team-view:status", "current"), [query, setQuery] = useState("");
   const [data, setData] = useState<TeamData>({ staff: [], shifts: [], bounds: { from: null, to: null } });
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [error, setError] = useState("");
   const [staffEdit, setStaffEdit] = useState<Staff | null>(null);

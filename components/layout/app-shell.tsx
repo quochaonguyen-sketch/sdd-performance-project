@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, Bike, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, Bike, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
 import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/app-brand";
@@ -13,6 +13,9 @@ import { RouteReveal } from "@/components/layout/route-reveal";
 import { SidebarNavigation } from "@/components/layout/sidebar-navigation";
 import { NavigationGroup } from "@/components/layout/navigation-group";
 import { OffRequestNotifications } from "@/components/layout/off-request-notifications";
+import { ProductUpdateNotifications } from "@/components/feedback/product-update-notifications";
+import { useRememberedLinks } from "@/components/layout/filter-memory";
+import { FeedbackPopup } from "@/components/feedback/feedback-popup";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
 import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
 
@@ -36,6 +39,7 @@ const navItems = [
   { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
   { href: "/overnight-holds", label: "Giữ hàng qua đêm", icon: Moon },
   { href: "/notes", label: "Notes", icon: ListChecks },
+  { href: "/feedback", label: "Báo lỗi & góp ý", icon: ListChecks },
   { href: "/off-schedule", label: "Time Off", icon: ListChecks },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/violations", label: "Violations", icon: ListChecks },
@@ -44,6 +48,7 @@ const navItems = [
   { href: "/data-sources", label: "Data Sources", icon: Activity },
   { href: "/settings", label: "Members", icon: UsersRound },
   { href: "/user-activity", label: "Activity Log", icon: Activity },
+  { href: "/site-health", label: "Sức khỏe website", icon: Activity },
 ];
 
 const navigationGroups = [
@@ -82,6 +87,7 @@ function getTrustedFrameContext() {
 
 export function AppShell({ children, user }: { children: React.ReactNode; user: { email: string; fullName: string | null; role: string } }) {
   const pathname = usePathname();
+  const rememberedHref = useRememberedLinks();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTrustedFrame = useSyncExternalStore(subscribeToFrameContext, getTrustedFrameContext, () => false);
@@ -95,23 +101,24 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleToolItems = memberToolRestricted ? [] : toolItems;
   const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
   const visibleReturnItems = returnItems;
-  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity"].includes(item.href) && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
+  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity", "/site-health", "/feedback"].includes(item.href) && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
   const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
-  const systemItems = navItems.filter((item) => item.href === "/settings" || item.href === "/user-activity" && user.role === "admin");
+  const systemItems = navItems.filter((item) => item.href === "/settings" || ["/user-activity", "/site-health"].includes(item.href) && user.role === "admin");
   const moreNavItems = [
     ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
     ...visibleReturnItems,
     ...visiblePickupItems,
     ...visibleToolItems,
     ...systemItems,
+    navItems.find((item) => item.href === "/feedback")!,
   ];
   const pickupActive = pathname.startsWith("/pickup-management");
   const returnActive = pathname.startsWith("/return-orders");
   const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
     : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
     : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
-    : pathname.startsWith("/settings") || pathname.startsWith("/user-activity") ? "settings" : "operations";
+    : pathname.startsWith("/settings") || pathname.startsWith("/user-activity") || pathname.startsWith("/site-health") ? "settings" : "operations";
   const [moduleSelection, setModuleSelection] = useState<{ pathname: string; module: WorkspaceModule } | null>(null);
   const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
   const modules = [
@@ -126,14 +133,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     : selectedModule === "data" ? workspaceItems.filter((item) => dataPaths.includes(item.href))
     : selectedModule === "settings" ? systemItems
     : workspaceItems.filter((item) => !teamPaths.includes(item.href) && !dataPaths.includes(item.href));
-  const moreRouteActive = morePaths.some((path) => pathname.startsWith(path));
+  const moreRouteActive = pathname.startsWith("/feedback") || morePaths.some((path) => pathname.startsWith(path));
   const currentPage = returnActive
     ? returnItems.find((item) => item.view === searchParams.get("view")) ?? returnItems[0]
     : pickupActive
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
       : [...navItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const splitItems = navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href))
-    .filter((item) => item.href !== pathname && (item.href !== "/user-activity" || user.role === "admin") && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
+    .filter((item) => item.href !== pathname && (!["/user-activity", "/site-health"].includes(item.href) || user.role === "admin") && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {
@@ -191,21 +198,22 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
                 if (group.paths[0] !== item.href) return null;
                 const items = moduleItems.filter(child => group.paths.includes(child.href));
                 return <NavigationGroup key={`${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))}>
-                  {items.map(child => <Link key={child.href} href={child.href} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={16} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
+                  {items.map(child => <Link key={child.href} href={rememberedHref(child.href)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={16} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
                 </NavigationGroup>;
               }
               const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
+              return <Link key={item.href} href={rememberedHref(item.href)} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
             })}
             {selectedModule === "operations" ? <>
               <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Operations Management</p>
-              {visibleReturnItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+              {visibleReturnItems.map((item) => <Link key={item.href} href={rememberedHref(item.href)} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
               {visiblePickupItems.length ? <NavigationGroup key={`pickup:${pathname}:${searchParams.get("view") ?? ""}`} label="Pickup Management" icon={ListChecks} active={visiblePickupItems.some(item => isNavigationItemActive(item, pathname, searchParams.get("view")))}>
-                {visiblePickupItems.map((item) => <Link key={item.href} href={item.href} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
+                {visiblePickupItems.map((item) => <Link key={item.href} href={rememberedHref(item.href)} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
               </NavigationGroup> : null}
             </> : null}
           </SidebarNavigation>
+          <div className="app-sidebar-feedback"><Link href="/feedback" aria-current={pathname === "/feedback" ? "page" : undefined} className={cn("app-nav-link", pathname === "/feedback" && "is-active")}><MessageSquarePlus size={17} aria-hidden="true" /><span>Báo lỗi & góp ý</span><NavigationPendingIndicator /></Link></div>
           <div className="app-sidebar-foot"><Map size={15} aria-hidden="true" /><span>SDD · Areas 1–5</span></div>
         </aside>
       </div>
@@ -225,6 +233,8 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           <div className="app-header-account">
             <OllamaChatbox />
             <OffRequestNotifications />
+            <FeedbackPopup />
+            <ProductUpdateNotifications />
             <button type="button" className={cn("app-split-toggle", splitOpen && "is-active")} aria-pressed={splitOpen} aria-label={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} title={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} onClick={() => setSplitOpen((current) => !current)}>
               <Columns2 size={17} aria-hidden="true" /><span>{splitOpen ? "Đóng chia màn hình" : "Chia màn hình"}</span>
             </button>
@@ -259,12 +269,12 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
               if (group.paths[0] !== item.href) return null;
               const items = moreNavItems.filter(child => group.paths.includes(child.href));
               return <NavigationGroup key={`mobile:${group.label}:${pathname}:${searchParams.get("view") ?? ""}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))} mobile>
-                {items.map(child => <Link key={child.href} href={child.href} onClick={() => setMoreOpen(false)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-more-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={17} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
+                {items.map(child => <Link key={child.href} href={rememberedHref(child.href)} onClick={() => setMoreOpen(false)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-more-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={17} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
               </NavigationGroup>;
             }
             const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={cn("app-more-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
+            return <Link key={item.href} href={rememberedHref(item.href)} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={cn("app-more-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
           })}
         </div>
         <button type="button" onClick={() => void signOut()} className="app-more-signout"><LogOut size={17} />Đăng xuất</button>
@@ -274,7 +284,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
         {mobileNavItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
-          return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-taskbar-link", active && "is-active")}><Icon size={19} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
+          return <Link key={item.href} href={rememberedHref(item.href)} aria-current={active ? "page" : undefined} className={cn("app-taskbar-link", active && "is-active")}><Icon size={19} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
         })}
         <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((current) => !current)} className={cn("app-taskbar-link", (moreOpen || moreRouteActive) && "is-active")}>
           {moreOpen ? <X size={19} aria-hidden="true" /> : <Menu size={19} aria-hidden="true" />}<span>Thêm</span>

@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -39,7 +40,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
 
   // Filters
   const [query, setQuery] = useState("");
-  const [areaFilter, setAreaFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useRememberedState("overnight-holds-view:areaFilter", "all");
   const [cutoffStatusFilter, setCutoffStatusFilter] = useState("all");
   const [currentStatusFilter, setCurrentStatusFilter] = useState("all");
   const [noteFilter, setNoteFilter] = useState("all");

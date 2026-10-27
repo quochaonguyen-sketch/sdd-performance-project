@@ -1,0 +1,195 @@
+{
+  "measuredAt": "2026-10-27T15:17:25.473Z",
+  "route": "/login",
+  "mode": "local production, unthrottled CPU/network, cold browser context per run",
+  "interaction": "click login heading; no OAuth or authenticated workflow",
+  "limitation": "Lab measurements, not real-user P75. Authenticated dashboards need production usage samples in /site-health.",
+  "runs": [
+    {
+      "device": "desktop",
+      "run": 1,
+      "journeyElapsedMs": 4007,
+      "timing": {
+        "ttfb": 211.70000004768372,
+        "domContentLoaded": 370.2000000476837
+      },
+      "metrics": {
+        "FCP": {
+          "value": 388,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 211.70000004768372,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 388,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "run": 2,
+      "journeyElapsedMs": 3771,
+      "timing": {
+        "ttfb": 33.60000002384186,
+        "domContentLoaded": 143.19999992847443
+      },
+      "metrics": {
+        "FCP": {
+          "value": 164,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 33.60000002384186,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 164,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "run": 3,
+      "journeyElapsedMs": 3690,
+      "timing": {
+        "ttfb": 18.100000023841858,
+        "domContentLoaded": 109.5
+      },
+      "metrics": {
+        "FCP": {
+          "value": 136,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 18.100000023841858,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 136,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    },
+    {
+      "device": "mobile",
+      "run": 1,
+      "journeyElapsedMs": 3715,
+      "timing": {
+        "ttfb": 19.199999928474426,
+        "domContentLoaded": 119.29999995231628
+      },
+      "metrics": {
+        "FCP": {
+          "value": 144,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 19.199999928474426,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 144,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    },
+    {
+      "device": "mobile",
+      "run": 2,
+      "journeyElapsedMs": 3728,
+      "timing": {
+        "ttfb": 17.299999952316284,
+        "domContentLoaded": 80
+      },
+      "metrics": {
+        "FCP": {
+          "value": 128,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 17.299999952316284,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 128,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    },
+    {
+      "device": "mobile",
+      "run": 3,
+      "journeyElapsedMs": 3710,
+      "timing": {
+        "ttfb": 13.800000071525574,
+        "domContentLoaded": 110.70000004768372
+      },
+      "metrics": {
+        "FCP": {
+          "value": 140,
+          "rating": "good"
+        },
+        "TTFB": {
+          "value": 13.800000071525574,
+          "rating": "good"
+        },
+        "LCP": {
+          "value": 140,
+          "rating": "good"
+        },
+        "INP": {
+          "value": 8,
+          "rating": "good"
+        },
+        "CLS": {
+          "value": 0,
+          "rating": "good"
+        }
+      }
+    }
+  ]
+}

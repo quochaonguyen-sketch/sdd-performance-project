@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Box, Check, ChevronRight, Clock3, Copy, Filter, MapPin, PackageCheck, RefreshCw, RotateCcw, Search, Truck, X } from "lucide-react";
 import { EMPTY_RETURN_FILTERS, filterReturnRows, hubTime, RETURN_AREAS, returnAge, returnArea, returnCsv, summarizeReturns, type ReturnWorkspaceData, type ReturnWorkspaceRow } from "@/lib/return-orders/workspace";
@@ -9,7 +10,7 @@ const date=(value:string|null)=>value?new Date(value).toLocaleString("vi-VN",{ti
 
 export function ReturnWorkspace({initialData,initialNow,initialError=""}:{initialData:ReturnWorkspaceData;initialNow:number;initialError?:string}) {
   const [data,setData]=useState(initialData),[error,setError]=useState(initialError),[loading,setLoading]=useState(false);
-  const [filters,setFilters]=useState({...EMPTY_RETURN_FILTERS}),[page,setPage]=useState(1),[selected,setSelected]=useState<string|null>(null),[notice,setNotice]=useState("");
+  const [filters,setFilters]=useRememberedState("return-workspace:filters", {...EMPTY_RETURN_FILTERS}),[page,setPage]=useState(1),[selected,setSelected]=useState<string|null>(null),[notice,setNotice]=useState("");
   const [now,setNow]=useState(initialNow);
   const inFlight=useRef(false), mounted=useRef(true), request=useRef<AbortController|null>(null), noticeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const snapshotAt=useRef(initialData.snapshotAt);

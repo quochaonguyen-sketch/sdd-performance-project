@@ -2,6 +2,7 @@
  * pre-emit critique: P5 H4 E5 S5 R5 V4 · contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57)
  */
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,7 +23,7 @@ export function ViolationsView() {
   const [riders, setRiders] = useState<Rider[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useRememberedState("violations-view:status", "all");
   const [type, setType] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(initialForm);

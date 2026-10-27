@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import Link from "next/link";
 import { Bell, CheckCheck, X } from "lucide-react";
 
@@ -70,24 +71,16 @@ export function OffRequestNotifications() {
 
   useEffect(() => {
     const initialRead = window.setTimeout(() => setReadIds(loadReadIds()), 0);
-    let cancelled = false;
-    async function load() {
-      try {
-        const response = await fetch("/api/off-requests/pending", { cache: "no-store" });
-        const payload = await response.json().catch(() => null);
-        if (!cancelled && payload?.success) setRequests(payload.requests ?? []);
-      } catch {
-        if (!cancelled) setRequests([]);
-      }
-    }
-    void load();
-    const timer = window.setInterval(() => void load(), 30_000);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(initialRead);
-      window.clearInterval(timer);
-    };
+    return () => window.clearTimeout(initialRead);
   }, []);
+  const load = useCallback(async (signal: AbortSignal) => {
+    try {
+      const response = await fetch("/api/off-requests/pending", { cache: "no-store", signal });
+      const payload = await response.json().catch(() => null);
+      if (!signal.aborted && response.ok && payload?.success) setRequests(payload.requests ?? []);
+    } catch { /* Keep the last successful list during temporary network failures. */ }
+  }, []);
+  useVisiblePolling(load);
 
   const unreadCount = useMemo(
     () => requests.filter((item) => !readIds.has(item.id)).length,

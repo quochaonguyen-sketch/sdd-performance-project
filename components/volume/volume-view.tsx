@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -51,7 +52,7 @@ const PAGE_SIZE = 1000;
 
 export function VolumeView({ kind }: { kind: VolumeKind }) {
   const table = kind === "delivery" ? "delivery_order" : "pickup_volume";
-  const [date, setDate] = useState(todayInVietnam());
+  const [date, setDate] = useRememberedState("volume-view:date", todayInVietnam());
   const [rows, setRows] = useState<VolumeRow[]>([]);
   const [comparisonRows, setComparisonRows] = useState<VolumeRow[]>([]);
   const [loading, setLoading] = useState(true);

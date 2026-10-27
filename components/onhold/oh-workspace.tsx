@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
@@ -55,45 +56,36 @@ export function OHWorkspace({
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(!initialData);
   const [busy, setBusy] = useState(false);
-  const [start, setStart] = useState(from);
-  const [end, setEnd] = useState(today);
-  const [range, setRange] = useState({ from, to: today });
+  const [start, setStart] = useRememberedState("oh-workspace:start", from);
+  const [end, setEnd] = useRememberedState("oh-workspace:end", today);
+  const [range, setRange] = useRememberedState("oh-workspace:range", { from, to: today });
   const [geoMode, setGeoMode] = useState<"district" | "ward">("ward");
-  const [day, setDay] = useState(today);
+  const [day, setDay] = useRememberedState("oh-workspace:day", today);
 
   // Hook into AppLoadingOverlay (renders rider loader on top of AppShell while sidebar stays solid)
   useReportInitialDataLoading("onhold", loading);
 
-  // Client-side fetch on mount if initialData was not provided
+  // Abort an older date-range read when the selected range changes.
   useEffect(() => {
-    if (!initialData) {
+    if (initialData) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
       setLoading(true);
-      fetch(`/api/onhold?from=${start}&to=${end}`, { cache: "no-store" })
-        .then(async (res) => {
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || "Không tải được dữ liệu phân tích OH");
-          }
-          return res.json();
-        })
-        .then((next: OHData) => {
-          setData(next);
-        })
-        .catch((e) => {
-          setError(e instanceof Error ? e.message : "Không tải được pivot OH.");
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
+      fetch(`/api/onhold?from=${start}&to=${end}`, { cache: "no-store", signal: controller.signal })
+        .then(async res => { if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Không tải được dữ liệu phân tích OH"); } return res.json(); })
+        .then((next: OHData) => { if (!controller.signal.aborted) setData(next); })
+        .catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Không tải được pivot OH."); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 0);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [initialData, start, end]);
 
   // OH is reported together across all recording statuses.
   const status = "all";
   const [reason, setReason] = useState("all");
-  const [area, setArea] = useState("all");
-  const [district, setDistrict] = useState("all");
-  const [ward, setWard] = useState("all");
+  const [area, setArea] = useRememberedState("oh-workspace:area", "all");
+  const [district, setDistrict] = useRememberedState("oh-workspace:district", "all");
+  const [ward, setWard] = useRememberedState("oh-workspace:ward", "all");
 
   // Inline table searches and view limits
   const [geoSearch, setGeoSearch] = useState("");

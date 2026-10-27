@@ -6,6 +6,7 @@
  const realComponents=new Set(['app-shell','navigation-group','sidebar-navigation','app-brand']);
  Module._resolveFilename=function(name,parent,...args){return resolve.call(this,name.startsWith('@/')?path.join(root,name.slice(2)):name,parent,...args);};
  Module._load=function(name,...args){
+  if(name==='@/components/layout/filter-memory')return {useRememberedLinks:()=>href=>href};
   if(name==='next/navigation')return {usePathname:()=>pathname.split('?')[0],useSearchParams:()=>new URLSearchParams(pathname.split('?')[1]),useRouter:()=>({})};
   if(name.startsWith('@/components/')&&!realComponents.has(name.split('/').pop()))return new Proxy({__esModule:true},{get:(target,key)=>key==='__esModule'?true:()=>null});
   if(name==='@/lib/supabase/client')return {createClient:()=>{throw Error('Unexpected Supabase call');}};

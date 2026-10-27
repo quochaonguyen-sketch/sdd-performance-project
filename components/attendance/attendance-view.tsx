@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -107,8 +108,8 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
     initialMonth === format(new Date(), "yyyy-MM") ? format(new Date(), "yyyy-MM-dd") : `${initialMonth}-01`,
   );
   const [query, setQuery] = useState("");
-  const [kv, setKv] = useState("all");
-  const [cot, setCot] = useState("all");
+  const [kv, setKv] = useRememberedState("attendance-view:kv", "all");
+  const [cot, setCot] = useRememberedState("attendance-view:cot", "all");
   const [deliveryDistrict, setDeliveryDistrict] = useState("all");
   const [rosterStatus, setRosterStatus] = useState("all");
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceCategory | "all">("all");

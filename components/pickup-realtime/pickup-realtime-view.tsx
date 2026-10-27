@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Bike, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Layers3, RefreshCcw, Search, UsersRound } from "lucide-react";
@@ -24,7 +25,7 @@ type Payload = { riders: PickupRider[]; summary: Summary[]; snapshotAt: string |
 export function PickupRealtimeView() {
   const [data, setData] = useState<Payload>({ riders: [], summary: [], snapshotAt: null, riderSnapshotAt: null, routeSnapshotAt: null, snapshotsAligned: true });
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
-  const [filters, setFilters] = useState(INITIAL), [tab, setTab] = useState<"riders" | "zones">("riders"), [page, setPage] = useState(0);
+  const [filters, setFilters] = useRememberedState("pickup-realtime-view:filters", INITIAL), [tab, setTab] = useState<"riders" | "zones">("riders"), [page, setPage] = useState(0);
   const request = useRef(0), abort = useRef<AbortController | null>(null);
   useReportInitialDataLoading("pickup-realtime", loading);
   const load = useCallback(async () => {

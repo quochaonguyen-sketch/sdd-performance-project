@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -58,11 +59,11 @@ export function RealtimeDashboardView() {
   const [profiles, setProfiles] = useState<RiderProfile[]>([]);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
   const [workDate, setWorkDate] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("realtime-dashboard-view:query", "");
   const [zone, setZone] = useState("all");
-  const [kvFilter, setKvFilter] = useState("all");
-  const [status, setStatus] = useState<RiderStatus | "all">("all");
-  const [cot, setCot] = useState<string>("all");
+  const [kvFilter, setKvFilter] = useRememberedState("realtime-dashboard-view:kvFilter", "all");
+  const [status, setStatus] = useRememberedState<RiderStatus | "all">("realtime-dashboard-view:status", "all");
+  const [cot, setCot] = useRememberedState<string>("realtime-dashboard-view:cot", "all");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "status", direction: "asc" });
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<DisplayRider | null>(null);
@@ -171,7 +172,7 @@ export function RealtimeDashboardView() {
     setZone("all");
     setActiveDistrict(null);
     setPage(1);
-  }, []);
+  }, [setKvFilter]);
 
   const filtered = useMemo(() => {
     const q = normalize(query);

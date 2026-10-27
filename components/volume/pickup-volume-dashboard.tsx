@@ -1,4 +1,5 @@
 "use client";
+import { useRememberedState } from "@/components/layout/filter-memory";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -55,7 +56,7 @@ export function PickupVolumeDashboard({
   error,
   districts,
 }: PickupVolumeDashboardProps) {
-  const [area, setArea] = useState("all");
+  const [area, setArea] = useRememberedState("pickup-volume-dashboard:area", "all");
   const scoped = useMemo(() => districts.filter((item) => area === "all" || item.area === area), [districts, area]);
   const totalOrders = scoped.reduce((sum, item) => sum + item.count, 0);
   const totalRoutes = new Set(scoped.flatMap((item) => item.wards.flatMap((ward) => ward.routes.map((route) => route.route))).filter((route) => route !== "Chưa có mã tuyến")).size;

@@ -1,0 +1,43 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+(async () => {
+ const previewDirectory=path.resolve('app/followup-ui-preview'), previewFile=path.join(previewDirectory,'page.tsx');
+ if(fs.existsSync(previewDirectory))throw Error('The preview path already exists; it will not be overwritten.');
+ fs.mkdirSync(previewDirectory);
+ fs.copyFileSync(path.resolve('scripts/fixtures/followups-preview.tsx'),previewFile);
+ let browser;
+ try {
+  browser=await chromium.launch({headless:true,channel:'msedge'});
+  const page=await browser.newPage({viewport:{width:1440,height:1000}}), errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  const id='11111111-1111-4111-8111-111111111111';
+  let read=false, selected=false;
+  const feedback={id,title:'Lỗi riêng của bạn',content:'Một phản hồi riêng tư để kiểm tra thông báo.',status:'RESOLVED',response:'Đã sửa lỗi hiển thị.',kind:'BUG',created_at:'2026-10-27T08:00:00Z',page_path:'/riders',author_name:'Fixture',user_id:'fixture'};
+  await page.route('**/api/product-updates',route=>route.fulfill({json:{updates:[],feedbackNotifications:[{...feedback,feedback_id:id,read}]}}));
+  await page.route('**/api/feedback?*',route=>{const query=new URL(route.request().url()).searchParams;selected ||= query.get('feedback_id')===id;return route.fulfill({json:{feedback:[feedback],isAdmin:true,total:1,page:1,pageSize:20}});});
+  await page.route('**/api/feedback-notifications/*/read',route=>{read=true;return route.fulfill({json:{success:true}});});
+  await page.route('**/api/web-vitals',route=>route.fulfill({json:{summary:[{path:'/dashboard',device:'desktop',name:'LCP',p75:3000,samples:30},{path:'/riders',device:'mobile',name:'INP',p75:180,samples:12}]}}));
+  await page.goto('http://localhost:3000/followup-ui-preview');
+  await page.getByLabel('Fixture area').selectOption('KV1');
+  await page.getByLabel('Fixture date').fill('2026-10-20');
+  await page.getByLabel('Fixture status').selectOption('OPEN');
+  await page.getByRole('button',{name:'Switch view',exact:true}).click();await page.getByRole('button',{name:'Switch view',exact:true}).click();
+  assert.equal(await page.getByLabel('Fixture area').inputValue(),'KV1');assert.equal(await page.getByLabel('Fixture date').inputValue(),'2026-10-20');
+  await page.reload();await page.waitForFunction(()=>Array.from(document.querySelectorAll('label')).find(label=>label.textContent.startsWith('Fixture status'))?.querySelector('select')?.value==='OPEN');assert.equal(await page.getByLabel('Fixture status').inputValue(),'OPEN');
+  await page.getByRole('button',{name:'Switch account',exact:true}).click();assert.equal(await page.getByLabel('Fixture area').inputValue(),'all');
+  await page.getByRole('button',{name:'Switch account',exact:true}).click();assert.equal(await page.getByLabel('Fixture area').inputValue(),'KV1');
+  const notification=page.locator('#feedback-notifications');await notification.getByRole('heading',{name:'Thông báo phản hồi'}).waitFor();
+  await notification.getByRole('link',{name:'Xem phản hồi',exact:true}).click();
+  await page.getByText('Đang xem phản hồi được chọn từ thông báo.',{exact:false}).waitFor();assert.equal(selected,true);
+  await notification.getByRole('button',{name:'Đánh dấu đã đọc',exact:true}).click();
+  await notification.getByText('Đã đọc',{exact:true}).waitFor();assert.equal(read,true);
+  await page.getByRole('button',{name:'Show metrics',exact:true}).click();
+  await page.getByRole('cell',{name:'3000 ms',exact:true}).waitFor();
+  assert.equal(await page.getByText('Cần cải thiện',{exact:true}).count(),1);
+  await page.setViewportSize({width:375,height:812});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.deepEqual(errors,[]);
+  console.log('Browser checks passed: filter retention across views/reloads, account isolation, private notification navigation/read, P75 report and mobile layout.');
+ } finally {await browser?.close();fs.unlinkSync(previewFile);fs.rmdirSync(previewDirectory);}
+})().catch(error=>{console.error(error);process.exitCode=1;});
