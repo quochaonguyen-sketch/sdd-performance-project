@@ -1,18 +1,20 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Database, Download, ListChecks, MapPinned, RefreshCcw, Search, X } from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Database, Download, CalendarDays, TrendingUp, ListChecks, MapPinned, RefreshCcw, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
+import { pickupCsvCell } from "@/lib/pickup/csv";
 import styles from "./pickup-management-view.module.css";
 
 type PickupAssignment = {
   id: string;
   assignment_key: string;
   assigned_at: string | null;
+  last_synced_at: string | null;
   cot: string | null;
   route_name: string | null;
   mapped_pickup_point_group: string | null;
@@ -24,6 +26,8 @@ type PickupAssignment = {
   district: string | null;
   pickup_status: number | null;
   pickup_retry_assign_type: number | null;
+  ado: number | null;
+  ado_days: number;
 };
 
 type RouteSummary = {
@@ -32,11 +36,17 @@ type RouteSummary = {
   helper: string;
 };
 
-const PAGE_SIZE = 1000;
 const ROW_PAGE_SIZE = 80;
 
 export function PickupManagementView() {
+  const requestVersion=useRef(0);
+  const pendingRequest=useRef<AbortController|null>(null);
+  const [total,setTotal]=useState(0),[filteredTotal,setFilteredTotal]=useState(0);
+  const [routeSummaries,setRouteSummaries]=useState<RouteSummary[]>([]);
+  const [exporting,setExporting]=useState(false);
+  const [adoDays,setAdoDays]=useState(0);
   const [rows, setRows] = useState<PickupAssignment[]>([]);
+  const [sortOrder,setSortOrder]=useState("ado_desc");
   const [selectedRoute, setSelectedRoute] = useState("all");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -48,41 +58,27 @@ export function PickupManagementView() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const loadAssignments = useCallback(async () => {
-    const supabase = createClient();
-    const loaded: PickupAssignment[] = [];
-    let offset = 0;
-
-    setLoading(true);
-    setError(null);
-
-    while (true) {
-      const { data, error: queryError } = await supabase
-        .from("pickup_assignments")
-        .select("id,assignment_key,assigned_at,cot,route_name,mapped_pickup_point_group,pickup_point_id,pup_code,shop_name,shop_address,ward,district,pickup_status,pickup_retry_assign_type")
-        .order("route_name", { nullsFirst: false })
-        .order("assigned_at")
-        .range(offset, offset + PAGE_SIZE - 1);
-
-      if (queryError) {
-        setRows([]);
-        setError(queryError.message);
-        setLoading(false);
-        return;
-      }
-
-      const batch = (data ?? []) as PickupAssignment[];
-      loaded.push(...batch);
-      if (batch.length < PAGE_SIZE) break;
-      offset += PAGE_SIZE;
-    }
-
-    setRows(loaded);
-    setLoading(false);
-  }, []);
+    const version=++requestVersion.current;
+    pendingRequest.current?.abort();
+    const controller=new AbortController();
+    pendingRequest.current=controller;
+    setLoading(true);setError(null);
+    try {
+      const params=new URLSearchParams({page:String(currentPage),q:deferredQuery,route:selectedRoute,sort:sortOrder});
+      const response=await fetch(`/api/pickup-points?${params}`,{cache:"no-store",signal:controller.signal});
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error);
+      if(version!==requestVersion.current||controller.signal.aborted)return;
+      const lastPage=Math.max(1,Math.ceil(body.filtered/ROW_PAGE_SIZE));
+      if(currentPage>lastPage){setCurrentPage(lastPage);return;}
+      setRows(body.rows);setTotal(body.total);setFilteredTotal(body.filtered);setRouteSummaries(body.routes);setAdoDays(body.ado_days);
+    } catch(error) {if(version===requestVersion.current&&!(error instanceof Error&&error.name==="AbortError"))setError(error instanceof Error?error.message:"Không tải được PUP");}
+    finally {if(version===requestVersion.current&&!controller.signal.aborted)setLoading(false);}
+  }, [currentPage,deferredQuery,selectedRoute,sortOrder]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadAssignments();
+    const timer=setTimeout(()=>void loadAssignments(),250);
+    return ()=>{clearTimeout(timer);pendingRequest.current?.abort();};
   }, [loadAssignments]);
 
   const refresh = useCallback(() => {
@@ -91,7 +87,6 @@ export function PickupManagementView() {
 
   useSupabaseRealtime({ table: "pickup_assignments", onChange: refresh });
 
-  const routeSummaries = useMemo(() => summarizeRoutes(rows), [rows]);
   const routeOptions = useMemo(
     () =>
       routeSummaries
@@ -100,31 +95,17 @@ export function PickupManagementView() {
         .sort((a, b) => a.localeCompare(b, "vi", { numeric: true })),
     [routeSummaries],
   );
-  const selectedRows = useMemo(() => {
-    const normalizedQuery = deferredQuery.trim().toLocaleLowerCase("vi");
-    return rows.filter((row) => {
-      const route = routeName(row.route_name);
-      const matchesRoute = selectedRoute === "all" || route === selectedRoute;
-      const matchesQuery =
-        !normalizedQuery ||
-        [pickupCode(row), row.shop_name, row.shop_address, row.ward, row.district, row.route_name, row.cot]
-          .filter(Boolean)
-          .some((value) => value?.toLocaleLowerCase("vi").includes(normalizedQuery));
-      return matchesRoute && matchesQuery;
-    });
-  }, [deferredQuery, rows, selectedRoute]);
 
   const activeRoute = routeSummaries.find((route) => route.route === selectedRoute);
   const featuredRoutes = useMemo(() => {
-    const topRoutes = routeSummaries.slice(0, 9);
+    const topRoutes = routeSummaries.slice(0, 5);
     if (selectedRoute === "all" || topRoutes.some((route) => route.route === selectedRoute)) return topRoutes;
     const selected = routeSummaries.find((route) => route.route === selectedRoute);
-    return selected ? [selected, ...topRoutes].slice(0, 9) : topRoutes;
+    return selected ? [selected, ...topRoutes].slice(0, 5) : topRoutes;
   }, [routeSummaries, selectedRoute]);
-  const pageCount = Math.max(1, Math.ceil(selectedRows.length / ROW_PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / ROW_PAGE_SIZE));
   const safePage = Math.min(currentPage, pageCount);
   const pageStart = (safePage - 1) * ROW_PAGE_SIZE;
-  const pagedRows = selectedRows.slice(pageStart, pageStart + ROW_PAGE_SIZE);
 
   async function changeRoute(row: PickupAssignment, nextRoute: string) {
     const cleanedRoute = nextRoute.trim();
@@ -147,16 +128,34 @@ export function PickupManagementView() {
       return;
     }
 
-    setRows((current) =>
-      current.map((item) => (item.id === row.id ? { ...item, route_name: cleanedRoute } : item)),
-    );
+    void loadAssignments();
     setSuccess(`Đã chuyển ${pickupCode(row)} sang ${cleanedRoute}.`);
   }
 
-  function exportForPython() {
-    if (rows.length === 0) return;
-
-    const csv = buildPickupAssignmentCsv(rows);
+  async function exportForPython() {
+    if(exporting)return;
+    setExporting(true);
+    try {
+      const exported:PickupAssignment[]=[];
+      const ids=new Set<string>();
+      let exportDays:number|undefined;
+      let exportTotal:number|undefined;
+      for(let page=1;;page++) {
+        const params=new URLSearchParams({page:String(page),size:"1000",q:deferredQuery,route:selectedRoute,sort:sortOrder});
+        const response=await fetch(`/api/pickup-points?${params}`,{cache:"no-store"});
+        const body=await response.json();
+        if(!response.ok)throw new Error(body.error);
+        exportDays??=body.ado_days;
+        exportTotal??=body.filtered;
+        if(body.ado_days!==exportDays||body.filtered!==exportTotal)throw new Error("Dữ liệu đã thay đổi trong lúc xuất. Vui lòng thử lại.");
+        for(const row of body.rows){
+          if(ids.has(row.id))throw new Error("Thứ tự PUP đã thay đổi trong lúc xuất. Vui lòng thử lại.");
+          ids.add(row.id);exported.push(row);
+        }
+        if(exported.length===exportTotal)break;
+        if(body.rows.length===0||exported.length>body.filtered)throw new Error("Danh sách xuất chưa đầy đủ. Vui lòng thử lại.");
+      }
+      const csv = buildPickupAssignmentCsv(exported);
     const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -166,6 +165,8 @@ export function PickupManagementView() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    } catch(error){setError(error instanceof Error?error.message:"Không xuất được CSV");}
+    finally{setExporting(false);}
   }
 
   return (
@@ -174,9 +175,9 @@ export function PickupManagementView() {
         <div className={styles.titleBlock}>
           <span className={styles.titleIcon}><ListChecks size={20} /></span>
           <div>
-            <p className={styles.contextLine}>Pickup operations · dữ liệu PUP theo tuyến</p>
-            <h1>Quản lý PUP</h1>
-            <p className={styles.lede}>Tìm shop, đổi tuyến và xuất dữ liệu gán từ cùng một màn hình.</p>
+            <p className={styles.contextLine}>SDD OPERATIONS / PICKUP</p>
+            <h1>Pickup Points<span className={styles.hubBadge}>Toàn hub</span></h1>
+            <p className={styles.lede}>Theo dõi shop, tuyến lấy hàng và sản lượng trung bình mỗi ngày.</p>
           </div>
         </div>
         <div className={styles.commandActions}>
@@ -184,9 +185,9 @@ export function PickupManagementView() {
             <RefreshCcw size={16} className={loading ? styles.spinning : undefined} />
             Làm mới
           </Button>
-          <Button type="button" onClick={exportForPython} disabled={loading || rows.length === 0} className={styles.actionButton}>
+          <Button type="button" onClick={()=>void exportForPython()} disabled={loading || exporting || total === 0} className={styles.actionButton}>
             <Download size={16} />
-            Xuất CSV
+            {exporting?"Đang xuất…":"Xuất CSV"}
           </Button>
         </div>
       </header>
@@ -195,55 +196,58 @@ export function PickupManagementView() {
       {success ? <p className={styles.successBanner}><CheckCircle2 size={17} />{success}</p> : null}
 
       <section className={styles.signalStrip} aria-label="Tín hiệu vận hành PUP">
-        <MetricCard icon={<Database size={17} />} label="Tổng PUP" value={rows.length} loading={loading} />
-        <MetricCard icon={<MapPinned size={17} />} label="Số tuyến" value={routeSummaries.length} loading={loading} />
-        <MetricCard icon={<Search size={17} />} label="Đang hiển thị" value={selectedRows.length} loading={loading} />
-        <MetricCard icon={<AlertTriangle size={17} />} label="Chưa có tuyến" value={rows.filter((row) => routeName(row.route_name) === "Chưa có tuyến").length} loading={loading} tone="warning" />
+        <MetricCard icon={<Database size={17} />} label="Điểm lấy hàng" value={total} loading={loading} />
+        <MetricCard icon={<MapPinned size={17} />} label="Tuyến pickup" value={routeSummaries.length} loading={loading} />
+        <MetricCard icon={<Search size={17} />} label="Đang hiển thị" value={filteredTotal} loading={loading} />
+        <MetricCard icon={<CalendarDays size={17} />} label="Ngày tính ADO" value={adoDays} loading={loading} />
       </section>
 
       <section className={styles.routeIndex} aria-labelledby="route-index-title">
         <div className={styles.sectionHeading}>
-          <div><h2 id="route-index-title">Chỉ mục tuyến</h2><p>Chọn nhanh tuyến nhiều PUP hoặc mở toàn bộ danh sách tuyến.</p></div>
+          <div><h2 id="route-index-title">Tuyến lấy hàng</h2><p>Chọn tuyến để xem các shop phụ trách.</p></div>
           <label className={styles.routeSelectLabel}>
             <span>Tất cả tuyến</span>
             <select value={selectedRoute} onChange={(event) => { setSelectedRoute(event.target.value); setCurrentPage(1); }}>
-              <option value="all">Tất cả · {formatNumber(rows.length)} PUP</option>
+              <option value="all">Tất cả · {formatNumber(total)} PUP</option>
               {routeSummaries.map((route) => <option key={route.route} value={route.route}>{route.route} · {formatNumber(route.count)}</option>)}
             </select>
           </label>
         </div>
         <div className={styles.routeRail}>
-          <RouteTab active={selectedRoute === "all"} label="Tất cả" count={rows.length} helper={`${routeSummaries.length} tuyến`} onClick={() => { setSelectedRoute("all"); setCurrentPage(1); }} />
+          <RouteTab active={selectedRoute === "all"} label="Tất cả" count={total} helper={`${routeSummaries.length} tuyến`} onClick={() => { setSelectedRoute("all"); setCurrentPage(1); }} />
           {featuredRoutes.map((route) => <RouteTab key={route.route} active={selectedRoute === route.route} label={route.route} count={route.count} helper={route.helper} onClick={() => { setSelectedRoute(route.route); setCurrentPage(1); }} />)}
         </div>
       </section>
 
       <section className={styles.ledger} aria-labelledby="pup-ledger-title">
         <div className={styles.ledgerToolbar}>
-          <div><h2 id="pup-ledger-title">Danh sách PUP</h2><p>{selectedRoute === "all" ? "Toàn bộ dữ liệu" : activeRoute?.route ?? selectedRoute} · {formatNumber(selectedRows.length)} kết quả</p></div>
+          <div><h2 id="pup-ledger-title">Danh sách điểm lấy hàng</h2><p>{selectedRoute === "all" ? "Toàn bộ dữ liệu" : activeRoute?.route ?? selectedRoute} · {formatNumber(filteredTotal)} kết quả</p></div>
+          <div className={styles.ledgerFilters}><label className={styles.routeSelectLabel}><span>Sắp xếp</span><select aria-label="Sắp xếp Pickup Points" value={sortOrder} onChange={event=>{setSortOrder(event.target.value);setCurrentPage(1);}}><option value="ado_desc">ADO: cao → thấp</option><option value="route">Theo tuyến</option></select></label>
           <label className={styles.searchField}>
             <span>Tìm trong danh sách</span>
-            <div className={styles.searchShell}><Search size={17} /><Input value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} placeholder="Mã PUP, shop, địa chỉ, tuyến…" className={styles.searchInput} />{query ? <button type="button" aria-label="Xóa từ khóa tìm kiếm" onClick={() => setQuery("")}><X size={15} /></button> : null}</div>
-          </label>
+            <div className={styles.searchShell}><Search size={17} /><Input value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} placeholder="Tìm tên shop, mã PUP, địa chỉ…" className={styles.searchInput} />{query ? <button type="button" aria-label="Xóa từ khóa tìm kiếm" onClick={() => setQuery("")}><X size={15} /></button> : null}</div>
+          </label></div>
         </div>
 
-        <div className={styles.tableFrame}>
-          <div className={styles.tableHead}><span>PUP</span><span>Shop</span><span>Địa chỉ</span><span>Phường / Quận</span><span>Tuyến hiện tại</span></div>
-          <div className={styles.tableBody} aria-live="polite">
+        <div className={styles.adoContext}><TrendingUp size={16} aria-hidden="true"/><strong>ADO làm tròn lên</strong><span>Trung bình {adoDays} ngày đầy đủ trong 30 ngày gần nhất</span><details><summary>Cách tính</summary><p>Tổng đơn của shop chia số ngày đầy đủ, sau đó làm tròn lên số nguyên. Tính cả ngày có 0 đơn và không tính hôm nay.</p></details></div>
+        <div className={styles.tableFrame} role="table" aria-label="Danh sách Pickup Points và ADO">
+          <div className={styles.tableHead} role="row"><span role="columnheader">Mã PUP</span><span role="columnheader">Shop</span><span role="columnheader">Địa chỉ lấy hàng</span><span role="columnheader">Phường / Quận</span><span role="columnheader">Tuyến hiện tại</span><span role="columnheader" aria-sort={sortOrder==="ado_desc"?"descending":"none"}>ADO / ngày {sortOrder==="ado_desc"?"↓":""}</span></div>
+          <div className={styles.tableBody} role="rowgroup" aria-live="polite">
             {loading ? Array.from({ length: 8 }, (_, index) => <div key={index} className={styles.skeletonRow}><i /><i /><i /><i /></div>) : null}
-            {!loading && selectedRows.length === 0 ? <div className={styles.emptyState}><Search size={21} /><strong>Không có PUP phù hợp.</strong><span>Đổi từ khóa hoặc chọn lại tuyến để mở rộng kết quả.</span><button type="button" onClick={() => { setQuery(""); setSelectedRoute("all"); }}>Xóa bộ lọc</button></div> : null}
-            {!loading ? pagedRows.map((row) => <div key={row.id} className={styles.tableRow}>
-              <div className={styles.identityCell} data-label="PUP"><strong>{pickupCode(row)}</strong><span>{formatAssignedAt(row.assigned_at)}</span></div>
-              <p className={styles.shopCell} data-label="Shop">{row.shop_name || "—"}</p>
-              <p className={styles.addressCell} data-label="Địa chỉ" title={row.shop_address || undefined}>{row.shop_address || "—"}</p>
-              <div className={styles.locationCell} data-label="Phường / Quận"><strong>{row.ward || "—"}</strong><span>{row.district || "—"}</span></div>
-              <div className={styles.routeCell} data-label="Tuyến hiện tại"><RoutePicker row={row} routes={routeOptions} disabled={updatingId === row.id} onChangeRoute={changeRoute} /></div>
+            {!loading && rows.length === 0 ? <div className={styles.emptyState}><Search size={21} /><strong>Không có PUP phù hợp.</strong><span>Đổi từ khóa hoặc chọn lại tuyến để mở rộng kết quả.</span><button type="button" onClick={() => { setQuery(""); setSelectedRoute("all"); }}>Xóa bộ lọc</button></div> : null}
+            {!loading ? rows.map((row) => <div key={row.id} className={styles.tableRow} role="row">
+              <div className={styles.identityCell} role="cell" data-label="PUP"><strong>{pickupCode(row)}</strong><span>{row.last_synced_at ? "Đồng bộ " : ""}{formatAssignedAt(row.last_synced_at ?? row.assigned_at)}</span></div>
+              <p className={styles.shopCell} role="cell" data-label="Shop">{row.shop_name || "—"}</p>
+              <p className={styles.addressCell} role="cell" data-label="Địa chỉ" title={row.shop_address || undefined}>{row.shop_address || "—"}</p>
+              <div className={styles.locationCell} role="cell" data-label="Phường / Quận"><strong>{row.ward || "—"}</strong><span>{row.district || "—"}</span></div>
+              <div className={styles.routeCell} role="cell" data-label="Tuyến hiện tại">{row.last_synced_at ? <div title={row.mapped_pickup_point_group || undefined}><strong>{routeName(row.route_name)}</strong><p className="mt-1 text-xs text-slate-500">{row.route_name?"Theo danh mục SPX":row.mapped_pickup_point_group?"Nhiều nhóm, cần đối chiếu":"Chưa có nhóm SPX"}</p></div> : <RoutePicker row={row} routes={routeOptions} disabled={updatingId === row.id} onChangeRoute={changeRoute} />}</div>
+              <div className={styles.adoCell} role="cell" data-label="ADO / ngày"><strong>{row.ado===null?"—":row.ado.toLocaleString("vi-VN")}</strong><span>{row.ado===null?"Chưa có dữ liệu":"đơn / ngày"}</span></div>
             </div>) : null}
           </div>
         </div>
 
         <footer className={styles.pagination}>
-          <span>Hiện {selectedRows.length === 0 ? 0 : pageStart + 1}–{Math.min(pageStart + ROW_PAGE_SIZE, selectedRows.length)} / {formatNumber(selectedRows.length)} PUP</span>
+          <span>Hiện {filteredTotal === 0 ? 0 : pageStart + 1}–{Math.min(pageStart + ROW_PAGE_SIZE, filteredTotal)} / {formatNumber(filteredTotal)} PUP</span>
           <div><button type="button" aria-label="Trang trước" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={safePage <= 1}><ChevronLeft size={16} /></button><strong>Trang {safePage}/{pageCount}</strong><button type="button" aria-label="Trang sau" onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))} disabled={safePage >= pageCount}><ChevronRight size={16} /></button></div>
         </footer>
       </section>
@@ -397,6 +401,7 @@ function RouteTab({
       onClick={onClick}
       className={`${styles.routeTab} ${active ? styles.routeTabActive : ""}`}
       aria-pressed={active}
+      title={label}
     >
       <span className={styles.routeTabLabel}>{label}</span>
       <span className={styles.routeTabMeta}>
@@ -407,27 +412,6 @@ function RouteTab({
   );
 }
 
-function summarizeRoutes(rows: PickupAssignment[]): RouteSummary[] {
-  const routes = new Map<string, { count: number; cots: Set<string> }>();
-
-  for (const row of rows) {
-    const route = routeName(row.route_name);
-    const routeData = routes.get(route) ?? { count: 0, cots: new Set<string>() };
-    const cot = row.cot?.trim();
-
-    routeData.count += 1;
-    if (cot) routeData.cots.add(cot);
-    routes.set(route, routeData);
-  }
-
-  return Array.from(routes, ([route, routeData]) => ({
-    route,
-    count: routeData.count,
-    helper: [
-      Array.from(routeData.cots).sort((a, b) => a.localeCompare(b, "vi", { numeric: true })).join(", "),
-    ].filter(Boolean).join(" / "),
-  })).sort((a, b) => b.count - a.count || a.route.localeCompare(b.route, "vi", { numeric: true }));
-}
 
 function routeName(value: string | null | undefined) {
   return value?.trim() || "Chưa có tuyến";
@@ -441,6 +425,7 @@ function buildPickupAssignmentCsv(rows: PickupAssignment[]) {
   const headers = [
     "assignment_key",
     "assigned_at",
+    "last_synced_at",
     "cot",
     "route_name",
     "mapped_pickup_point_group",
@@ -452,18 +437,15 @@ function buildPickupAssignmentCsv(rows: PickupAssignment[]) {
     "district",
     "pickup_status",
     "pickup_retry_assign_type",
+    "ado_per_day",
+    "ado_days",
   ];
   const lines = rows
-    .slice()
-    .sort(
-      (a, b) =>
-        routeName(a.route_name).localeCompare(routeName(b.route_name), "vi", { numeric: true }) ||
-        pickupCode(a).localeCompare(pickupCode(b), "vi"),
-    )
     .map((row) =>
       [
         row.assignment_key,
         row.assigned_at,
+        row.last_synced_at,
         row.cot,
         routeName(row.route_name),
         row.mapped_pickup_point_group,
@@ -475,20 +457,19 @@ function buildPickupAssignmentCsv(rows: PickupAssignment[]) {
         row.district,
         row.pickup_status?.toString(),
         row.pickup_retry_assign_type?.toString(),
-      ].map(csvCell).join(","),
+        row.ado?.toString(),
+        String(row.ado_days),
+      ].map(pickupCsvCell).join(","),
     );
 
   return [headers.join(","), ...lines].join("\r\n");
 }
 
-function csvCell(value: string | null | undefined) {
-  const text = value ?? "";
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
 function formatAssignedAt(value: string | null) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 19);
+  if (!value) return "—";
+  const date=new Date(value);
+  if(!Number.isFinite(date.getTime()))return "—";
+  return new Intl.DateTimeFormat("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(date);
 }
 
 function formatNumber(value: number) {

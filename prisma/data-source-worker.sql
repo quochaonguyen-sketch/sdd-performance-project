@@ -1,12 +1,12 @@
 -- Control plane: only the authenticated server API and the server-side worker use these tables/RPCs.
 create table if not exists public.data_source_settings (
-  source_id text primary key check(source_id in ('pickup_inventory','delivery_inventory','pickup_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily')),
+  source_id text primary key check(source_id in ('pickup_inventory','delivery_inventory','pickup_realtime','delivery_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily')),
   auto_enabled boolean not null default false,
   interval_seconds integer not null default 1800 check(interval_seconds between 300 and 86400),
   next_run_at timestamptz, updated_at timestamptz not null default now()
 );
 alter table public.data_source_settings drop constraint if exists data_source_settings_source_id_check;
-alter table public.data_source_settings add constraint data_source_settings_source_id_check check(source_id in ('pickup_inventory','delivery_inventory','pickup_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily'));
+alter table public.data_source_settings add constraint data_source_settings_source_id_check check(source_id in ('pickup_inventory','delivery_inventory','pickup_realtime','delivery_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily'));
 alter table public.data_source_settings add column if not exists schedule_mode text not null default 'interval' check(schedule_mode in ('interval','daily'));
 alter table public.data_source_settings add column if not exists daily_time time not null default '06:00';
 alter table public.data_source_settings add column if not exists day_offset integer not null default 0 check(day_offset in (0,1));
@@ -18,7 +18,7 @@ do $$ begin
   end if;
 end $$;
 insert into public.data_source_settings(source_id,interval_seconds) values
- ('pickup_inventory',1800),('delivery_inventory',1800),('pickup_realtime',300),('pickup_volume',1800),('delivery_volume',1800),('performance',1800),('return_inventory',1800),('onhold_daily',300)
+ ('pickup_inventory',1800),('delivery_inventory',1800),('pickup_realtime',300),('delivery_realtime',600),('pickup_volume',1800),('delivery_volume',1800),('performance',1800),('return_inventory',1800),('onhold_daily',300)
 on conflict(source_id) do nothing;
 create table if not exists public.data_source_workers (
   id text primary key, hostname text not null, version text not null,
@@ -114,7 +114,7 @@ create or replace function public.control_data_source(p_source text,p_action tex
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
 declare j public.data_source_jobs; s public.data_source_settings;
 begin
-  if p_source not in ('pickup_inventory','delivery_inventory','pickup_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily') or p_action not in ('run','stop','auto') then raise exception 'Invalid source/action'; end if;
+  if p_source not in ('pickup_inventory','delivery_inventory','pickup_realtime','delivery_realtime','pickup_volume','delivery_volume','performance','return_inventory','onhold_daily') or p_action not in ('run','stop','auto') then raise exception 'Invalid source/action'; end if;
   if p_day is null or p_day>(now() at time zone 'Asia/Ho_Chi_Minh')::date or p_day<(now() at time zone 'Asia/Ho_Chi_Minh')::date-366 then raise exception 'Invalid report day'; end if;
   perform pg_advisory_xact_lock(948251,1);
   select * into s from public.data_source_settings where source_id=p_source for update;

@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Play, Square, Server, RefreshCw, ArrowUpRight, Clock3, Database, Loader2 } from "lucide-react";
+import { Play, Square, Server, RefreshCw, ArrowUpRight, Clock3, Database, Loader2, CheckCircle2, CircleAlert, Layers3, History } from "lucide-react";
 import { DATA_SOURCES, vietnamDay, type DataSourceId } from "@/lib/data-sources/catalog";
 import { SourceSchedule, type SourceScheduleSetting } from "./source-schedule";
 import { SpxSession } from "./spx-session";
+import "./data-sources.css";
 
 type Job={id:string;source_id:DataSourceId;report_date:string;status:string;phase:string;message:string;requested_at:string;started_at:string|null;finished_at:string|null;events:{at:string;message:string}[]};
 type Setting=SourceScheduleSetting;
@@ -29,19 +30,27 @@ export function DataSourcesView(){
   }
   const workers=error?[]:state?.workers.filter(w=>Date.parse(state.serverTime)-Date.parse(w.last_seen_at)<45000)??[];
   const detail=state?.jobs.find(j=>j.id===selected);
-  return <div className="space-y-6 p-4 md:p-7">
+  return <div className="data-sources-page space-y-6 p-4 md:p-7">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="mb-2 flex items-center gap-2 text-sm text-slate-500"><Database size={16}/> TRUNG TÂM DỮ LIỆU</div><h1 className="text-3xl font-bold tracking-tight">Điều khiển nguồn dữ liệu</h1><p className="mt-2 text-sm text-slate-500">Chọn nguồn trên web · Máy chủ chạy nền · Cập nhật trạng thái mỗi 5 giây</p></div><button onClick={()=>void load()} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"><RefreshCw size={16}/> Làm mới</button></div>
     <div className={`rounded-2xl border p-5 ${workers.length?"border-emerald-200 bg-emerald-50":"border-amber-200 bg-amber-50"}`}><div className="flex items-center gap-3"><Server size={24}/><div><p className="font-semibold">{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</p><p className="mt-1 text-sm">{workers.length?workers.map(w=>`${w.hostname} · tối đa ${w.concurrency} nguồn song song`).join(" | "):"Lệnh chạy sẽ xếp hàng. Bật run_sources_worker.cmd trong sdd-web-data trên máy chủ để nhận lệnh."}</p></div><span className="ml-auto rounded-full bg-white/70 px-3 py-1 text-sm">{state?.jobs.filter(active).length??0} tác vụ đang chờ / chạy</span></div></div>
     {error&&<div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</div>}{notice&&<div role="status" className="rounded-xl bg-blue-50 p-4 text-blue-700">{notice}</div>}
     {!state&&!error&&<p className="flex gap-2"><Loader2 className="animate-spin" size={18}/>Đang tải nguồn dữ liệu…</p>}
     <SpxSession />
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{state?.sources.map(source=>{
+    <div className="ds-section-heading"><div><span className="ds-section-kicker">VẬN HÀNH DỮ LIỆU</span><h2>Các nguồn đồng bộ <span>{state?.sources.length??"—"}</span></h2></div><p>Chạy thủ công hoặc mở từng nguồn để chỉnh lịch.</p></div>
+    <div className="ds-source-grid">{state?.sources.map(source=>{
       const setting=state.settings.find(s=>s.source_id===source.id),job=state.jobs.find(j=>j.source_id===source.id&&active(j))??state.jobs.find(j=>j.source_id===source.id),running=job&&active(job);
-      return <section key={source.id} className="flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md" style={{borderTop:`4px solid ${source.color}`}}>
-        <div className="flex-1 p-5"><div className="flex justify-between gap-2"><h2 className="text-lg font-bold" style={{color:source.color}}>{source.name}</h2><Link href={source.href} aria-label={`Mở ${source.name}`} className="rounded-full bg-slate-50 p-2"><ArrowUpRight size={16}/></Link></div><p className="mt-1 min-h-10 text-sm text-slate-500">{source.description}</p>
-        <div className="my-4 rounded-xl bg-slate-50 p-3"><p className={`flex items-center gap-2 text-sm font-semibold ${job?.status==="FAILED"?"text-red-600":"text-slate-700"}`}>{running&&<Loader2 size={14} className="animate-spin"/>}{job?labels[job.status]:"Chưa có lượt chạy"}{job?.phase==="publishing"&&" · Đang ghi"}</p><p className="mt-1 min-h-9 text-xs text-slate-500">{job?.message??"Sẵn sàng nhận lệnh từ web"}</p>{job&&<button onClick={()=>setSelected(job.id)} className="mt-2 text-xs text-blue-600 underline">Xem nhật ký lượt chạy</button>}</div>
-        {source.dated&&<label className="mb-3 flex items-center justify-between text-sm text-slate-600">Ngày chạy một lần<input aria-label={`Ngày ${source.name}`} type="date" max={vietnamDay()} value={dates[source.id]??vietnamDay()} onChange={e=>setDates({...dates,[source.id]:e.target.value})} className="rounded-lg border px-2 py-1"/></label>}
-        <div className="flex gap-2"><button disabled={!!busy||!!running} onClick={()=>void command(source.id,"run")} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{background:source.color}}><Play size={15}/> {busy===source.id?"Đang gửi…":"Chạy một lần"}</button><button disabled={!!busy||!running||job?.status==="CANCEL_REQUESTED"} onClick={()=>void command(source.id,"stop")} className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm disabled:opacity-35"><Square size={14}/>Dừng</button></div>
+      const tone=job?.status==="FAILED"?"error":running?"running":job?.status==="SUCCEEDED"?"success":"idle";
+      const StatusIcon=tone==="success"?CheckCircle2:tone==="error"?CircleAlert:running?Loader2:Clock3;
+      return <section key={source.id} className="ds-source-card" style={{"--source-accent":source.color} as React.CSSProperties} aria-label={source.name}>
+        <div className="ds-card-main">
+          <div className="ds-card-heading"><span className="ds-source-icon"><Layers3 size={18} aria-hidden="true"/></span><div className="ds-source-title"><h3>{source.name}</h3><p className="ds-source-description" title={source.description}>{source.description}</p></div><Link href={source.href} aria-label={`Mở ${source.name}`} className="ds-open-link"><ArrowUpRight size={17} aria-hidden="true"/></Link></div>
+          <div className="ds-status-cell"><div className={`ds-job-status is-${tone}`}><StatusIcon size={15} className={running?"animate-spin":undefined} aria-hidden="true"/><strong>{job?labels[job.status]:"Sẵn sàng"}{job?.phase==="publishing"&&" · Đang ghi"}</strong><span>{job?.finished_at?time(job.finished_at):running?"Đang xử lý":""}</span></div>
+          <p className="ds-job-message">{job?.message??"Chưa có lượt chạy. Bắt đầu khi bạn sẵn sàng."}</p>
+          <div className="ds-job-history">{job?<button type="button" onClick={()=>setSelected(job.id)}><History size={14} aria-hidden="true"/>Nhật ký</button>:<span>Chưa có nhật ký</span>}</div></div>
+          <div className="ds-run-controls">
+            {source.dated?<label className="ds-run-date"><span>Ngày dữ liệu</span><input aria-label={`Ngày ${source.name}`} type="date" max={vietnamDay()} value={dates[source.id]??vietnamDay()} onChange={e=>setDates({...dates,[source.id]:e.target.value})}/></label>:<p className="ds-run-date ds-live-note"><span className="ds-live-dot"/>Dữ liệu hiện tại</p>}
+            <div className="ds-run-actions"><button type="button" disabled={!!busy||!!running} onClick={()=>void command(source.id,"run")} className="ds-run-button"><Play size={15} aria-hidden="true"/>{busy===source.id?"Đang gửi…":"Chạy ngay"}</button><button type="button" disabled={!!busy||!running||job?.status==="CANCEL_REQUESTED"} onClick={()=>void command(source.id,"stop")} className="ds-stop-button"><Square size={13} aria-hidden="true"/>Dừng</button></div>
+          </div>
         </div><SourceSchedule source={source} setting={setting} disabled={!!busy} saving={busy===source.id} onSave={draft=>command(source.id,"auto",draft)}/>
       </section>;
     })}</div>

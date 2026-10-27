@@ -17,7 +17,7 @@ export function SidebarNavigation({ children, moduleKey, activeKey, open }: {
         const active = nav.querySelector<HTMLElement>('.app-nav-link[aria-current="page"]');
         const marker = nav.querySelector<HTMLElement>(".app-sidebar-active-marker");
         if (!marker) return;
-        if (!active || !open || nav.clientWidth === 0) { marker.style.opacity = "0"; return; }
+        if (!active || !active.getClientRects().length || !open || nav.clientWidth === 0) { marker.style.opacity = "0"; return; }
         const top = active.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop + 7;
         marker.style.height = `${Math.max(0, active.offsetHeight - 14)}px`;
         marker.style.transform = `translateY(${top}px)`;
@@ -27,8 +27,9 @@ export function SidebarNavigation({ children, moduleKey, activeKey, open }: {
     const observer = new ResizeObserver(measure);
     observer.observe(nav);
     nav.querySelectorAll<HTMLElement>(".app-nav-link").forEach(link => observer.observe(link));
+    nav.addEventListener("toggle", measure, true);
     measure();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); nav.removeEventListener("toggle", measure, true); };
   }, [activeKey, moduleKey, open]);
 
   useEffect(() => {

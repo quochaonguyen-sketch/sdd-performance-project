@@ -11,17 +11,18 @@ import { AppLoadingOverlay } from "@/components/layout/app-loading-overlay";
 import { NavigationPendingIndicator } from "@/components/layout/navigation-pending-indicator";
 import { RouteReveal } from "@/components/layout/route-reveal";
 import { SidebarNavigation } from "@/components/layout/sidebar-navigation";
+import { NavigationGroup } from "@/components/layout/navigation-group";
 import { OffRequestNotifications } from "@/components/layout/off-request-notifications";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
 import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/realtime-dashboard", label: "Live Dashboard", icon: Activity },
+  { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
   { href: "/performance", label: "Rider Performance", icon: BarChart3 },
-  { href: "/pickup-realtime", label: "Live Pickup", icon: PackagePlus },
+  { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/lmhub-inventory", label: "Pickup Backlog", icon: PackageOpen },
   { href: "/inventory-delivery", label: "Delivery Backlog", icon: Truck },
   { href: "/backlog-history", label: "Backlog History", icon: BarChart3 },
@@ -35,6 +36,11 @@ const navItems = [
   { href: "/data-sources", label: "Data Sources", icon: Activity },
   { href: "/settings", label: "Members", icon: UsersRound },
   { href: "/user-activity", label: "Activity Log", icon: Activity },
+];
+
+const navigationGroups = [
+  { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime"] },
+  { label: "Backlog", icon: PackageOpen, paths: ["/lmhub-inventory", "/inventory-delivery", "/backlog-history"] },
 ];
 
 const mobileNavItems = navItems.slice(0, 4);
@@ -54,7 +60,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/off-schedule", "/tasks", "/violations", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/backlog-history", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/off-schedule", "/tasks", "/violations", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
@@ -175,6 +181,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           <SidebarNavigation moduleKey={selectedModule} activeKey={`${pathname}:${searchParams.get("view") ?? ""}`} open={sidebarOpen}>
             <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Operations Workspace" : modules.find((module) => module.id === selectedModule)?.label}</p>
             {moduleItems.map((item) => {
+              const group = navigationGroups.find(group => group.paths.includes(item.href));
+              if (group) {
+                if (group.paths[0] !== item.href) return null;
+                const items = moduleItems.filter(child => group.paths.includes(child.href));
+                return <NavigationGroup key={`${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))}>
+                  {items.map(child => <Link key={child.href} href={child.href} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={16} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
+                </NavigationGroup>;
+              }
               const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
               const Icon = item.icon;
               return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("app-nav-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
@@ -236,6 +250,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
         <div className="app-more-heading"><div><span>Rider Operations</span><h2>Chức năng vận hành</h2></div><button type="button" aria-label="Đóng menu" onClick={() => setMoreOpen(false)}><X size={18} /></button></div>
         <div className="app-more-grid">
           {moreNavItems.map((item) => {
+            const group = navigationGroups.find(group => group.paths.includes(item.href));
+            if (group) {
+              if (group.paths[0] !== item.href) return null;
+              const items = moreNavItems.filter(child => group.paths.includes(child.href));
+              return <NavigationGroup key={`mobile:${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))} mobile>
+                {items.map(child => <Link key={child.href} href={child.href} onClick={() => setMoreOpen(false)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-more-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={17} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
+              </NavigationGroup>;
+            }
             const active = isNavigationItemActive(item, pathname, searchParams.get("view"));
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={cn("app-more-link", active && "is-active")}><Icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;

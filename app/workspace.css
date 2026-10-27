@@ -171,6 +171,22 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .app-sidebar .app-nav-link.is-active { background: var(--color-accent-soft); color: var(--color-accent); font-weight: 500; }
 .app-sidebar .app-nav-link.is-active svg { color: var(--color-accent); }
 .app-nav-link:hover { background: var(--color-paper-2); color: var(--color-ink); }
+.app-nav-group { margin: 3px 0; }
+.app-nav-group-heading { display:flex; min-height:44px; align-items:center; gap:10px; padding:10px; border-radius:6px; color:var(--color-ink-2); font-size:13px; line-height:20px; cursor:pointer; list-style:none; }
+.app-nav-group-heading::-webkit-details-marker { display:none; }
+.app-nav-group-heading > svg { flex:none; color:var(--color-muted); stroke-width:1.6; }
+.app-nav-group-heading > span { flex:1; }
+.app-nav-group-heading:hover { background:var(--color-paper-2); color:var(--color-ink); }
+.app-nav-group.is-active > .app-nav-group-heading { color:var(--color-accent); font-weight:500; }
+.app-nav-group.is-active > .app-nav-group-heading > svg { color:var(--color-accent); }
+.app-nav-group-chevron { transition:transform .16s ease; }
+.app-nav-group[open] > .app-nav-group-heading .app-nav-group-chevron { transform:rotate(180deg); }
+.app-nav-group-items { margin:2px 0 8px 18px; padding-left:10px; border-left:1px solid var(--color-rule-strong); }
+.app-nav-group-items .app-nav-link { min-height:40px; font-size:12px; padding:8px; }
+.app-nav-group-heading:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+.app-nav-group.is-mobile { grid-column:1 / -1; }
+.app-nav-group.is-mobile .app-nav-group-items { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:6px; }
+@media(prefers-reduced-motion:reduce) { .app-nav-group-chevron { transition:none; } }
 .app-sidebar .app-nav-link.is-active:hover { background: var(--ops-active); color: var(--color-accent); }
 .app-sidebar-foot { display: flex; align-items: center; justify-content: start; gap: 8px; padding: 16px 20px; border-color: var(--color-rule); color: var(--color-muted); font: 11px/18px var(--font-body); letter-spacing: 0; text-transform: none; }
 .app-sidebar-foot svg { flex: none; }
