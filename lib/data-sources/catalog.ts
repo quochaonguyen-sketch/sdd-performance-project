@@ -1,4 +1,5 @@
 export const DATA_SOURCES = [
+  { id:"linehaul", name:"Quản lý LH", description:"Chuyến hôm nay, xuất/xả tải và vị trí xe", href:"/linehaul", permission:"manage_dashboard", color:"#0f766e", dated:false, interval:300 },
   { id:"delivery_realtime", name:"Delivery Realtime", description:"Tiến độ giao hàng, đơn đang giao và cảnh báo rider", href:"/realtime-dashboard", permission:"manage_performance", color:"#2563eb", dated:false, interval:600 },
   { id:"onhold_daily", name:"OH Delivery", description:"Thu thập OH lũy kế · khử trùng mã trong ngày · chốt pivot cuối ngày", href:"/onhold", permission:"manage_performance", color:"#ea580c", dated:false, interval:300 },
   { id:"pickup_inventory", name:"Tồn Pickup", description:"Assigned thực sự, chưa Onhold/Picked", href:"/lmhub-inventory", permission:"manage_pickup", color:"#059669", dated:false, interval:1800 },

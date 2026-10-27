@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { BarChart, ChartHead, RiskStrip } from "@/components/lmhub-inventory/lmhub-inventory-charts";
 import { HeatLegend, Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
 import { DeliveryInventoryBoard } from "@/components/lmhub-inventory/delivery-inventory-board";
+import { DeliveryBacklogReport } from "@/components/lmhub-inventory/delivery-backlog-report";
 import "./delivery-inventory.css";
 import {
   COLUMNS,
@@ -303,6 +304,8 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
         <details className="relative text-[11px] text-slate-500"><summary className="cursor-pointer py-1">Chú thích màu</summary><div className="absolute right-0 z-20 mt-1 min-w-60 rounded-lg border border-slate-200 bg-white p-2 shadow-sm"><HeatLegend /></div></details>
       </div>
 
+      <DeliveryBacklogReport districts={filtered} cot={cot} snapshotAt={snapshotAt} disabled={loading || !!error}
+        scope={[scopeLabel, cot === "all" ? "COT 1 + COT 2" : cot === "cot1" ? "COT 1" : "COT 2", query.trim() ? `Tìm: ${query.trim()}` : "", heat === "hot" ? "Chỉ phường đỏ" : ""].filter(Boolean).join(" · ")} />
       {error ? <div role="alert" className="dashboard-error">{error}</div> : null}
       {loading && !rows.length ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">

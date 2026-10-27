@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DATA_SOURCES, sourceAction, sourceAllowed } from "../lib/data-sources/catalog.ts";
-test("nine allowlisted sources; role and per-source permission enforced",()=>{
-  assert.equal(DATA_SOURCES.length,9);
+test("ten allowlisted sources; role and per-source permission enforced",()=>{
+  assert.equal(DATA_SOURCES.length,10);
   assert.equal(sourceAllowed("member",{manage_pickup:true},"pickup_inventory"),false);
   assert.equal(sourceAllowed("leader",{manage_pickup:true},"performance"),false);
   assert.equal(sourceAllowed("leader",{manage_pickup:true},"pickup_inventory"),true);
