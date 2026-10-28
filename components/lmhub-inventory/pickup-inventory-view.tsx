@@ -37,6 +37,7 @@ import {
   type PickupStatusKey,
   type PickupStatusRow,
 } from "@/components/lmhub-inventory/pickup-inventory-model";
+import type { RiderInventoryRow } from "@/lib/pickup/inventory-riders";
 import { PickupRiderInventory } from "./pickup-rider-inventory";
 import { PickupOrderDialog } from "./pickup-order-dialog";
 import type { PickupOrderScope } from "@/lib/pickup/inventory-orders";
@@ -47,8 +48,9 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const [orderScope, setOrderScope] = useState<PickupOrderScope | null>(null);
   const [section, setSection] = useState<"zones" | "riders">("zones");
   const status: PickupStatusKey = "assigned";
-  const [rows, setRows] = useState<PickupStatusRow[]>([]);
-  const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  const [data, setData] = useState<{ rows: PickupStatusRow[]; riders: RiderInventoryRow[]; snapshotAt: string | null }>({ rows: [], riders: [], snapshotAt: null });
+  const { rows, riders, snapshotAt } = data;
+  const loadId = useRef(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,8 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const baselineRef = useRef<string | null>(null);
 
   const load = useCallback(async (nextStatus = status) => {
-    const params = new URLSearchParams({ view: "zone-board", p_status: PICKUP_STATUS_LABEL[nextStatus] });
+    const requestId = ++loadId.current;
+    const params = new URLSearchParams({ view: "dashboard", p_status: PICKUP_STATUS_LABEL[nextStatus] });
     const res = await fetch(`/api/pickup-inventory?${params}`, { cache: "no-store" });
     const payload = await res.json();
     if (!res.ok || !payload.success) throw new Error(payload.error ?? `API ${res.status}`);
@@ -82,8 +85,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
       collected.push({ area, district: "—", ward: zone, zone, cot: row.cot,
         orders, snapshot_id: null, snapshot_at: payload.snapshotAt ?? null, updated_at: null });
     }
-    setRows(collected);
-    setSnapshotAt(payload.snapshotAt ?? null);
+    if (requestId === loadId.current) setData({ rows: collected, riders: payload.riders ?? [], snapshotAt: payload.snapshotAt ?? null });
   }, [status]);
 
   const runLoad = useCallback(async () => {
@@ -149,10 +151,13 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   }, []);
 
   useEffect(() => {
-    const initialLoad = setTimeout(() => void refreshQueueStatus(), 0);
+    const initialLoad = setTimeout(() => void refreshQueueStatus().catch(() => null), 0);
     return () => clearTimeout(initialLoad);
   }, [refreshQueueStatus]);
-  useSupabaseRealtime({ table: "lmhub_fetch_jobs", onChange: () => { void refreshQueueStatus(); }, debounceMs: 400 });
+  useSupabaseRealtime({ table: "lmhub_fetch_jobs", onChange: (payload) => {
+    void refreshQueueStatus().catch(() => null);
+    if ("status" in payload.new && payload.new.status === "DONE") scheduleLoad();
+  }, debounceMs: 400 });
 
   const queuePickup = useCallback(async () => {
     if (queueing) return;
@@ -199,29 +204,38 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   }, [queueing, snapshotAt]);
 
   useEffect(() => {
-    if (!waitingSnapshot) return;
     let stopped = false;
+    let polling = false;
     const started = Date.now();
     const tick = async () => {
-      if (stopped) return;
-      await load();
-      await refreshQueueStatus();
-      if (Date.now() - started > 20 * 60_000) {
+      if (stopped || polling || document.visibilityState === "hidden") return;
+      polling = true;
+      try {
+        await Promise.all([load(), refreshQueueStatus().catch(() => null)]);
+        if (!stopped) setError(null);
+      } catch (err) {
+        if (!stopped) setError(err instanceof Error ? err.message : "Không tải được tồn pickup.");
+      } finally {
+        polling = false;
+      }
+      if (!stopped && waitingSnapshot && Date.now() - started > 20 * 60_000) {
         setWaitingSnapshot(false);
-        setQueueNote("Worker chưa ghi snapshot pickup mới sau 20 phút. Kiểm tra cửa sổ Tồn KV1–KV5.");
+        setQueueNote("Worker chưa ghi snapshot pickup mới sau 20 phút. Kiểm tra trang Nguồn dữ liệu.");
       }
     };
-    void tick();
-    const timerId = setInterval(() => void tick(), 8000);
+    const timerId = setInterval(() => void tick(), waitingSnapshot ? 8000 : 15000);
+    const onVisible = () => { if (document.visibilityState === "visible") void tick(); };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
       clearInterval(timerId);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [waitingSnapshot, load, refreshQueueStatus]);
 
   useEffect(() => {
     if (!waitingSnapshot || !snapshotAt) return;
-    if (baselineRef.current && snapshotAt !== baselineRef.current) {
+    if (snapshotAt !== baselineRef.current) {
       setWaitingSnapshot(false);
       setQueueNote(`Đã có snapshot pickup mới lúc ${formatDateTime(snapshotAt)}.`);
     }
@@ -581,7 +595,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
         </div>
       ) : null}
 
-      {section === "riders" ? <PickupRiderInventory area={areaFilter} cot={cot} status={statusLabel} snapshotAt={snapshotAt} /> : <>
+      {section === "riders" ? <PickupRiderInventory area={areaFilter} cot={cot} status={statusLabel} rows={riders} loading={loading || refreshing} error={error} /> : <>
       {/* Main Area Wards Table Section */}
       {loading && !rows.length ? (
         <div className="grid grid-cols-1 gap-4">

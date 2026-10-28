@@ -63,37 +63,59 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   useReportInitialDataLoading("lmhub-inventory", loading);
 
   const requestRef = useRef(0);
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false) => {
     const requestId = ++requestRef.current;
     const supabase = createClient();
-    setLoading(true);
-    setError(null);
-    const latest = await supabase.from("lmhub_inventory_rows").select("snapshot_id,snapshot_at").in("area", OPERATING_AREAS).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
-    if (requestId !== requestRef.current) return;
-    if (latest.error) { setError(latest.error.message); setRows([]); setSnapshotAt(null); setLoading(false); return; }
-    if (!latest.data) { setRows([]); setSnapshotAt(null); setLoading(false); return; }
-    const snapshotId = (latest.data as { snapshot_id: string }).snapshot_id;
-    const collected: InventoryRow[] = [];
-    let from = 0;
-    while (true) {
-      const result = await supabase.from("lmhub_inventory_rows").select(COLUMNS).in("area", OPERATING_AREAS).eq("snapshot_id", snapshotId).order("shipment_id", { ascending: true }).range(from, from + PAGE_ROWS - 1);
-      if (requestId !== requestRef.current) return;
-      if (result.error) { setError(result.error.message); setLoading(false); return; }
-      collected.push(...((result.data ?? []) as InventoryRow[]).map(normalizeRow));
-      if ((result.data ?? []).length < PAGE_ROWS) break;
-      from += PAGE_ROWS;
-      if (from > 100000) break;
+    if (!background) setLoading(true);
+    const latestHead = () => supabase.from("lmhub_inventory_rows").select("snapshot_id,snapshot_at")
+      .in("area", OPERATING_AREAS).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const latest = await latestHead();
+        if (requestId !== requestRef.current) return;
+        if (latest.error) throw new Error(latest.error.message);
+        const snapshotId = latest.data?.snapshot_id;
+        const collected: InventoryRow[] = [];
+        let nextSnapshotAt = latest.data?.snapshot_at ?? null;
+        if (snapshotId) {
+          for (let from = 0; ; from += PAGE_ROWS) {
+            if (from > 100000) throw new Error("Tồn Delivery vượt giới hạn tải; chưa thay thế bảng hiện tại.");
+            const result = await supabase.from("lmhub_inventory_rows").select(COLUMNS).in("area", OPERATING_AREAS)
+              .eq("snapshot_id", snapshotId).order("shipment_id", { ascending: true }).range(from, from + PAGE_ROWS - 1);
+            if (requestId !== requestRef.current) return;
+            if (result.error) throw new Error(result.error.message);
+            collected.push(...((result.data ?? []) as InventoryRow[]).map(normalizeRow));
+            if ((result.data ?? []).length < PAGE_ROWS) break;
+          }
+        } else {
+          const completed = await supabase.from("lmhub_fetch_jobs").select("finished_at").eq("status", "DONE")
+            .in("params->>kind", ["delivery", "ton_delivery", "all", "both"])
+            .order("finished_at", { ascending: false }).limit(1).maybeSingle();
+          if (completed.error) throw new Error(completed.error.message);
+          nextSnapshotAt = completed.data?.finished_at ?? null;
+        }
+        const current = await latestHead();
+        if (requestId !== requestRef.current) return;
+        if (current.error) throw new Error(current.error.message);
+        // A publish can replace rows between pages; never display a partial old snapshot.
+        if (current.data?.snapshot_id !== snapshotId || current.data?.snapshot_at !== latest.data?.snapshot_at) continue;
+        setRows(deliveryInventoryRows(collected));
+        setSnapshotAt(nextSnapshotAt);
+        setError(null);
+        return;
+      }
+      throw new Error("Dữ liệu Delivery vừa thay đổi khi tải. Hệ thống sẽ tự thử lại.");
+    } catch (err) {
+      if (requestId === requestRef.current) setError(err instanceof Error ? err.message : "Không tải được tồn Delivery.");
+    } finally {
+      if (requestId === requestRef.current) setLoading(false);
     }
-    const scopedRows = deliveryInventoryRows(collected);
-    setRows(scopedRows);
-    setSnapshotAt((latest.data as { snapshot_at: string | null }).snapshot_at ?? null);
-    setLoading(false);
   }, []);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleLoad = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void load(), RELOAD_DEBOUNCE_MS);
+    timerRef.current = setTimeout(() => void load(true), RELOAD_DEBOUNCE_MS);
   }, [load]);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   // Initial async data load also sets the loading indicator before the request.
@@ -110,8 +132,11 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void refreshQueueStatus(); }, [refreshQueueStatus]);
-  useSupabaseRealtime({ table: "lmhub_fetch_jobs", onChange: () => { void refreshQueueStatus(); }, debounceMs: 400 });
+  useEffect(() => { void refreshQueueStatus().catch(() => null); }, [refreshQueueStatus]);
+  useSupabaseRealtime({ table: "lmhub_fetch_jobs", onChange: (payload) => {
+    void refreshQueueStatus().catch(() => null);
+    if ("status" in payload.new && payload.new.status === "DONE") scheduleLoad();
+  }, debounceMs: 400 });
 
   const baselineRef = useRef<string | null>(null);
   const orderPanelRef = useRef<HTMLElement | null>(null);
@@ -140,26 +165,31 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   }, [queueing, snapshotAt]);
 
   useEffect(() => {
-    if (!waitingSnapshot) return;
     let stopped = false;
+    let polling = false;
     const started = Date.now();
     const tick = async () => {
-      if (stopped) return;
-      await load();
-      await refreshQueueStatus();
-      if (Date.now() - started > 8 * 60_000) {
+      if (stopped || polling || document.visibilityState === "hidden") return;
+      polling = true;
+      try {
+        await Promise.all([load(true), refreshQueueStatus().catch(() => null)]);
+      } finally {
+        polling = false;
+      }
+      if (!stopped && waitingSnapshot && Date.now() - started > 20 * 60_000) {
         setWaitingSnapshot(false);
-        setQueueNote("Worker chưa ghi snapshot mới sau 8 phút. Kiểm tra worker rồi bấm Làm mới.");
+        setQueueNote("Worker chưa ghi snapshot Delivery mới sau 20 phút. Kiểm tra trang Nguồn dữ liệu.");
       }
     };
-    void tick();
-    const timer = setInterval(() => void tick(), 8000);
-    return () => { stopped = true; clearInterval(timer); };
+    const timer = setInterval(() => void tick(), waitingSnapshot ? 8000 : 15000);
+    const onVisible = () => { if (document.visibilityState === "visible") void tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [waitingSnapshot, load, refreshQueueStatus]);
 
   useEffect(() => {
     if (!waitingSnapshot || !snapshotAt) return;
-    if (baselineRef.current && snapshotAt !== baselineRef.current) {
+    if (snapshotAt !== baselineRef.current) {
       setWaitingSnapshot(false);
       setQueueNote(`Đã có snapshot mới lúc ${formatDateTime(snapshotAt)}.`);
     }

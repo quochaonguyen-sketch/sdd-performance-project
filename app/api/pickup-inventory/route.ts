@@ -31,10 +31,10 @@ export async function GET(request: Request) {
       if (error) throw error;
       return NextResponse.json({ success:true, ...data }, { headers:{ "Cache-Control":"private, no-store" } });
     }
-    if (view === "zone-board") {
+    if (view === "zone-board" || view === "dashboard") {
       const status = (url.searchParams.get("p_status") ?? "").trim();
       if (!["Assigned", "Pickup Onhold", "Created"].includes(status)) return NextResponse.json({success:false,error:"Trạng thái không hợp lệ"},{status:400});
-      const { data, error } = await admin.rpc("pickup_inventory_zone_board", { p_status: status });
+      const { data, error } = await admin.rpc(view === "dashboard" ? "pickup_inventory_dashboard" : "pickup_inventory_zone_board", { p_status: status });
       if (error) throw error;
       return NextResponse.json({success:true,...data},{headers:{"Cache-Control":"private, no-store"}});
     }

@@ -9,6 +9,8 @@ export type OvernightHoldSnapshot = {
   status: string;
   created_at: string;
   updated_at: string;
+  supplemented_at?: string | null;
+  supplemented_count?: number;
   status_synced_at?: string | null;
   status_sync_requested_at?: string | null;
   status_sync_started_at?: string | null;
@@ -21,6 +23,8 @@ export type OvernightHoldOrder = {
   cutoff_date: string;
   order_key: string;
   order_code: string;
+  delivering_at?: string | null;
+  added_after_cutoff_at?: string | null;
   area: string;
   district: string;
   ward: string;

@@ -37,12 +37,12 @@ begin
  status_sync_attempted_at=now(),status_sync_requested_at=null,status_sync_error=null where cutoff_date=s.cutoff_date;
  return jsonb_build_object('day',s.cutoff_date,'token',token,'orders',coalesce((
  select jsonb_agg(jsonb_build_object('order_code',order_code,'created_at',created_at) order by order_code)
- from public.overnight_hold_orders where cutoff_date=s.cutoff_date and is_cutoff_member),'[]'::jsonb));
+ from public.overnight_hold_orders where cutoff_date=s.cutoff_date and is_cutoff_member and current_status not in ('Delivered','Returned')),'[]'::jsonb));
 end $$;
 
 create or replace function public.finish_overnight_status_sync(p_day date,p_token uuid,p_rows jsonb,p_error text default null)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
-declare s public.overnight_hold_snapshots; n integer;
+declare s public.overnight_hold_snapshots; n integer; changed integer;
 begin
  select * into s from public.overnight_hold_snapshots where cutoff_date=p_day and status_sync_token=p_token
  and status_sync_started_at>=now()-interval '10 minutes' for update;
@@ -56,17 +56,19 @@ begin
   or coalesce(r->>'current_status','') !~ '^(Delivering|Onhold|Delivered|Returned|LMHub_Received|SPX \([0-9]{1,6}\))$')
  or (select count(distinct r->>'order_code') from jsonb_array_elements(p_rows) r)<>jsonb_array_length(p_rows)
  or exists(select 1 from public.overnight_hold_orders o where o.cutoff_date=p_day and o.is_cutoff_member
-   and not exists(select 1 from jsonb_array_elements(p_rows) r where r->>'order_code'=o.order_code))
+   and o.current_status not in ('Delivered','Returned') and not exists(select 1 from jsonb_array_elements(p_rows) r where r->>'order_code'=o.order_code))
  or exists(select 1 from jsonb_array_elements(p_rows) r where not exists(select 1 from public.overnight_hold_orders o
    where o.cutoff_date=p_day and o.is_cutoff_member and o.order_code=r->>'order_code'))
  then raise exception 'Incomplete or invalid SPX status lookup'; end if;
  update public.overnight_hold_orders o set current_status=r.current_status,last_synced_at=s.status_sync_started_at,updated_at=now()
  from jsonb_to_recordset(p_rows) r(order_code text,current_status text)
- where o.cutoff_date=p_day and o.is_cutoff_member and o.order_code=r.order_code;
+ where o.cutoff_date=p_day and o.is_cutoff_member and o.order_code=r.order_code
+ and o.current_status not in ('Delivered','Returned') and o.current_status is distinct from r.current_status;
+ get diagnostics changed = row_count;
  select count(*) into n from public.overnight_hold_orders where cutoff_date=p_day and is_cutoff_member and current_status in ('Delivered','Returned');
  update public.overnight_hold_snapshots set resolved_count=n,status_synced_at=s.status_sync_started_at,
  status_sync_token=null,status_sync_error=null,updated_at=now() where cutoff_date=p_day;
- return jsonb_build_object('success',true,'resolved_count',n,'synced_count',jsonb_array_length(p_rows));
+ return jsonb_build_object('success',true,'resolved_count',n,'synced_count',jsonb_array_length(p_rows),'changed_count',changed);
 end $$;
 
 revoke all on function public.claim_overnight_status_sync(),public.finish_overnight_status_sync(date,uuid,jsonb,text) from public,anon,authenticated;

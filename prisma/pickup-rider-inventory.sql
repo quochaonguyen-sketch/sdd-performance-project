@@ -69,3 +69,14 @@ returns jsonb language sql stable security invoker set search_path=pg_catalog as
 $fn$;
 revoke all on function public.pickup_inventory_zone_board(text) from public,anon,authenticated;
 grant execute on function public.pickup_inventory_zone_board(text) to service_role;
+
+
+-- Both boards use the same MVCC snapshot even if a worker publishes during the request.
+create or replace function public.pickup_inventory_dashboard(p_status text)
+returns jsonb language sql stable security invoker set search_path=pg_catalog as $fn$
+  select public.pickup_inventory_zone_board(p_status) || jsonb_build_object(
+    'riders', public.pickup_inventory_riders(p_status)->'rows');
+$fn$;
+revoke all on function public.pickup_inventory_dashboard(text) from public,anon,authenticated;
+grant execute on function public.pickup_inventory_dashboard(text) to service_role;
+notify pgrst,'reload schema';

@@ -1,6 +1,6 @@
 -- Run through the SQL runner with --test; every fixture/write rolls back.
 do $$
-declare job uuid:=gen_random_uuid(); fixture jsonb; before_count integer; total integer;
+declare job uuid:=gen_random_uuid(); fixture jsonb; before_count integer; total integer; original_key text;
 begin
   if exists(select 1 from public.data_source_jobs where source_id='return_inventory' and status in ('QUEUED','RUNNING','CANCEL_REQUESTED')) then raise exception 'Return source must be idle for integration test'; end if;
   if has_function_privilege('authenticated','public.publish_central_returns(uuid,text,jsonb,boolean,integer)','execute') or has_function_privilege('anon','public.publish_central_returns(uuid,text,jsonb,boolean,integer)','execute') then raise exception 'Return publisher exposed'; end if;
@@ -28,7 +28,7 @@ begin
   exception when raise_exception then if SQLERRM='Duplicate source accepted' then raise; end if; end;
   if (select count(*) from public.return_order_snapshots)<>before_count then raise exception 'Validation failure changed snapshots'; end if;
   total:=public.publish_central_returns(job,'integration-return',jsonb_build_array(fixture),true,4232);
-  if total<>1 or (select count(*) from public.return_order_snapshots)<>1 or not exists(select 1 from public.return_order_snapshots where return_order_key=job::text||':RETURN-INTEGRATION-ONLY') then raise exception 'Complete replacement failed'; end if;
+  if total<>1 or (select count(*) from public.return_order_snapshots)<>1 or not exists(select 1 from public.return_order_snapshots where return_order_key='return:RETURN-INTEGRATION-ONLY') then raise exception 'Complete replacement failed'; end if;
   begin
     -- A row constraint failure after delete/insert work must roll back to the prior complete snapshot.
     perform public.publish_central_returns(job,'integration-return',jsonb_build_array(fixture||'{"shipment_id":"SECOND","status_label":null}'::jsonb),true,4232);
@@ -39,6 +39,17 @@ begin
   job:=gen_random_uuid();
   insert into public.data_source_jobs(id,source_id,report_date,status,phase,worker_id,lease_until)
     values(job,'return_inventory',current_date,'RUNNING','publishing','integration-return',now()+interval '2 minutes');
+  update public.return_order_snapshots set return_order_key='legacy-return-key' where shipment_id='RETURN-INTEGRATION-ONLY';
+  select return_order_key into original_key from public.return_order_snapshots where shipment_id='RETURN-INTEGRATION-ONLY';
+  total:=public.publish_central_returns(job,'integration-return',jsonb_build_array(fixture||'{"order_status":72,"return_driver_name":"Updated driver"}'::jsonb),true,4232);
+  if total<>1 or (select count(*) from public.return_order_snapshots)<>1 or not exists(
+    select 1 from public.return_order_snapshots where return_order_key=original_key and snapshot_id=job::text
+    and order_status=72 and return_driver_name='Updated driver') then raise exception 'Existing shipment was reinserted or not updated'; end if;
+  begin
+    insert into public.return_order_snapshots select (jsonb_populate_record(null::public.return_order_snapshots,
+      to_jsonb(r)||'{"return_order_key":"duplicate-key"}'::jsonb)).* from public.return_order_snapshots r;
+    raise exception 'Duplicate shipment inserted with a different key';
+  exception when unique_violation then null; end;
   total:=public.publish_central_returns(job,'integration-return','[]'::jsonb,true,4232);
   if total<>0 or exists(select 1 from public.return_order_snapshots) then raise exception 'Verified empty snapshot failed'; end if;
 end $$;

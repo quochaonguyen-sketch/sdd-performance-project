@@ -15,7 +15,7 @@
  Module._extensions['.css']=mod=>{mod.exports={__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};};
  const load=Module.createRequire(__filename),React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server');
  const {OvernightHoldsView}=load('../components/overnight-holds/overnight-holds-view.tsx'),{paginateOvernightRiders}=load('../lib/overnight-holds/riders.ts');
- const orders=Array.from({length:120},(_,i)=>({id:String(i),rider_code:'TEST-A',rider_name:'Rider test',order_code:`TEST-ORDER-${i}`,area:'Khu vực 1',cutoff_status:5,current_status:'Onhold',note:'',last_synced_at:'2026-10-27T00:00:00Z'}));
+ const orders=Array.from({length:120},(_,i)=>({id:String(i),rider_code:'TEST-A',rider_name:'Rider test',order_code:`TEST-ORDER-${i}`,delivering_at:'2026-10-20T01:00:00Z',area:'Khu vực 1',cutoff_status:5,current_status:'Onhold',note:'',last_synced_at:'2026-10-27T00:00:00Z'}));
  orders.push(...Array.from({length:12},(_,i)=>({...orders[0],id:`B-${i}`,order_code:`TEST-B-${i}`,rider_code:'TEST-B',rider_name:'Rider B',area:'Khu vực 2',current_status:i<4?'Returned':'Delivering'})));
  orders.push(...Array.from({length:8},(_,i)=>({...orders[0],id:`C-${i}`,order_code:`TEST-C-${i}`,rider_code:'TEST-C',rider_name:'Rider C',area:'Khu vực 3',current_status:i<6?'Returned':'Onhold'})));
  fixture={...paginateOvernightRiders(orders,[{rider_code:'TEST-A',note:'Liên hệ trước 8h',updated_by:'Dispatcher'}],0,20),total:140,pageSize:20,snapshot:null,snapshots:[],summary:{total:140,delivering:12,onhold:128,resolved:10,hasNotes:0,riderCount:3}};
@@ -24,6 +24,8 @@
   const html=renderToStaticMarkup(React.createElement(OvernightHoldsView,{initialDay:'2026-10-26'}));
   for(const text of ['Rider test','Liên hệ trước 8h','120','còn giữ','Dispatcher'])assert.ok(html.includes(text),`Missing ${text}`);
   assert.equal(html.includes('TEST-ORDER-119'),Boolean(code));
+  if(code)assert.ok(html.includes('Bắt đầu giao:') && html.includes('20/10/2026'));
+  assert.ok(html.includes('Ngày chốt 23h'));
   assert.ok(html.includes(`aria-expanded="${Boolean(code)}"`));
   if(process.argv.includes('--preview')){
    const css=fs.readFileSync(path.join(root,'components/overnight-holds/overnight-holds.module.css'),'utf8');
@@ -35,14 +37,19 @@
   [{},'Chưa đồng bộ SPX'],
   [{status_sync_requested_at:'2026-10-28T02:00:00Z'},'Đang chờ worker'],
   [{status_sync_token:'lease'},'Đang lấy trạng thái từ SPX'],
-  [{status_synced_at:'2026-10-28T02:00:00Z'},'Đồng bộ SPX:'],
+  [{status_synced_at:'2026-10-28T02:00:00Z'},'Kiểm tra SPX gần nhất:'],
   [{status_sync_error:'SPX unavailable'},'SPX unavailable'],
+  [{supplemented_at:'2026-10-28T04:30:00Z',supplemented_count:5},'Đã bổ sung 5 đơn cũ'],
  ]){
   fixture.snapshot={cutoff_date:'2026-10-26',captured_at:'2026-10-26T16:04:00Z',...sync};
   hook=0;selected='TEST-A';
   const html=renderToStaticMarkup(React.createElement(OvernightHoldsView,{initialDay:'2026-10-26'}));
   assert.ok(html.includes(expected),`Missing sync state: ${expected}`);
-  assert.ok(html.includes(sync.status_synced_at?'Sync SPX:':'Chưa đồng bộ SPX'));
+  assert.ok(html.includes(sync.status_synced_at?'Lưu trạng thái:':'Chưa đồng bộ SPX'));
  }
+ fixture.orders[0].added_after_cutoff_at='2026-10-28T04:30:00Z';
+ hook=0;selected='TEST-A';
+ const supplementedHtml=renderToStaticMarkup(React.createElement(OvernightHoldsView,{initialDay:'2026-10-26'}));
+ assert.ok(supplementedHtml.includes('Bổ sung:') && supplementedHtml.includes('không phải trạng thái lúc 23h'));
  console.log('Rider board SSR: grouped counts, saved notes, accessible expansion and all 120 order details passed.');
 })().catch(error=>{console.error(error.stack);process.exitCode=1;});

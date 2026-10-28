@@ -1,5 +1,8 @@
 -- Membership comes from a fresh SPX scan after 23h, never the cumulative OH ledger.
 alter table public.overnight_hold_orders add column if not exists delivering_at timestamptz;
+alter table public.overnight_hold_orders add column if not exists added_after_cutoff_at timestamptz;
+alter table public.overnight_hold_snapshots add column if not exists supplemented_at timestamptz,
+ add column if not exists supplemented_count integer not null default 0;
 alter table public.overnight_hold_orders add column if not exists is_cutoff_member boolean not null default true;
 
 -- Preserve premature captures and notes for audit, but exclude them from overnight work.
@@ -37,7 +40,7 @@ begin
    or coalesce(r->>'rider_code','') in ('','0','unknown')
    or coalesce(r->>'status','') not in ('1','5')
    or nullif(r->>'delivering_at','') is null
-   or ((r->>'delivering_at')::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date<>d
+   or ((r->>'delivering_at')::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date>d
    or (r->>'delivering_at')::timestamptz>p_started
    or coalesce(r->>'area','') not in ('Khu vực 1','Khu vực 2','Khu vực 3','Khu vực 4','Khu vực 5','Chưa rõ KV'))
  then raise exception 'Invalid overnight order or delivering day'; end if;

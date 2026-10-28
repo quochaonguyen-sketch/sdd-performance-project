@@ -28,6 +28,14 @@ begin
   if not exists(select 1 from jsonb_array_elements(zones) z where z->>'area'='KV1' and (z->>'orders')::int=1) then raise exception 'Area totals merged'; end if;
   if not exists(select 1 from jsonb_array_elements(zones) z where z->>'zone'='Chưa có mã zone' and z->>'cot'='COT2') then raise exception 'Missing zone orders were dropped'; end if;
   if (select sum((z->>'orders')::int) from jsonb_array_elements(zones) z)<>5 then raise exception 'Zone total changed'; end if;
+  result:=public.pickup_inventory_dashboard(key);
+  if result->'rows' is distinct from public.pickup_inventory_zone_board(key)->'rows'
+    or result->'riders' is distinct from public.pickup_inventory_riders(key)->'rows'
+    or result->'snapshotAt' is distinct from public.pickup_inventory_zone_board(key)->'snapshotAt'
+    then raise exception 'Combined dashboard differs from its source boards'; end if;
+  if has_function_privilege('anon','public.pickup_inventory_dashboard(text)','EXECUTE')
+    or has_function_privilege('authenticated','public.pickup_inventory_dashboard(text)','EXECUTE')
+    then raise exception 'Dashboard bypasses API permissions'; end if;
   if has_function_privilege('authenticated','public.pickup_inventory_zone_board(text)','EXECUTE') then raise exception 'Zone board bypasses API permissions'; end if;
   if has_function_privilege('authenticated','public.pickup_inventory_riders(text)','EXECUTE') or has_function_privilege('anon','public.pickup_inventory_ward_zones(text,text,text)','EXECUTE') then raise exception 'RPC bypasses API permissions'; end if;
 end $test$;

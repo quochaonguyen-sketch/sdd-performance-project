@@ -207,7 +207,9 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
         "Phường",
         "Mã tài xế",
         "Tên tài xế",
-        "Trạng thái 23h",
+        "Trạng thái khi ghi nhận",
+        "Nguồn ghi nhận",
+        "Thời gian bổ sung",
         "Trạng thái hiện tại",
         "Lý do giữ hàng",
         "Ghi chú",
@@ -219,7 +221,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
       const csvRows = [headers.join(",")];
       for (const o of orders) {
         const row = [o.order_code,o.area,o.district,o.ward,o.rider_code,o.rider_name,
-          o.cutoff_status===1?"Delivering":"Onhold",o.current_status,o.reason_label,o.note,
+          o.cutoff_status===1?"Delivering":"Onhold",o.added_after_cutoff_at?"Bổ sung sau chốt":"Chốt 23h",o.added_after_cutoff_at??"",o.current_status,o.reason_label,o.note,
           o.note_updated_by,o.last_synced_at,riderNotes.get(o.rider_code)].map(pickupCsvCell);
         csvRows.push(row.join(","));
       }
@@ -272,7 +274,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
                 <th style={{ width: "180px" }}>Mã đơn hàng</th>
                 <th style={{ width: "200px" }}>Tài xế giữ hàng</th>
                 <th style={{ width: "150px" }}>Khu vực / Tuyến</th>
-                <th style={{ width: "130px" }}>Trạng thái 23h</th>
+                <th style={{ width: "130px" }}>Trạng thái ghi nhận</th>
                 <th style={{ width: "190px" }}>Lý do Onhold</th>
                 <th style={{ width: "150px" }}>Trạng thái hiện tại</th>
                 <th style={{ minWidth: "260px" }}>Ghi chú điều phối (Note sự cố)</th>
@@ -331,6 +333,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
                             )}
                           </button>
                         </div>
+                        {order.delivering_at && <div className="mt-1 text-[11px] text-slate-500">Bắt đầu giao: {new Date(order.delivering_at).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</div>}
                       </td>
 
                       {/* Rider */}
@@ -361,6 +364,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
                           {isDelivering ? <Truck size={12} /> : <Moon size={12} />}
                           {isDelivering ? "Delivering" : "Onhold"}
                         </span>
+                        {order.added_after_cutoff_at && <div className="mt-1 text-[11px] text-amber-700" title="Trạng thái ghi nhận khi bổ sung, không phải trạng thái lúc 23h">Bổ sung: {new Date(order.added_after_cutoff_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</div>}
                       </td>
 
                       {/* Reason Label */}
@@ -398,7 +402,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
                             {order.current_status}
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            {snapshot?.status_synced_at ? `Sync SPX: ${new Date(order.last_synced_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone:"Asia/Ho_Chi_Minh" })}` : "Chưa đồng bộ SPX"}
+                            {snapshot?.status_synced_at ? `Lưu trạng thái: ${new Date(order.last_synced_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone:"Asia/Ho_Chi_Minh" })}` : "Chưa đồng bộ SPX"}
                           </span>
                         </div>
                       </td>
@@ -485,14 +489,14 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
           <span className={s.eyebrow}><Moon size={15} aria-hidden="true"/> SDD OPERATIONS <span>/</span> MORNING FOLLOW-UP</span>
           <h1>Giữ hàng qua đêm<span className={s.cutoffBadge}>Chốt 23:00</span></h1>
           <p>
-            Bàn giao từ đêm trước. Theo sát rider, xử lý từng đơn trong ca sáng.
+            Danh sách chốt 23h gồm cả đơn từ nhiều ngày trước còn trên rider. Theo dõi và xử lý trong ca sáng.
           </p>
         </div>
 
         <div className={s.actions}>
-          <label className={s.dateField}><span>Ngày giao / chốt 23h</span><input
+          <label className={s.dateField}><span>Ngày chốt 23h</span><input
             type="date"
-            aria-label="Ngày đưa đi giao và chốt danh sách 23h"
+            aria-label="Ngày chốt danh sách 23h"
             className={s.dateInput}
             value={day}
             onChange={(e) => {
@@ -527,6 +531,8 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
         </div>
       </div>
 
+      {snapshot?.supplemented_at && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Đã bổ sung {nf.format(snapshot.supplemented_count ?? 0)} đơn cũ ngoài lần chốt 23h. Lần bổ sung gần nhất: {new Date(snapshot.supplemented_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}. Trạng thái của các đơn có nhãn “Bổ sung” được ghi nhận tại thời điểm thêm.</p>}
+
       {/* Snapshot Alert / Info */}
       {snapshot ? (
         <div className={s.snapshotStatus} data-state="locked">
@@ -537,7 +543,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
             </span>
           </div>
           <span className="text-slate-500">
-            {snapshot.status_sync_error ? snapshot.status_sync_error : snapshot.status_sync_token ? "Đang lấy trạng thái từ SPX..." : snapshot.status_sync_requested_at ? "Đang chờ worker lấy trạng thái SPX..." : snapshot.status_synced_at ? `Đồng bộ SPX: ${new Date(snapshot.status_synced_at).toLocaleString("vi-VN", { timeZone:"Asia/Ho_Chi_Minh" })} · Tự cập nhật mỗi 5 phút` : "Chưa đồng bộ SPX · Tự cập nhật mỗi 5 phút"}
+            {snapshot.status_sync_error ? snapshot.status_sync_error : snapshot.status_sync_token ? "Đang lấy trạng thái từ SPX..." : snapshot.status_sync_requested_at ? "Đang chờ worker lấy trạng thái SPX..." : snapshot.status_synced_at ? `Kiểm tra SPX gần nhất: ${new Date(snapshot.status_synced_at).toLocaleString("vi-VN", { timeZone:"Asia/Ho_Chi_Minh" })} · Tự cập nhật mỗi 5 phút` : "Chưa đồng bộ SPX · Tự cập nhật mỗi 5 phút"}
           </span>
         </div>
       ) : (
@@ -571,7 +577,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
 
       <section className={s.kpiGrid} aria-label="Tổng quan bàn giao ca sáng">
         <div className={`${s.kpiCard} ${s.kpiPending}`}><div className={s.kpiLabel}>Đơn còn giữ<Package size={18}/></div><strong className={s.kpiValue}>{loading?"—":nf.format(Math.max(0,summary.total-summary.resolved))}</strong><p className={s.kpiSub}>Cần theo dõi trong ca sáng</p></div>
-        <div className={s.kpiCard}><div className={s.kpiLabel}>Rider lúc chốt<UsersRound size={18}/></div><strong className={s.kpiValue}>{loading?"—":nf.format(summary.riderCount)}</strong><p className={s.kpiSub}>{nf.format(summary.total)} đơn tại thời điểm chốt 23h</p></div>
+        <div className={s.kpiCard}><div className={s.kpiLabel}>Rider theo dõi<UsersRound size={18}/></div><strong className={s.kpiValue}>{loading?"—":nf.format(summary.riderCount)}</strong><p className={s.kpiSub}>{nf.format(summary.total)} đơn trong danh sách theo dõi</p></div>
         <div className={s.kpiCard}><div className={s.kpiLabel}>Đã xử lý<CheckCircle2 size={18}/></div><strong className={s.kpiValue}>{loading?"—":nf.format(summary.resolved)}<small> / {nf.format(summary.total)}</small></strong><p className={s.kpiSub}>Đã giao hoặc đã trả về hub</p></div>
         <div className={s.kpiCard}><div className={s.kpiLabel}>Đơn có ghi chú<Edit2 size={18}/></div><strong className={s.kpiValue}>{loading?"—":nf.format(summary.hasNotes)}</strong><p className={s.kpiSub}>Ghi chú sự cố theo từng đơn</p></div>
       </section>
@@ -612,14 +618,14 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
 
         <select
           className={s.filterSelect}
-          aria-label="Trạng thái lúc chốt 23h"
+          aria-label="Trạng thái khi ghi nhận"
           value={cutoffStatusFilter}
           onChange={(e) => {
             setCutoffStatusFilter(e.target.value);
             setPage(0);
           }}
         >
-          <option value="all">Chốt 23h: tất cả</option>
+          <option value="all">Ghi nhận: tất cả</option>
           <option value="1">Delivering (Đang giao)</option>
           <option value="5">Onhold (Giữ hàng)</option>
         </select>

@@ -33,10 +33,32 @@ begin
  if public.claim_overnight_status_sync() is not null then raise exception 'Five minute delay ignored'; end if;
  perform public.sync_overnight_hold_status('2099-04-01');
  claim:=public.claim_overnight_status_sync();token:=(claim->>'token')::uuid;
+ if jsonb_array_length(claim->'orders')<>1 or claim->'orders'->0->>'order_code'<>'SYNC-B'
+ then raise exception 'Resolved order was fetched again'; end if;
+ update public.overnight_hold_orders set last_synced_at='2098-01-01',updated_at='2098-01-01'
+ where cutoff_date='2099-04-01';
+ result:=public.finish_overnight_status_sync('2099-04-01',token,
+ '[{"order_code":"SYNC-B","current_status":"Delivering"},{"order_code":"SYNC-A","current_status":"Onhold"}]');
+ if result->>'changed_count'<>'0' or exists(select 1 from public.overnight_hold_orders
+ where cutoff_date='2099-04-01' and (last_synced_at<>'2098-01-01'::timestamptz or updated_at<>'2098-01-01'::timestamptz))
+ or not exists(select 1 from public.overnight_hold_orders where order_code='SYNC-A' and current_status='Delivered')
+ then raise exception 'Unchanged or resolved orders were rewritten'; end if;
+ perform public.sync_overnight_hold_status('2099-04-01');
+ claim:=public.claim_overnight_status_sync();token:=(claim->>'token')::uuid;
+ result:=public.finish_overnight_status_sync('2099-04-01',token,'[{"order_code":"SYNC-B","current_status":"Returned"}]');
+ if result->>'changed_count'<>'1' or result->>'resolved_count'<>'2' then raise exception 'Changed status not saved'; end if;
+ perform public.sync_overnight_hold_status('2099-04-01');
+ claim:=public.claim_overnight_status_sync();token:=(claim->>'token')::uuid;
+ if jsonb_array_length(claim->'orders')<>0 then raise exception 'All resolved still fetched'; end if;
+ result:=public.finish_overnight_status_sync('2099-04-01',token,'[]');
+ if result->>'changed_count'<>'0' then raise exception 'Empty sync wrote orders'; end if;
+ perform public.sync_overnight_hold_status('2099-04-01');
+ claim:=public.claim_overnight_status_sync();token:=(claim->>'token')::uuid;
  result:=public.finish_overnight_status_sync('2099-04-01',token,'[]','SPX unavailable');
  if not exists(select 1 from public.overnight_hold_snapshots where cutoff_date='2099-04-01' and status_sync_error='SPX unavailable' and status_synced_at is not null)
  or not exists(select 1 from public.overnight_hold_orders where order_code='SYNC-A' and current_status='Delivered')
  then raise exception 'Failed lookup overwrote previous result'; end if;
+ update public.overnight_hold_orders set current_status='Onhold' where order_code='SYNC-B';
  update public.overnight_hold_snapshots set status_sync_token=token,status_sync_started_at=now()-interval '11 minutes',status_sync_attempted_at=now()-interval '11 minutes' where cutoff_date='2099-04-01';
  claim:=public.claim_overnight_status_sync();
  if claim is null or (claim->>'token')::uuid=token then raise exception 'Expired claim not recovered'; end if;
