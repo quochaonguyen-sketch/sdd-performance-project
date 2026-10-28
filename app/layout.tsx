@@ -6,6 +6,7 @@ import "./workspace.css";
 import "./dashboard.css";
 import "./realtime.css";
 import "./navigation-motion.css";
+import "./design-system.css";
 import { IBM_Plex_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { WebVitalsReporter } from "@/components/layout/web-vitals-reporter";

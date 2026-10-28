@@ -26,7 +26,7 @@ export function PickupOrderDialog({ scope, onClose }: { scope: PickupOrderScope;
       setLoading(true); setError(""); setNotice("");
       try {
         const params = new URLSearchParams({ view: "orders", p_area: scope.area, p_status: scope.status,
-          p_cot: scope.cot, p_zone: scope.zone ?? "", p_rider: scope.rider ?? "",
+          p_cot: scope.cot, p_zone: scope.zone ?? "", p_district:scope.district??"",p_ward:scope.ward??"",p_wards:JSON.stringify(scope.wards??[]),p_rider: scope.rider ?? "",
           p_rider_cot: scope.riderCot ?? "", q: query, page: String(page) });
         const res = await fetch(`/api/pickup-inventory?${params}`, { cache: "no-store", signal: controller.signal });
         const data = await res.json();
@@ -36,7 +36,7 @@ export function PickupOrderDialog({ scope, onClose }: { scope: PickupOrderScope;
       finally { if (!controller.signal.aborted) setLoading(false); }
     }, 0);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [scope.area, scope.status, scope.cot, scope.zone, scope.rider, scope.riderCot, query, page, retry]);
+  }, [scope.area, scope.status, scope.cot, scope.zone, scope.district,scope.ward,scope.wards,scope.rider, scope.riderCot, query, page, retry]);
   async function copy(value: string) {
     try { await navigator.clipboard.writeText(value); setNotice("Đã sao chép mã đơn."); }
     catch { setNotice("Không sao chép được. Bạn có thể chọn mã đơn trong bảng để sao chép."); }
@@ -44,7 +44,7 @@ export function PickupOrderDialog({ scope, onClose }: { scope: PickupOrderScope;
   const pageCount = Math.max(1, Math.ceil(result.total / result.pageSize));
   const code = (order: Order) => order.sls_tracking_number?.trim() || order.shipment_id;
   return <dialog ref={dialog} aria-modal="true" aria-labelledby={titleId}
-    className="fixed inset-0 m-auto w-[min(1200px,95vw)] max-w-none overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/50"
+    className="delivery-order-dialog fixed inset-0 m-auto w-[min(1200px,95vw)] max-w-none overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-950/50"
     onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="flex max-h-[88dvh] flex-col">
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">

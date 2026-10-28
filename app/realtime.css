@@ -1,8 +1,8 @@
-.realtime-premium { --rt-green: #35846e; --rt-red: #b65358; --rt-blue: #527eaa; padding-bottom: 28px; }
-.realtime-premium .rt-command { display: flex; justify-content: space-between; gap: 32px; padding: 32px 36px; border: 1px solid #2d4865; border-radius: 16px; background: #1e344d; color: #f4f8ff; }
+.realtime-premium { --rt-green: var(--color-success); --rt-red: var(--color-error); --rt-blue: var(--color-accent); padding-bottom: 28px; }
+.realtime-premium .rt-command { display: flex; justify-content: space-between; gap: 32px; padding: 32px 36px; border: 1px solid #2d4865; border-radius: 16px; background: var(--color-graphite); color: var(--color-graphite-ink); }
 .rt-command .rt-eyebrow { display: flex; align-items: center; gap: 9px; color: #bfcee0; font-size: 10px; font-weight: 600; letter-spacing: .16em; }
 .rt-eyebrow > span { margin-left: 8px; padding-left: 16px; border-left: 1px solid #56708b; color: #89b0d5; }
-.rt-command h1 { margin-top: 18px; font-size: clamp(26px, 3vw, 38px); font-weight: 500; line-height: 1.2; letter-spacing: -.045em; color: #f4f8ff; }
+.rt-command h1 { margin-top: 18px; font-size: clamp(26px, 3vw, 38px); font-weight: 500; line-height: 1.2; letter-spacing: -.045em; color: var(--color-graphite-ink); }
 .rt-command h1 > span { color: #88b3d9; }
 .rt-command-main > p { margin-top: 10px; color: #beccdc; font-size: 13px; }
 .rt-command-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 26px; color: #c3d2e3; font-size: 11px; }
@@ -45,7 +45,7 @@
 .rt-area-track { height: 4px; margin-top: 12px; overflow: hidden; border-radius: 3px; background: var(--color-paper-3); }.rt-area-track > span { display: block; height: 100%; background: var(--rt-blue); border-radius: inherit; }
 .rt-area-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }.rt-area-stats > span { display: grid; gap: 5px; font-size: 10px; color: var(--color-muted); }.rt-area-stats strong { font-size: 14px; font-weight: 500; color: var(--color-ink); font-variant-numeric: tabular-nums; }
 .rt-area-footer { display: flex; align-items: center; gap: 6px; margin: 16px -18px 0; padding: 11px 18px; border-top: 1px solid var(--color-rule); font-size: 10px; color: var(--color-muted); }.rt-area-footer.has-warning { color: var(--color-error); }
-.rt-area-card.is-selected { background: #294c72; border-color: #294c72; color: #fff; }.rt-area-card.is-selected :is(.rt-area-top,.rt-area-riders,.rt-area-progress > span,.rt-area-stats > span) { color: #c3d6e9; }.rt-area-card.is-selected .rt-area-stats strong { color: #fff; }.rt-area-card.is-selected .rt-area-track { background: #4b6a8a; }.rt-area-card.is-selected .rt-area-track > span { background: #bed6eb; }.rt-area-card.is-selected .rt-area-footer { border-color: #506e8c; color: #d1dfed; }.rt-area-card.is-selected .has-warning { color: #ffcccc; }
+.rt-area-card.is-selected { background: var(--color-graphite); border-color: var(--color-graphite); color: var(--color-paper); }.rt-area-card.is-selected :is(.rt-area-top,.rt-area-riders,.rt-area-progress > span,.rt-area-stats > span) { color: #c3d6e9; }.rt-area-card.is-selected .rt-area-stats strong { color: var(--color-paper); }.rt-area-card.is-selected .rt-area-track { background: #4b6a8a; }.rt-area-card.is-selected .rt-area-track > span { background: #bed6eb; }.rt-area-card.is-selected .rt-area-footer { border-color: #506e8c; color: #d1dfed; }.rt-area-card.is-selected .has-warning { color: #ffcccc; }
 .rt-district-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; font-weight: 500; }.rt-district-heading :is(span,button) { display: inline-flex; align-items: center; gap: 6px; }.rt-district-heading button { color: var(--color-accent); font-size: 12px; cursor: pointer; }
 .realtime-premium .rt-filter-panel { padding: 20px 24px; background: var(--color-paper); border-color: var(--color-rule); border-radius: 12px; }.rt-filter-heading { margin-bottom: 20px; }
 .realtime-premium .rt-filter-panel > div:last-child { margin-top: 18px; padding-top: 14px; border-color: var(--color-rule); }
@@ -63,11 +63,11 @@
 @media (prefers-reduced-motion: reduce) { .rt-area-card { transition: none; } }
 
 /* Each area retains its identity in both overview and selected states. */
-.rt-area-card[data-area="KV1"] { --rt-area-color: #2563eb; }
-.rt-area-card[data-area="KV2"] { --rt-area-color: #0f766e; }
-.rt-area-card[data-area="KV3"] { --rt-area-color: #7c3aed; }
-.rt-area-card[data-area="KV4"] { --rt-area-color: #a85c12; }
-.rt-area-card[data-area="KV5"] { --rt-area-color: #15803d; }
+.rt-area-card[data-area="KV1"] { --rt-area-color: var(--color-accent); }
+.rt-area-card[data-area="KV2"] { --rt-area-color: var(--color-success); }
+.rt-area-card[data-area="KV3"] { --rt-area-color: var(--color-purple); }
+.rt-area-card[data-area="KV4"] { --rt-area-color: var(--color-warning); }
+.rt-area-card[data-area="KV5"] { --rt-area-color: var(--color-success); }
 .rt-area-card { background: color-mix(in srgb, var(--rt-area-color) 8%, var(--color-paper)); border-color: color-mix(in srgb, var(--rt-area-color) 26%, var(--color-rule)); border-top: 4px solid var(--rt-area-color); }
 .rt-area-card:hover { background: color-mix(in srgb, var(--rt-area-color) 14%, var(--color-paper)); border-color: var(--rt-area-color); }
 .rt-area-code { padding: 4px 8px; border-radius: 5px; background: var(--rt-area-color); color: white; }
@@ -77,10 +77,10 @@
 .rt-area-footer { background: color-mix(in srgb, var(--color-paper) 65%, transparent); border-color: color-mix(in srgb, var(--rt-area-color) 20%, var(--color-rule)); }
 .rt-area-card.is-selected { background: var(--rt-area-color); border-color: var(--rt-area-color); }
 .rt-area-card.is-selected :is(.rt-area-top > svg,.rt-area-progress strong) { color: white; }
-.rt-area-card.is-selected .rt-area-code { background: #ffffff26; }
-.rt-area-card.is-selected .rt-area-track { background: #ffffff33; }
+.rt-area-card.is-selected .rt-area-code { background: color-mix(in srgb, var(--color-paper) 14.9%, transparent); }
+.rt-area-card.is-selected .rt-area-track { background: color-mix(in srgb, var(--color-paper) 20%, transparent); }
 .rt-area-card.is-selected .rt-area-track > span { background: white; }
-.rt-area-card.is-selected .rt-area-footer { background: #00000014; border-color: #ffffff33; }
+.rt-area-card.is-selected .rt-area-footer { background: color-mix(in srgb, var(--color-shadow) 7.8%, transparent); border-color: color-mix(in srgb, var(--color-paper) 20%, transparent); }
 .dark .rt-area-card:not(.is-selected) .rt-area-progress strong { color: color-mix(in srgb, var(--rt-area-color) 50%, white); }
 
 /* Stable slots prevent loading text and long warnings from moving later sections. */

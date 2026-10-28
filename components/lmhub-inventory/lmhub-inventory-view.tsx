@@ -4,7 +4,7 @@ import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { Select } from "@/components/ui/select";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, MapPin, PackageCheck, RefreshCcw, Search, Truck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
@@ -139,7 +139,6 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   }, debounceMs: 400 });
 
   const baselineRef = useRef<string | null>(null);
-  const orderPanelRef = useRef<HTMLElement | null>(null);
   const queueLmhub = useCallback(async () => {
     if (queueing) return;
     setQueueing(true);
@@ -232,12 +231,6 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const selectFocus = (focus: InventoryFocus) => {
     setSelected(focus);
     setPage(1);
-    requestAnimationFrame(() => {
-      if (window.matchMedia("(min-width: 1280px)").matches) return;
-      orderPanelRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start",
-      });
-    });
   };
 
   return (
@@ -348,8 +341,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
           <div className="min-w-0">
             <DeliveryInventoryBoard districts={filtered} cot={cot} selected={selected} onSelect={selectFocus} forceExpanded={!!query || heat === "hot"} />
           </div>
-          <aside ref={orderPanelRef} aria-label="Chi tiết đơn theo địa bàn" className="delivery-command-detail min-w-0 scroll-mt-4">
-            <OrderPanel
+          {selected ? <DeliveryOrderDialog
               selected={selected}
               orders={pageOrders}
               total={selectedOrders.length}
@@ -359,8 +351,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
               onPrev={() => setPage((value) => Math.max(1, value - 1))}
               onNext={() => setPage((value) => Math.min(pageCount, value + 1))}
               onClose={() => setSelected(null)}
-            />
-          </aside>
+            /> : null}
         </div>
       )}
       <details className="rounded-2xl border border-slate-200 bg-white">
@@ -374,7 +365,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   );
 }
 
-function OrderPanel({
+function DeliveryOrderDialog({
   selected,
   orders,
   total,
@@ -385,7 +376,7 @@ function OrderPanel({
   onNext,
   onClose,
 }: {
-  selected: InventoryFocus | null;
+  selected: InventoryFocus;
   orders: InventoryRow[];
   total: number;
   cot1: number;
@@ -395,27 +386,22 @@ function OrderPanel({
   onNext: () => void;
   onClose: () => void;
 }) {
-  if (!selected) {
-    return (
-      <section className="flex min-h-72 items-center justify-center rounded-2xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] px-6 py-10 text-center">
-        <div>
-          <MapPin size={28} className="mx-auto mb-4 text-[var(--color-muted)]" aria-hidden="true" />
-          <h2 className="text-sm font-bold text-[var(--color-ink)]">Chi tiết đơn theo địa bàn</h2>
-          <p className="mt-2 text-xs leading-5 text-[var(--color-muted)]">Chọn tên phường hoặc số tổng trong bảng quận để xem tồn COT và danh sách vận đơn tại đây.</p>
-        </div>
-      </section>
-    );
-  }
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(()=>{const node=dialog.current;node?.showModal();return()=>node?.close();},[]);
 
   return (
+    <dialog ref={dialog} className="delivery-order-dialog" aria-modal="true" aria-labelledby={titleId}
+      onCancel={event=>{event.preventDefault();onClose();}} onClose={onClose}
+      onClick={event=>{if(event.target!==event.currentTarget)return;const bounds=event.currentTarget.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)onClose();}}>
     <section data-area={selected.area} className="delivery-order-panel overflow-hidden rounded-2xl border border-[var(--color-rule)] bg-[var(--color-paper)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-rule)] px-4 py-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{selected.area} · {deliveryDistrictLabel(selected.district)}</p>
-          <h2 className="text-base font-bold text-[var(--color-ink)]">{selected.ward ?? "Tất cả phường trong quận"}</h2>
+          <h2 id={titleId} className="text-base font-bold text-[var(--color-ink)]">{selected.ward ?? "Tất cả phường trong quận"}</h2>
           <p className="text-sm text-[var(--color-muted)]">{total.toLocaleString("vi-VN")} đơn khớp lọc</p>
         </div>
-        <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={onClose}><X size={16} /> Đóng</Button>
+        <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={onClose} autoFocus><X size={16} /> Đóng</Button>
       </div>
       <div className="border-b border-[var(--color-rule)] px-4 py-4">
         <p className="text-[11px] text-[var(--color-muted)]">Tồn trong địa bàn đang chọn</p>
@@ -456,7 +442,7 @@ function OrderPanel({
           <Button type="button" variant="secondary" className="h-8 px-2 text-xs" disabled={page >= pageCount} onClick={onNext}>Sau <ChevronRight size={16} /></Button>
         </div>
       </div>
-    </section>
+    </section></dialog>
   );
 }
 

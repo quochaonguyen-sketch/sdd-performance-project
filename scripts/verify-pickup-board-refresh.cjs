@@ -27,10 +27,10 @@ for(const ext of ['.ts','.tsx'])Module._extensions[ext]=(mod,file)=>mod._compile
 Module._extensions['.css']=mod=>mod.exports={};
 const {PickupInventoryView}=require('../components/lmhub-inventory/pickup-inventory-view.tsx');
 let count=7,snapshot='2026-10-28T01:00:00Z',fail=false,boardCalls=0,hold=null;
-const fixture=()=>({success:true,snapshotAt:snapshot,rows:[{area:'KV1',zone:'ZONE-A',cot:'COT1',orders:count}],riders:[{area:'KV1',ward:'Ward',zones:['ZONE-A'],rider_name:'Test rider',rider_code:'1',rider_cot:'COT1',cot1:count,cot2:0,total:count}]});
+const fixture=()=>({success:true,snapshotAt:snapshot,rows:[{area:'KV1',district:'Quận 1',ward:'Phường Tân Định',cot:'COT1',orders:count}],riders:[{area:'KV1',ward:'Ward',zones:['ZONE-A'],rider_name:'Test rider',rider_code:'1',rider_cot:'COT1',cot1:count,cot2:0,total:count}]});
 global.fetch=async(url,options)=>{
  if(String(url).startsWith('/api/lmhub-inventory/refresh'))return {ok:true,json:async()=>({success:true,queued:options?.method==='POST',pending:0,running:0,lastStatus:'DONE'})};
- assert.ok(String(url).includes('view=dashboard'),'Boards must share one request');boardCalls++;
+ assert.ok(String(url).includes('view=geography-dashboard'),'Boards must share one request');boardCalls++;
  if(hold)return hold;
  if(fail)throw Error('test network failure');
  const payload=fixture();return {ok:true,json:async()=>payload};
@@ -44,7 +44,12 @@ async function flush(){for(let i=0;i<8;i++)await new Promise(setImmediate);rende
 async function fireTimeouts(){for(const [id,t] of [...timeouts]){timeouts.delete(id);t.fn()}await flush()}
 async function poll(ms){const t=[...intervals.values()].find(t=>t.ms===ms);assert.ok(t,`Missing ${ms}ms poll`);t.fn();await flush()}
 (async()=>{
- render();await fireTimeouts();button('Tồn theo rider').props.onClick();render();
+ render();await fireTimeouts();
+ const board=all(rendered).find(n=>n.type?.name==='DeliveryInventoryBoard');assert.ok(board);assert.equal(board.props.kind,'Pickup');
+ const district=board.props.districts[0],ward=district.wards[0];assert.equal(district.district,'Quận 1');assert.equal(ward.ward,'Phường Tân Định');assert.equal(district.totals.total,7);
+ board.props.onSelect({area:ward.area,district:ward.district,ward:ward.ward});render();
+ const modal=all(rendered).find(n=>n.type?.name==='PickupOrderDialog');assert.ok(modal);assert.equal(modal.props.scope.district,'Quận 1');assert.equal(modal.props.scope.ward,'Phường Tân Định');assert.equal(modal.props.scope.zone,undefined);modal.props.onClose();render();
+ button('Tồn theo rider').props.onClick();render();
  assert.equal(rider().rows[0].total,7);assert.equal(rider().loading,false);
  count=11;snapshot='2026-10-28T01:05:00Z';await poll(15000);
  assert.equal(rider().rows[0].total,11,'External job must refresh riders without realtime');
@@ -58,7 +63,7 @@ async function poll(ms){const t=[...intervals.values()].find(t=>t.ms===ms);asser
  document.visibilityState='visible';count=19;document.dispatchEvent(new Event('visibilitychange'));await flush();assert.equal(rider().rows[0].total,19);
  // A first snapshot must finish the waiting state even when there was no baseline.
  for(const e of effects)e?.cleanup?.();states=[];effects=[];timeouts.clear();intervals.clear();snapshot=null;count=0;
- render();await fireTimeouts();button('Fetch tồn pickup').props.onClick();await flush();assert.ok([...intervals.values()].some(t=>t.ms===8000));
+ render();await fireTimeouts();button('Đồng bộ SPX').props.onClick();await flush();assert.ok([...intervals.values()].some(t=>t.ms===8000));
  snapshot='2026-10-28T01:10:00Z';count=3;await poll(8000);assert.ok(text(rendered).includes('Đã có snapshot pickup mới'));assert.ok(![...intervals.values()].some(t=>t.ms===8000));
  console.log('Pickup boards: shared data, external completion polling, manual refresh, stale response protection, errors, visibility and first snapshot passed.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{for(const e of effects)e?.cleanup?.()});

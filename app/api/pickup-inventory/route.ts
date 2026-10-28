@@ -27,14 +27,14 @@ export async function GET(request: Request) {
       let params;
       try { params = pickupOrderParams(url.searchParams); }
       catch { return NextResponse.json({ success:false, error:"Bộ lọc mã đơn pickup không hợp lệ" }, { status:400 }); }
-      const { data, error } = await admin.rpc("pickup_inventory_orders", params);
+      const { data, error } = await admin.rpc("p_district" in params?"pickup_inventory_geography_orders":"pickup_inventory_orders", params);
       if (error) throw error;
       return NextResponse.json({ success:true, ...data }, { headers:{ "Cache-Control":"private, no-store" } });
     }
-    if (view === "zone-board" || view === "dashboard") {
+    if (view === "zone-board" || view === "dashboard" || view === "geography-dashboard") {
       const status = (url.searchParams.get("p_status") ?? "").trim();
       if (!["Assigned", "Pickup Onhold", "Created"].includes(status)) return NextResponse.json({success:false,error:"Trạng thái không hợp lệ"},{status:400});
-      const { data, error } = await admin.rpc(view === "dashboard" ? "pickup_inventory_dashboard" : "pickup_inventory_zone_board", { p_status: status });
+      const { data, error } = await admin.rpc(view === "geography-dashboard"?"pickup_inventory_geography_dashboard":view === "dashboard" ? "pickup_inventory_dashboard" : "pickup_inventory_zone_board", { p_status: status });
       if (error) throw error;
       return NextResponse.json({success:true,...data},{headers:{"Cache-Control":"private, no-store"}});
     }

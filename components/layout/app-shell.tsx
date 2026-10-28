@@ -169,7 +169,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   }
 
   if (isEmbedded) {
-    return <><main className="app-embedded-main" onClickCapture={preserveEmbeddedNavigation}><RouteReveal key={pathname}>{children}</RouteReveal></main><AppLoadingOverlay /></>;
+    return <><main className="app-embedded-main workspace-content" onClickCapture={preserveEmbeddedNavigation}><RouteReveal key={pathname}>{children}</RouteReveal></main><AppLoadingOverlay /></>;
   }
 
   return (
@@ -240,7 +240,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             <button type="button" className="app-signout" onClick={() => void signOut()}><LogOut size={15} aria-hidden="true" /><span>Đăng xuất</span></button>
           </div>
         </header>
-        <main className={cn("app-main", splitOpen && "is-quick-split")}>
+        <main className={cn("app-main workspace-content", splitOpen && "is-quick-split")}>
           <section className="app-primary-pane"><RouteReveal key={pathname}>{children}</RouteReveal></section>
           {splitOpen ? <aside className="app-quick-split-pane" aria-label="Màn hình làm việc thứ hai">
             <header><span>Làm song song</span><select value={activeSplitRoute} onChange={(event) => setSplitRoute(event.target.value)} aria-label="Chọn màn hình thứ hai">

@@ -1,20 +1,20 @@
 /* Dashboard · distinct delivery/pickup series and stable area colors. */
 .app-main:has(.ops-dashboard) { background: var(--color-paper-2); }
 .ops-dashboard {
-  --dash-denim: #294c72;
+  --dash-denim: var(--color-graphite);
   --dash-denim-rule: #527497;
-  --dash-inverse: #f4f8ff;
-  --dash-inverse-muted: #c7d9ec;
-  --dash-delivery: #2563eb;
-  --dash-pickup: #c05616;
+  --dash-inverse: var(--color-graphite-ink);
+  --dash-inverse-muted: var(--color-inverse-muted);
+  --dash-delivery: var(--color-accent);
+  --dash-pickup: var(--color-warning);
   --dash-delivery-on-dark: #a9ceff;
   --dash-pickup-on-dark: #ffca92;
   --dash-blue: var(--dash-delivery);
-  --dash-area-1: #2563eb;
-  --dash-area-2: #0f8468;
-  --dash-area-3: #8b45cc;
+  --dash-area-1: var(--color-accent);
+  --dash-area-2: var(--color-success);
+  --dash-area-3: var(--color-purple);
   --dash-area-4: #b76a0b;
-  --dash-area-5: #d03d76;
+  --dash-area-5: var(--color-rose);
   --color-chart-1: var(--dash-area-1);
   --color-chart-2: var(--dash-area-2);
   --color-chart-3: var(--dash-area-3);

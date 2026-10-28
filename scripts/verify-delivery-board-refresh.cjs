@@ -10,6 +10,7 @@ global.clearTimeout=id=>timeouts.delete(id);
 global.setInterval=(fn,ms)=>{const id=++timerId;intervals.set(id,{fn,ms});return id};
 global.clearInterval=id=>intervals.delete(id);
 const hooks={
+ useId:()=> 'delivery-order-title',
  useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return [states[i],v=>{states[i]=typeof v==='function'?v(states[i]):v}]},
  useRef(initial){return hooks.useState(()=>({current:initial}))[0]},
  useMemo(fn){cursor++;return fn()},useCallback(fn,deps){const i=cursor++,old=states[i];if(!old||deps.some((v,j)=>!Object.is(v,old.deps[j])))states[i]={deps,value:fn};return states[i].value},
@@ -44,6 +45,25 @@ async function fireTimeouts(){for(const [id,t] of [...timeouts]){timeouts.delete
 async function poll(ms){const t=[...intervals.values()].find(t=>t.ms===ms);assert.ok(t,`Missing ${ms}ms poll`);t.fn();await flush()}
 (async()=>{
  render();await flush();assert.equal(states[0].length,7);
+ // A board selection opens an actual native dialog, without scrolling away from the board.
+ const board=()=>all(rendered).find(n=>n.type?.name==='DeliveryInventoryBoard');
+ const modal=()=>all(rendered).find(n=>n.type?.name==='DeliveryOrderDialog');
+ assert.ok(!modal());
+ const ward=board().props.districts[0].wards[0],focus={area:ward.area,district:ward.district,ward:ward.ward};
+ board().props.onSelect(focus);render();assert.ok(modal());assert.equal(modal().props.total,7);assert.equal(modal().props.page,1);
+ const modalProps=modal().props,Component=modal().type;
+ const saved={states,effects,pending,cursor};states=[];effects=[];pending=[];cursor=0;
+ const dialogTree=Component(modalProps);let opened=0,closed=0;
+ states[0].current={showModal(){opened++},close(){closed++}};
+ for(const effect of pending)effect();assert.equal(opened,1);assert.equal(dialogTree.type,'dialog');assert.equal(dialogTree.props['aria-modal'],'true');assert.equal(dialogTree.props['aria-labelledby'],'delivery-order-title');
+ const cleanup=effects[1].cleanup;
+ states=saved.states;effects=saved.effects;pending=saved.pending;cursor=saved.cursor;
+ let prevented=false;dialogTree.props.onCancel({preventDefault(){prevented=true}});render();assert.ok(prevented);assert.ok(!modal());cleanup();assert.equal(closed,1);
+ board().props.onSelect(focus);render();
+ const target={getBoundingClientRect:()=>({left:100,right:800,top:100,bottom:700})};
+ dialogTree.props.onClick({target,currentTarget:target,clientX:150,clientY:150});render();assert.ok(modal(),'Click within the dialog must not close it');
+ dialogTree.props.onClick({target,currentTarget:target,clientX:20,clientY:20});render();assert.ok(!modal(),'Backdrop click closes the modal');
+ board().props.onSelect(focus);render();modal().props.onClose();render();assert.ok(!modal());
  count=11;snapshot='B';stamp='2026-10-28T01:05:00Z';await poll(15000);assert.equal(states[0].length,11);assert.equal(report().snapshotAt,stamp);
  count=13;button('Làm mới').props.onClick();await flush();assert.equal(states[0].length,13);
  let release;const old=head();hold=new Promise(r=>release=r);button('Làm mới').props.onClick();await flush();
@@ -57,5 +77,5 @@ async function poll(ms){const t=[...intervals.values()].find(t=>t.ms===ms);asser
  render();await flush();button('Lấy dữ liệu mới').props.onClick();await flush();assert.ok([...intervals.values()].some(t=>t.ms===8000));
  // A successful empty publication must also stop waiting and clear both board/report.
  stamp='2026-10-28T01:10:00Z';await poll(8000);assert.equal(states[0].length,0);assert.equal(report().snapshotAt,stamp);assert.ok(text(rendered).includes('Đã có snapshot mới'));assert.ok(![...intervals.values()].some(t=>t.ms===8000));
- console.log('Delivery refresh: external completion, manual refresh, late responses, publication during pagination, retained data on error, visibility and empty publication passed.');
+ console.log('Delivery: modal selection/scope, native lifecycle, Escape/backdrop/close, pagination reset, external/manual refresh, late responses, publication during pagination, retained data on error, visibility and empty publication passed.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{for(const e of effects)e?.cleanup?.()});

@@ -1,14 +1,14 @@
 export const DATA_SOURCES = [
-  { id:"linehaul", name:"Linehaul Management", description:"Chuyến hôm nay, xuất/xả tải và vị trí xe", href:"/linehaul", permission:"manage_dashboard", color:"#0f766e", dated:false, interval:300 },
-  { id:"delivery_realtime", name:"Delivery Realtime", description:"Tiến độ giao hàng, đơn đang giao và cảnh báo rider", href:"/realtime-dashboard", permission:"manage_performance", color:"#2563eb", dated:false, interval:600 },
-  { id:"onhold_daily", name:"OH Delivery", description:"Thu thập OH lũy kế · khử trùng mã trong ngày · chốt pivot cuối ngày", href:"/onhold", permission:"manage_performance", color:"#ea580c", dated:false, interval:300 },
-  { id:"pickup_inventory", name:"Tồn Pickup", description:"Assigned thực sự, chưa Onhold/Picked", href:"/lmhub-inventory", permission:"manage_pickup", color:"#059669", dated:false, interval:1800 },
-  { id:"delivery_inventory", name:"Tồn Delivery", description:"Đơn còn tại hub theo khu vực và tuyến", href:"/inventory-delivery", permission:"manage_pickup", color:"#2563eb", dated:false, interval:1800 },
-  { id:"pickup_realtime", name:"Pickup Realtime", description:"Sản lượng, chờ lấy và Onhold của rider", href:"/pickup-realtime", permission:"manage_pickup", color:"#7c3aed", dated:false, interval:300 },
-  { id:"pickup_volume", name:"Sản lượng Pickup", description:"Đồng bộ sản lượng theo ngày", href:"/volume/pickup", permission:"manage_volume", color:"#0891b2", dated:true, interval:1800 },
-  { id:"delivery_volume", name:"Sản lượng Delivery", description:"Đồng bộ sản lượng theo ngày", href:"/volume/delivery", permission:"manage_volume", color:"#d97706", dated:true, interval:1800 },
-  { id:"performance", name:"Performance", description:"Hiệu suất rider theo ngày", href:"/performance", permission:"manage_performance", color:"#db2777", dated:true, interval:1800 },
-  { id:"return_inventory", name:"Hàng trả", description:"Chờ trả tại hub và đang đi trả · KV1–KV5", href:"/return-orders", permission:"manage_return", color:"#e11d48", dated:false, interval:1800 },
+  { id:"linehaul", name:"Linehaul Management", description:"Chuyến hôm nay, xuất/xả tải và vị trí xe", href:"/linehaul", permission:"manage_dashboard", color:"var(--color-accent)", dated:false, interval:300 },
+  { id:"delivery_realtime", name:"Delivery Realtime", description:"Tiến độ giao hàng, đơn đang giao và cảnh báo rider", href:"/realtime-dashboard", permission:"manage_performance", color:"var(--color-accent)", dated:false, interval:600 },
+  { id:"onhold_daily", name:"OH Delivery", description:"Thu thập OH lũy kế · khử trùng mã trong ngày · chốt pivot cuối ngày", href:"/onhold", permission:"manage_performance", color:"var(--color-accent)", dated:false, interval:300 },
+  { id:"pickup_inventory", name:"Tồn Pickup", description:"Assigned thực sự, chưa Onhold/Picked", href:"/lmhub-inventory", permission:"manage_pickup", color:"var(--color-accent)", dated:false, interval:1800 },
+  { id:"delivery_inventory", name:"Tồn Delivery", description:"Đơn còn tại hub theo khu vực và tuyến", href:"/inventory-delivery", permission:"manage_pickup", color:"var(--color-accent)", dated:false, interval:1800 },
+  { id:"pickup_realtime", name:"Pickup Realtime", description:"Sản lượng, chờ lấy và Onhold của rider", href:"/pickup-realtime", permission:"manage_pickup", color:"var(--color-accent)", dated:false, interval:300 },
+  { id:"pickup_volume", name:"Sản lượng Pickup", description:"Đồng bộ sản lượng theo ngày", href:"/volume/pickup", permission:"manage_volume", color:"var(--color-accent)", dated:true, interval:1800 },
+  { id:"delivery_volume", name:"Sản lượng Delivery", description:"Đồng bộ sản lượng theo ngày", href:"/volume/delivery", permission:"manage_volume", color:"var(--color-accent)", dated:true, interval:1800 },
+  { id:"performance", name:"Performance", description:"Hiệu suất rider theo ngày", href:"/performance", permission:"manage_performance", color:"var(--color-accent)", dated:true, interval:1800 },
+  { id:"return_inventory", name:"Hàng trả", description:"Chờ trả tại hub và đang đi trả · KV1–KV5", href:"/return-orders", permission:"manage_return", color:"var(--color-accent)", dated:false, interval:1800 },
 ] as const;
 export type DataSourceId = typeof DATA_SOURCES[number]["id"];
 export function dataSource(id: unknown) { return DATA_SOURCES.find(s=>s.id===id); }

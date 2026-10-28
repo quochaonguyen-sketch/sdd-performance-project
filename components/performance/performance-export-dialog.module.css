@@ -1,10 +1,10 @@
-.dialog { width:min(560px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; margin:auto; padding:24px; border:1px solid var(--color-rule); border-radius:16px; background:var(--color-paper); color:var(--color-ink); box-shadow:0 24px 90px #112b4a33; }
-.dialog::backdrop { background:#132b4770; }
+.dialog { width:min(560px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; margin:auto; padding:24px; border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); color:var(--color-ink); box-shadow:0 24px 90px color-mix(in srgb, var(--color-shadow) 20%, transparent); }
+.dialog::backdrop { background:color-mix(in srgb, var(--color-shadow) 43.9%, transparent); }
 .dialog header { display:flex; align-items:center; gap:12px; }
-.icon { display:grid; place-items:center; width:44px; height:44px; border:1px solid var(--color-rule); border-radius:12px; color:var(--color-accent); background:var(--color-paper-2); }
+.icon { display:grid; place-items:center; width:44px; height:44px; border:1px solid var(--color-rule); border-radius:var(--radius-panel); color:var(--color-accent); background:var(--color-paper-2); }
 .dialog header p { margin:0 0 3px; font-size:10px; font-weight:700; letter-spacing:.12em; color:var(--color-ink-2); }
 .dialog h2 { margin:0; font-size:21px; font-weight:650; letter-spacing:-.03em; }
-.dialog header button { display:grid; place-items:center; margin-left:auto; width:44px; height:44px; border-radius:8px; color:var(--color-ink-2); }
+.dialog header button { display:grid; place-items:center; margin-left:auto; width:44px; height:44px; border-radius:var(--radius-control); color:var(--color-ink-2); }
 .scope { margin:22px 0; padding:14px 16px; border:1px solid var(--color-rule); border-radius:9px; background:var(--color-paper-2); }
 .scope > span { display:block; font-size:11px; color:var(--color-ink-2); }
 .scope strong { display:block; margin:5px 0; font-size:15px; }
@@ -18,11 +18,11 @@
 .option strong { display:block; font-size:13px; font-weight:600; }
 .option small { display:block; margin-top:4px; font-size:12px; line-height:1.55; color:var(--color-ink-2); }
 .help { margin:14px 0 0; font-size:11px; line-height:1.65; color:var(--color-ink-2); }
-.error { padding:10px 12px; border-radius:7px; color:var(--color-error); background:var(--color-paper-2); font-size:12px; }
+.error { padding:10px 12px; border-radius:var(--radius-control); color:var(--color-error); background:var(--color-paper-2); font-size:12px; }
 .dialog footer { display:flex; justify-content:flex-end; gap:8px; margin-top:22px; padding-top:18px; border-top:1px solid var(--color-rule); }
 .dialog button { cursor:pointer; }
 .dialog button:disabled,.dialog fieldset:disabled { opacity:.6; cursor:wait; }
-.cancel,.download { display:flex; justify-content:center; align-items:center; gap:7px; min-height:42px; padding:10px 16px; border:1px solid var(--color-rule); border-radius:8px; font-size:13px; font-weight:500; }
+.cancel,.download { display:flex; justify-content:center; align-items:center; gap:7px; min-height:42px; padding:10px 16px; border:1px solid var(--color-rule); border-radius:var(--radius-control); font-size:13px; font-weight:500; }
 .cancel { background:var(--color-paper); }
 .download { background:var(--color-accent); color:var(--color-paper); border-color:var(--color-accent); }
 .dialog :is(button,input):focus-visible { outline:2px solid var(--color-accent); outline-offset:3px; }

@@ -1,19 +1,19 @@
-.page { --analysis-deli:#1d4ed8; --analysis-pick:#047857; --rp-soft:color-mix(in srgb,var(--analysis-deli) 5%,var(--color-paper)); --rp-muted:#526178; gap:20px; min-width:0; width:100%; padding-bottom:32px; }
-:global(.dark) .page { --analysis-deli:#93c5fd; --analysis-pick:#6ee7b7; --rp-muted:#a5b4c7; }
+.page { --analysis-deli:var(--color-accent); --analysis-pick:var(--color-success); --rp-soft:color-mix(in srgb,var(--analysis-deli) 5%,var(--color-paper)); --rp-muted:var(--color-muted); gap:20px; min-width:0; width:100%; padding-bottom:32px; }
+:global(.dark) .page { --analysis-deli:var(--color-accent); --analysis-pick:var(--color-success); --rp-muted:var(--color-muted); }
 .page :global(.perf-header) { flex-direction:row; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:8px 0 4px; background:transparent; border:0; box-shadow:none; gap:20px; }
 .page :global(.perf-header-top) { align-items:center; gap:16px; min-width:0; }
 .page :global(.perf-title) { font-family:inherit; font-size:clamp(28px,2.6vw,38px); font-weight:750; letter-spacing:-1.2px; line-height:1.2; }
 .page :global(.perf-mark) { width:52px; height:52px; border-radius:15px; background:var(--analysis-deli); color:var(--color-paper); }
 .page :global(.perf-kicker) { color:var(--analysis-deli); font-family:inherit; font-weight:650; font-size:11px; line-height:1.5; letter-spacing:1.3px; margin-bottom:5px; }
 .page :global(.perf-desc) { color:var(--rp-muted); font-size:13px; margin-top:7px; }
-.page :global(.perf-scope) { display:grid; flex-shrink:0; gap:5px; padding:14px 18px; background:var(--color-paper); border:1px solid var(--color-rule); border-radius:12px; box-shadow:none; font-size:12px; }
+.page :global(.perf-scope) { display:grid; flex-shrink:0; gap:5px; padding:14px 18px; background:var(--color-paper); border:1px solid var(--color-rule); border-radius:var(--radius-panel); box-shadow:none; font-size:12px; }
 .page :global(.perf-scope)>span { display:flex; align-items:center; gap:7px; color:var(--rp-muted); }
 .page :global(.perf-scope strong) { font-size:14px; font-weight:650; color:var(--color-ink); font-variant-numeric:tabular-nums; }
 .page :global(.perf-scope small) { font-size:11px; color:var(--rp-muted); }
-.page :global(.perf-filters) { position:static; backdrop-filter:none; box-shadow:0 2px 8px #0f172a04; background:var(--color-paper); border-radius:16px; }
+.page :global(.perf-filters) { position:static; backdrop-filter:none; box-shadow:0 2px 8px color-mix(in srgb, var(--color-ink) 1.6%, transparent); background:var(--color-paper); border-radius:var(--radius-panel); }
 .page :global(.perf-field-label) { text-transform:none; letter-spacing:0; font-weight:550; color:var(--rp-muted); }
 .page :global(.perf-kpi-grid) { grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-.page :global(.perf-kpi) { padding:20px; min-height:174px; min-width:0; gap:14px; box-shadow:0 2px 8px #0f172a04; border-radius:16px; }
+.page :global(.perf-kpi) { padding:20px; min-height:174px; min-width:0; gap:14px; box-shadow:0 2px 8px color-mix(in srgb, var(--color-ink) 1.6%, transparent); border-radius:var(--radius-panel); }
 .page :global(.perf-kpi-title) { text-transform:none; letter-spacing:0; font-size:13px; font-weight:550; color:var(--rp-muted); }
 .page :global(.perf-kpi-icon) { width:34px; height:34px; border-radius:10px; color:var(--analysis-deli); background:color-mix(in srgb,var(--analysis-deli) 8%,var(--color-paper)); }
 .page :global(.perf-kpi):nth-child(2n) :global(.perf-kpi-icon) { color:var(--analysis-pick); background:color-mix(in srgb,var(--analysis-pick) 8%,var(--color-paper)); }
@@ -28,7 +28,7 @@
 .page :global(.perf-context-stat) { display:flex; flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:6px 10px; background:transparent; padding:0; }
 .page :global(.perf-context-value) { font-size:13px; }
 .page :global(.perf-context-label),.page :global(.perf-context-sub) { font-size:12px; color:var(--rp-muted); }
-.page :global(.perf-table) { border-radius:16px; box-shadow:0 2px 8px #0f172a04; }
+.page :global(.perf-table) { border-radius:var(--radius-panel); box-shadow:0 2px 8px color-mix(in srgb, var(--color-ink) 1.6%, transparent); }
 .page :global(.perf-badge) { font-size:12px; font-weight:550; padding:6px 10px; }
 .page :is(button,a,input,select,summary):focus-visible { outline:2px solid var(--analysis-deli); outline-offset:3px; scroll-margin-block:80px; }
 .page button:not(:disabled),.page summary,.page select { cursor:pointer; }
@@ -42,7 +42,7 @@
 @media(prefers-reduced-motion:reduce) { .page *,.page *::before,.page *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
 .dashboard { display: grid; gap: 20px; min-width: 0; }
 .twoColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-width: 0; }
-.panel { padding:24px; border:1px solid var(--color-rule); border-radius:16px; background:var(--color-paper); min-width:0; box-shadow:0 2px 8px #0f172a04; }
+.panel { padding:24px; border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); min-width:0; box-shadow:0 2px 8px color-mix(in srgb, var(--color-ink) 1.6%, transparent); }
 .heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
 .headingIcon { display: grid; place-items: center; flex-shrink: 0; padding-top: 2px; color: var(--color-muted); }
 .heading h2 { margin:0; font-size:17px; font-weight:650; letter-spacing:-.3px; color:var(--color-ink); }
@@ -61,7 +61,7 @@
 .delivery { color: var(--analysis-deli); }
 .pickup { color: var(--analysis-pick); }
 .trend { min-width: 0; }
-.trendDetail { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; min-height: 58px; padding: 12px 16px; border-radius: 8px; background: var(--color-paper-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.trendDetail { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; min-height: 58px; padding: 12px 16px; border-radius:var(--radius-control); background: var(--color-paper-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 .trendDetail > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--color-muted); }
 .trendDetail b,.trendDetail strong { color: var(--color-ink); font-weight: 650; }
 .trendDetail small { font-size: 11px; }
