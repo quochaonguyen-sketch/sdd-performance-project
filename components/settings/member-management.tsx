@@ -219,7 +219,7 @@ function AreaPermissions({ areas, onChange, disabled }: { areas: string[]; onCha
 
 function PermissionMultiSelect({ value, onChange, disabled }: { value: MemberPermissions; onChange: (value: MemberPermissions) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const selected = useMemo(() => selectedPermissionKeys(value), [value]);
+  const selected = useMemo(() => selectedPermissionKeys(value).filter(key=>key==="manage_riders"), [value]);
   const summary = selected.length === 0
     ? "Chưa chọn quyền"
     : selected.length === PERMISSION_OPTIONS.length
@@ -251,7 +251,7 @@ function PermissionMultiSelect({ value, onChange, disabled }: { value: MemberPer
       ) : null}
       {open && !disabled ? (
         <div className="absolute z-20 mt-2 max-h-72 w-full min-w-[240px] overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-          {PERMISSION_OPTIONS.map((item) => (
+          {PERMISSION_OPTIONS.filter(item=>item.key==="manage_riders").map((item) => (
             <label key={item.key} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm hover:bg-slate-50">
               <input type="checkbox" className="mt-0.5" checked={value[item.key]} onChange={() => toggle(item.key)} />
               <span>

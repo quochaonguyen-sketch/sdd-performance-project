@@ -10,7 +10,7 @@ import "./data-sources.css";
 type Job={id:string;source_id:DataSourceId;report_date:string;status:string;phase:string;message:string;requested_at:string;started_at:string|null;finished_at:string|null;events:{at:string;message:string}[]};
 type Setting=SourceScheduleSetting;
 type Worker={id:string;hostname:string;concurrency:number;last_seen_at:string};
-type State={sources:typeof DATA_SOURCES[number][];settings:Setting[];jobs:Job[];workers:Worker[];serverTime:string};
+type State={sources:Array<typeof DATA_SOURCES[number]&{canControl:boolean}>;settings:Setting[];jobs:Job[];workers:Worker[];serverTime:string;canControl:boolean};
 const active=(j:Job)=>["QUEUED","RUNNING","CANCEL_REQUESTED"].includes(j.status);
 const labels:Record<string,string>={QUEUED:"Chờ máy chủ",RUNNING:"Đang chạy",CANCEL_REQUESTED:"Đang yêu cầu dừng",SUCCEEDED:"Thành công",FAILED:"Thất bại",CANCELLED:"Đã dừng"};
 const time=(value:string|null)=>value?new Date(value).toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"}):"—";
@@ -35,7 +35,7 @@ export function DataSourcesView(){
     <div className={`rounded-2xl border p-5 ${workers.length?"border-emerald-200 bg-emerald-50":"border-amber-200 bg-amber-50"}`}><div className="flex items-center gap-3"><Server size={24}/><div><p className="font-semibold">{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</p><p className="mt-1 text-sm">{workers.length?workers.map(w=>`${w.hostname} · tối đa ${w.concurrency} nguồn song song`).join(" | "):"Lệnh chạy sẽ xếp hàng. Bật run_sources_worker.cmd trong sdd-web-data trên máy chủ để nhận lệnh."}</p></div><span className="ml-auto rounded-full bg-white/70 px-3 py-1 text-sm">{state?.jobs.filter(active).length??0} tác vụ đang chờ / chạy</span></div></div>
     {error&&<div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</div>}{notice&&<div role="status" className="rounded-xl bg-blue-50 p-4 text-blue-700">{notice}</div>}
     {!state&&!error&&<p className="flex gap-2"><Loader2 className="animate-spin" size={18}/>Đang tải nguồn dữ liệu…</p>}
-    <SpxSession />
+    {state?.canControl&&<SpxSession />}
     <div className="ds-section-heading"><div><span className="ds-section-kicker">VẬN HÀNH DỮ LIỆU</span><h2>Các nguồn đồng bộ <span>{state?.sources.length??"—"}</span></h2></div><p>Chạy thủ công hoặc mở từng nguồn để chỉnh lịch.</p></div>
     <div className="ds-source-grid">{state?.sources.map(source=>{
       const setting=state.settings.find(s=>s.source_id===source.id),job=state.jobs.find(j=>j.source_id===source.id&&active(j))??state.jobs.find(j=>j.source_id===source.id),running=job&&active(job);
@@ -49,9 +49,9 @@ export function DataSourcesView(){
           <div className="ds-job-history">{job?<button type="button" onClick={()=>setSelected(job.id)}><History size={14} aria-hidden="true"/>Nhật ký</button>:<span>Chưa có nhật ký</span>}</div></div>
           <div className="ds-run-controls">
             {source.dated?<label className="ds-run-date"><span>Ngày dữ liệu</span><input aria-label={`Ngày ${source.name}`} type="date" max={vietnamDay()} value={dates[source.id]??vietnamDay()} onChange={e=>setDates({...dates,[source.id]:e.target.value})}/></label>:<p className="ds-run-date ds-live-note"><span className="ds-live-dot"/>Dữ liệu hiện tại</p>}
-            <div className="ds-run-actions"><button type="button" disabled={!!busy||!!running} onClick={()=>void command(source.id,"run")} className="ds-run-button"><Play size={15} aria-hidden="true"/>{busy===source.id?"Đang gửi…":"Chạy ngay"}</button><button type="button" disabled={!!busy||!running||job?.status==="CANCEL_REQUESTED"} onClick={()=>void command(source.id,"stop")} className="ds-stop-button"><Square size={13} aria-hidden="true"/>Dừng</button></div>
+            <div className="ds-run-actions"><button type="button" disabled={!source.canControl||!!busy||!!running} onClick={()=>void command(source.id,"run")} className="ds-run-button"><Play size={15} aria-hidden="true"/>{busy===source.id?"Đang gửi…":"Chạy ngay"}</button><button type="button" disabled={!source.canControl||!!busy||!running||job?.status==="CANCEL_REQUESTED"} onClick={()=>void command(source.id,"stop")} className="ds-stop-button"><Square size={13} aria-hidden="true"/>Dừng</button></div>
           </div>
-        </div><SourceSchedule source={source} setting={setting} disabled={!!busy} saving={busy===source.id} onSave={draft=>command(source.id,"auto",draft)}/>
+        </div><SourceSchedule source={source} setting={setting} disabled={!source.canControl||!!busy} saving={busy===source.id} onSave={draft=>command(source.id,"auto",draft)}/>
       </section>;
     })}</div>
     <p className="flex items-start gap-2 text-sm text-slate-500"><Clock3 size={17} className="shrink-0"/>Dừng tác vụ và tắt lịch tự động là hai thao tác riêng. Nếu tác vụ đang ghi dữ liệu, worker hoàn tất lượt ghi trước khi dừng. Lịch theo giờ cố định dùng giờ Việt Nam (UTC+7). Ngày dữ liệu theo lựa chọn trong lịch; ô ngày phía trên dùng cho chạy một lần.</p>

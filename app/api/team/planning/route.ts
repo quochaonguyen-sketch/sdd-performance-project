@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { addDays, vietnamToday } from "@/lib/team/model";
 import { duration, suggestShiftPlan, validBreaks, type PlanningStaff, type PlanningShift } from "@/lib/team/planning";
 import { loadTeam } from "@/lib/team/server";
+import {canEditStaff,canViewPage} from "@/lib/auth/page-access";
 const area = z.enum(["KV1","KV2","KV3","KV4","KV5","KV6","SPF"]);
 const pool = z.enum(["OPS","FTE","BPO"]);
 const breaks = z.array(z.object({ start: z.number().int().min(0), end: z.number().int().max(720) })).max(5);
@@ -18,7 +19,8 @@ export async function POST(request: Request) {
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   const body = await request.json().catch(() => null);
-  if (body?.action !== "suggest" && context.profile.role !== "admin") return NextResponse.json({ error: "Chỉ admin được thay đổi ca, định biên và áp dụng phương án." }, { status: 403 });
+  if(!canViewPage(context.profile.role,context.profile.page_access,"team"))return NextResponse.json({error:"Không có quyền xem nhân sự và lịch."},{status:403});
+  if (body?.action !== "suggest" && !canEditStaff(context.profile.role,context.profile.page_access)) return NextResponse.json({ error: "Chỉ Admin hoặc Leader có quyền được thay đổi ca, định biên và áp dụng phương án." }, { status: 403 });
   const admin = createAdminClient();
   try {
     if (body?.action === "template") {

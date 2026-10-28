@@ -18,6 +18,7 @@ import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
 import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
+import {pageForPath,canViewPage,type PageAccess} from "@/lib/auth/page-access";
 
 const volumeItems = [
   { href: "/volume/delivery", label: "Delivery Volume", icon: Truck },
@@ -47,6 +48,7 @@ const navItems = [
   { href: "/imports", label: "Data Import", icon: PackagePlus },
   { href: "/data-sources", label: "Data Sources", icon: Activity },
   { href: "/settings", label: "Members", icon: UsersRound },
+  { href: "/role-permissions", label: "Phân quyền vai trò", icon: Settings2 },
   { href: "/user-activity", label: "Activity Log", icon: Activity },
   { href: "/site-health", label: "Sức khỏe website", icon: Activity },
 ];
@@ -85,7 +87,7 @@ function getTrustedFrameContext() {
   }
 }
 
-export function AppShell({ children, user }: { children: React.ReactNode; user: { email: string; fullName: string | null; role: string } }) {
+export function AppShell({ children, user }: { children: React.ReactNode; user: { email: string; fullName: string | null; role: string; pageAccess?:PageAccess } }) {
   const pathname = usePathname();
   const rememberedHref = useRememberedLinks();
   const router = useRouter();
@@ -97,28 +99,29 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitRoute, setSplitRoute] = useState("/dashboard");
   const [theme, setTheme] = useState<ThemeMode>("light");
-  const memberToolRestricted = user.role === "member";
-  const visibleToolItems = memberToolRestricted ? [] : toolItems;
-  const visiblePickupItems = memberToolRestricted ? [] : pickupItems;
-  const visibleReturnItems = returnItems;
-  const workspaceItems = navItems.filter((item) => !["/settings", "/user-activity", "/site-health", "/feedback"].includes(item.href) && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
+  const allowedHref=(href:string)=>{const key=pageForPath(href);return key==="admin"?user.role==="admin":!key||canViewPage(user.role,user.pageAccess,key);};
+  const visibleToolItems = toolItems.filter(item=>allowedHref(item.href));
+  const memberToolRestricted = visibleToolItems.length===0;
+  const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
+  const visibleReturnItems = returnItems.filter(item=>allowedHref(item.href));
+  const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
   const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
-  const systemItems = navItems.filter((item) => item.href === "/settings" || ["/user-activity", "/site-health"].includes(item.href) && user.role === "admin");
+  const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
   const moreNavItems = [
     ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
     ...visibleReturnItems,
     ...visiblePickupItems,
     ...visibleToolItems,
     ...systemItems,
-    navItems.find((item) => item.href === "/feedback")!,
+    ...navItems.filter((item) => item.href === "/feedback"&&allowedHref(item.href)),
   ];
   const pickupActive = pathname.startsWith("/pickup-management");
   const returnActive = pathname.startsWith("/return-orders");
   const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
     : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
     : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
-    : pathname.startsWith("/settings") || pathname.startsWith("/user-activity") || pathname.startsWith("/site-health") ? "settings" : "operations";
+    : pathname.startsWith("/settings") || pathname.startsWith("/role-permissions") || pathname.startsWith("/user-activity") || pathname.startsWith("/site-health") ? "settings" : "operations";
   const [moduleSelection, setModuleSelection] = useState<{ pathname: string; module: WorkspaceModule } | null>(null);
   const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
   const modules = [
@@ -139,8 +142,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     : pickupActive
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
       : [...navItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  const splitItems = navItems.filter((item) => !memberToolRestricted || !memberHiddenItems.has(item.href))
-    .filter((item) => item.href !== pathname && (!["/user-activity", "/site-health"].includes(item.href) || user.role === "admin") && (item.href !== "/data-sources" || ["admin", "leader"].includes(user.role)));
+  const splitItems = navItems.filter((item) => item.href!==pathname&&allowedHref(item.href));
   const activeSplitRoute = splitRoute === pathname ? (splitItems[0]?.href ?? "/dashboard") : splitRoute;
 
   useEffect(() => {
@@ -195,7 +197,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             {moduleItems.map((item) => {
               const group = navigationGroups.find(group => group.paths.includes(item.href));
               if (group) {
-                if (group.paths[0] !== item.href) return null;
+                if (moduleItems.find(child=>group.paths.includes(child.href))?.href !== item.href) return null;
                 const items = moduleItems.filter(child => group.paths.includes(child.href));
                 return <NavigationGroup key={`${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))}>
                   {items.map(child => <Link key={child.href} href={rememberedHref(child.href)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={16} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
@@ -266,7 +268,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           {moreNavItems.map((item) => {
             const group = navigationGroups.find(group => group.paths.includes(item.href));
             if (group) {
-              if (group.paths[0] !== item.href) return null;
+              if (moreNavItems.find(child=>group.paths.includes(child.href))?.href !== item.href) return null;
               const items = moreNavItems.filter(child => group.paths.includes(child.href));
               return <NavigationGroup key={`mobile:${group.label}:${pathname}:${searchParams.get("view") ?? ""}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))} mobile>
                 {items.map(child => <Link key={child.href} href={rememberedHref(child.href)} onClick={() => setMoreOpen(false)} aria-current={isNavigationItemActive(child, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-more-link", isNavigationItemActive(child, pathname, searchParams.get("view")) && "is-active")}><child.icon size={17} aria-hidden="true"/><span>{child.label}</span><NavigationPendingIndicator/></Link>)}
@@ -281,7 +283,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
       </section>
 
       <nav className="app-taskbar" aria-label="Điều hướng nhanh">
-        {mobileNavItems.map((item) => {
+        {mobileNavItems.filter(item=>allowedHref(item.href)).map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return <Link key={item.href} href={rememberedHref(item.href)} aria-current={active ? "page" : undefined} className={cn("app-taskbar-link", active && "is-active")}><Icon size={19} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;

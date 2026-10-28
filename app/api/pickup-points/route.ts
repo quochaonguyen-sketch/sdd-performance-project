@@ -1,11 +1,12 @@
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {canViewPage} from "@/lib/auth/page-access";
 
 export async function GET(request:Request) {
  const context=await getCurrentUserContext();
  if(!context)return Response.json({error:"Chưa đăng nhập"},{status:401});
- if(!canAccessPickupManagement(context.profile.role,context.profile.permissions))return Response.json({error:"Không có quyền xem Pickup Points"},{status:403});
+ if(!canAccessPickupManagement(context.profile.role,context.profile.permissions)||!canViewPage(context.profile.role,context.profile.page_access,"pickup_management"))return Response.json({error:"Không có quyền xem Pickup Points"},{status:403});
  const params=new URL(request.url).searchParams;
  const sort=params.get("sort")??"ado_desc";
  if(!["route","ado_desc"].includes(sort))return Response.json({error:"Sắp xếp không hợp lệ"},{status:400});

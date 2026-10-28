@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
 import { normalizeRiderEditAreas } from "@/lib/auth/rider-scope";
+import {loadRoleAccess} from "@/lib/auth/role-access-server";
+import {viewPermissions,type PageAccess} from "@/lib/auth/page-access";
 
 export type CurrentUserContext = {
   user: {
@@ -15,6 +17,7 @@ export type CurrentUserContext = {
     role: string;
     permissions: MemberPermissions;
     rider_edit_areas: string[];
+    page_access?: PageAccess;
   };
 };
 
@@ -49,7 +52,9 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
 
   const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId);
   if (authError || !authUser.user) throw new Error("Không tải được quyền hiện tại của tài khoản.");
-  const permissions = normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
+  const page_access=await loadRoleAccess(byEmail.role);
+  const storedPermissions=normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
+  const permissions = ["member","leader"].includes(byEmail.role)?viewPermissions(storedPermissions,page_access):storedPermissions;
 
   return {
     user: { id: userId, email },
@@ -57,6 +62,7 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
       full_name: byEmail.full_name,
       role: byEmail.role,
       permissions,
+      page_access,
       rider_edit_areas: normalizeRiderEditAreas(authUser.user.app_metadata?.rider_edit_areas),
     },
   };

@@ -1,3 +1,4 @@
+import {canViewPage} from "@/lib/auth/page-access";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -84,13 +85,13 @@ async function session() {
   const context = await getCurrentUserContext();
   if (!context) return null;
   const admin = createAdminClient();
-  return { user: context.user, role: context.profile.role, permissions: context.profile.permissions, admin };
+  return { user: context.user, role: context.profile.role, permissions: context.profile.permissions, admin, canViewManagement:canViewPage(context.profile.role,context.profile.page_access,"pickup_management") };
 }
 
 export async function GET(request: Request) {
   const auth = await session();
   if (!auth) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  if (!canAccessPickupManagement(auth.role, auth.permissions)) {
+  if (!canAccessPickupManagement(auth.role, auth.permissions) || !auth.canViewManagement) {
     return NextResponse.json({ success: false, error: "Không có quyền xem Pickup Management" }, { status: 403 });
   }
 
@@ -228,7 +229,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const auth = await session();
   if (!auth) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  if (!canAccessPickupManagement(auth.role, auth.permissions)) {
+  if (!canAccessPickupManagement(auth.role, auth.permissions) || !auth.canViewManagement) {
     return NextResponse.json({ success: false, error: "Không có quyền xem Pickup Management" }, { status: 403 });
   }
   if (auth.role !== "admin" && auth.role !== "leader") {

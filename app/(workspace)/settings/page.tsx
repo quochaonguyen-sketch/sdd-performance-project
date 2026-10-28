@@ -15,8 +15,9 @@ export default async function SettingsPage() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Administration</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-950">Quản lý thành viên</h1>
-          <p className="mt-1 text-sm text-slate-500">Thêm email được phép đăng nhập Google và chọn quyền từng chức năng.</p>
+          <p className="mt-1 text-sm text-slate-500">Thêm email đăng nhập và quyền sửa Rider theo KV. Quyền xem trang được cấu hình chung trong Phân quyền vai trò.</p>
           {isAdmin ? <Link href="/user-activity" className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">Xem nhật ký đăng nhập, truy cập và chỉnh sửa →</Link> : null}
+          {isAdmin ? <Link href="/role-permissions" className="ml-4 mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">Cấu hình Member / Leader được xem trang nào →</Link> : null}
         </div>
         {isAdmin ? <MemberManagement /> : <Card className="border-amber-200 bg-amber-50"><h2 className="font-bold text-amber-900">Khu vực dành cho Admin</h2><p className="mt-1 text-sm text-amber-800">Tài khoản của bạn không có quyền quản lý thành viên.</p></Card>}
         <AiConnectionSettings />

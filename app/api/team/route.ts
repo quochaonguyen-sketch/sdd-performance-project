@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadTeam } from "@/lib/team/server";
+import {canEditStaff,canViewPage} from "@/lib/auth/page-access";
 import { staffAreas, STAFF_ROLES } from "@/lib/team/model";
 import { templateCode, type ShiftTemplate } from "@/lib/team/planning";
 
@@ -18,7 +19,9 @@ const staffSchema = z.object({
 const shiftSchema = z.object({ staff_id: z.string().min(1).max(64), work_date: date, shift: z.string().trim().max(100), template_id: z.uuid().nullable().optional() });
 
 export async function GET(request: Request) {
-  if (!await getCurrentUserContext()) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  const context=await getCurrentUserContext();
+  if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  if(!canViewPage(context.profile.role,context.profile.page_access,"team"))return NextResponse.json({error:"Không có quyền xem nhân sự và lịch."},{status:403});
   const params = new URL(request.url).searchParams;
   const from = date.safeParse(params.get("from")), to = date.safeParse(params.get("to"));
   if (!from.success || !to.success || from.data > to.data || Date.parse(to.data) - Date.parse(from.data) > 31 * 86400000) return NextResponse.json({ error: "Khoảng ngày không hợp lệ, tối đa 31 ngày." }, { status: 400 });
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
-  if (context.profile.role !== "admin") return NextResponse.json({ error: "Chỉ admin được chỉnh sửa nhân sự và lịch." }, { status: 403 });
+  if (!canEditStaff(context.profile.role,context.profile.page_access)) return NextResponse.json({ error: "Chỉ Admin hoặc Leader có quyền được chỉnh sửa nhân sự và lịch." }, { status: 403 });
   const body = await request.json().catch(() => null);
   const admin = createAdminClient();
   if (body?.action === "shift") {

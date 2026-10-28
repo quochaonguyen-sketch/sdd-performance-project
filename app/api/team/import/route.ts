@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStaffCsv } from "@/lib/team/import";
+import {canEditStaff} from "@/lib/auth/page-access";
 
 export async function POST(request: Request) {
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
-  if (context.profile.role !== "admin") return NextResponse.json({ error: "Chỉ admin được nhập nhân sự và lịch." }, { status: 403 });
+  if (!canEditStaff(context.profile.role,context.profile.page_access)) return NextResponse.json({ error: "Chỉ Admin hoặc Leader có quyền được nhập nhân sự và lịch." }, { status: 403 });
   try {
     const form = await request.formData(), file = form.get("file");
     if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".csv") || file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "Chọn file CSV tối đa 5 MB." }, { status: 400 });

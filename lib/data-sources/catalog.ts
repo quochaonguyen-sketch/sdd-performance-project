@@ -13,6 +13,9 @@ export const DATA_SOURCES = [
 export type DataSourceId = typeof DATA_SOURCES[number]["id"];
 export function dataSource(id: unknown) { return DATA_SOURCES.find(s=>s.id===id); }
 export function canControlSources(role:string) { return role==="admin"||role==="leader"; }
+export function canViewSource(role:string,permissions:Record<string,boolean>,id:unknown){
+ const source=dataSource(id);return !!source&&(["admin","member","leader"].includes(role)||permissions[source.permission]===true);
+}
 export function sourceAllowed(role:string, permissions:Record<string,boolean>, id:unknown) {
   const source=dataSource(id);
   return !!source&&canControlSources(role)&&(role==="admin"||permissions[source.permission]===true);

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DATA_SOURCES, sourceAllowed, sourceAction } from "@/lib/data-sources/catalog";
+import { DATA_SOURCES, sourceAllowed, sourceAction,canViewSource } from "@/lib/data-sources/catalog";
 
 export async function GET() {
   const context = await getCurrentUserContext().catch(() => null);
   if (!context) return NextResponse.json({error:"Chưa đăng nhập"},{status:401});
-  const sources = DATA_SOURCES.filter(s=>sourceAllowed(context.profile.role,context.profile.permissions,s.id));
+  const sources = DATA_SOURCES.filter(s=>canViewSource(context.profile.role,context.profile.permissions,s.id)).map(source=>({...source,canControl:sourceAllowed(context.profile.role,context.profile.permissions,source.id)}));
   if (!sources.length) return NextResponse.json({error:"Không có quyền quản lý nguồn dữ liệu"},{status:403});
   const db=createAdminClient(), ids=sources.map(s=>s.id);
   const [settings,jobs,workers]=await Promise.all([
@@ -15,7 +15,7 @@ export async function GET() {
     db.from("data_source_workers").select("id,hostname,version,concurrency,last_seen_at").order("last_seen_at",{ascending:false}).limit(10),
   ]);
   if(settings.error||jobs.error||workers.error) return NextResponse.json({error:"Chưa tải được bảng điều khiển worker. Kiểm tra cấu hình máy chủ."},{status:503});
-  return NextResponse.json({sources,settings:settings.data,jobs:jobs.data,workers:workers.data,serverTime:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({sources,settings:settings.data,jobs:jobs.data,workers:workers.data,canControl:sources.some(source=>source.canControl),serverTime:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request:Request) {

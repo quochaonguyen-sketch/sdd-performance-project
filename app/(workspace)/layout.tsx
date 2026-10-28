@@ -9,7 +9,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
   const context = await getCurrentUserContext();
   if (!context) redirect("/login");
 
-  return <FilterMemoryProvider key={context.user.id} userId={context.user.id}><ProductUpdatesProvider><AppShell user={{ email: context.user.email, fullName: context.profile.full_name, role: context.profile.role }}>
+  return <FilterMemoryProvider key={context.user.id} userId={context.user.id}><ProductUpdatesProvider><AppShell user={{ email: context.user.email, fullName: context.profile.full_name, role: context.profile.role, pageAccess:context.profile.page_access }}>
     <UserActivityTracker />
     {children}
   </AppShell></ProductUpdatesProvider></FilterMemoryProvider>;

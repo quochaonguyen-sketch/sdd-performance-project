@@ -14,7 +14,7 @@
  };
  for(const extension of ['.ts','.tsx'])Module._extensions[extension]=function(mod,file){mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);};
  const load=Module.createRequire(__filename),React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server'),{AppShell}=load('../components/layout/app-shell.tsx');
- for(const role of ['admin','member'])for(const route of ['/volume/delivery','/volume/pickup','/onhold','/pickup-management','/pickup-management?view=replacement','/return-orders']){
+ for(const role of ['admin','leader','member'])for(const route of ['/volume/delivery','/volume/pickup','/onhold','/pickup-management','/pickup-management?view=replacement','/return-orders']){
   pathname=route;
   const html=renderToStaticMarkup(React.createElement(AppShell,{user:{email:'preview@example.com',fullName:'Preview',role}},React.createElement('p',null,'Preview')));
   const sidebar=html.split('aria-label="Main navigation"')[1].split('</nav>')[0];
@@ -47,5 +47,10 @@
   }
   if(role==='admin'&&route==='/volume/delivery')fs.writeFileSync(path.join(root,'.next/sidebar-preview.html'),`<!doctype html><html><head><meta charset="utf-8"><style>${fs.readFileSync(path.join(root,'app/workspace.css'),'utf8')}</style></head><body>${html}</body></html>`);
  }
+ pathname='/pickup-realtime';
+ const {normalizePageAccess}=load('../lib/auth/page-access.ts');
+ const restricted=renderToStaticMarkup(React.createElement(AppShell,{user:{email:'preview@example.com',fullName:'Preview',role:'leader',pageAccess:normalizePageAccess('leader',{delivery_realtime:false,team:false,pickup_management:false})}},React.createElement('p',null,'Preview')));
+ assert.ok(restricted.includes('href="/pickup-realtime"'),'Allowed second item must remain visible when first item in group is denied');
+ assert.ok(!restricted.includes('href="/team"'));assert.ok(!restricted.includes('href="/realtime-dashboard"'));assert.ok(!restricted.includes('href="/pickup-management"'));
  console.log('Sidebar order, unique Volume links, active submenu, mobile grouping and role visibility passed.');
 })().catch(error=>{console.error(error.stack);process.exitCode=1;});
