@@ -33,3 +33,9 @@ test('dashboard rows sort by actual arrival and do not require a fabricated unlo
  {...trip,source:'dashboard',phase:'at_hub',lt_code:'NEW',hub_ata:'2026-10-27T09:00:00+07:00'}] as LinehaulTrip[];
  assert.deepEqual(sortTrips(rows).map(row=>row.lt_code),['NEW','OLD']);
 });
+test('unloading phase sorts before at_hub and after en_route',()=>{
+ const rows=[{...trip,phase:'at_hub',lt_code:'AT_HUB'},
+ {...trip,phase:'unloading',lt_code:'UNLOADING'},
+ {...trip,phase:'en_route',lt_code:'EN_ROUTE'}] as LinehaulTrip[];
+ assert.deepEqual(sortTrips(rows).map(r=>r.lt_code),['EN_ROUTE','UNLOADING','AT_HUB']);
+});

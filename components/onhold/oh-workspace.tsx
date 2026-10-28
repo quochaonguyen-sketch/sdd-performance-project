@@ -379,7 +379,7 @@ export function OHWorkspace({
 
       if (!orderData.has_snapshot) {
         alert(
-          "Mã đơn chi tiết chỉ lưu trong ngày hiện tại. Ngày này đã chốt qua ngày và snapshot đã giải phóng, chỉ lưu pivot thống kê."
+          "Mã đơn chi tiết được lưu 7 ngày gần nhất. Ngày này đã hết hạn lưu hoặc chưa có danh sách mã đơn; thống kê OH vẫn được giữ."
         );
         return;
       }
@@ -463,7 +463,7 @@ export function OHWorkspace({
 
       if (!orderData.has_snapshot) {
         alert(
-          "Mã đơn chi tiết chỉ lưu trong ngày hiện tại. Ngày này đã chốt qua ngày và snapshot đã giải phóng, chỉ lưu pivot thống kê."
+          "Mã đơn chi tiết được lưu 7 ngày gần nhất. Ngày này đã hết hạn lưu hoặc chưa có danh sách mã đơn; thống kê OH vẫn được giữ."
         );
         return;
       }
@@ -621,8 +621,8 @@ export function OHWorkspace({
         <Database size={18} />
         <p>
           <strong>Ghi nhận OH lũy kế.</strong> Mỗi mã được tính một lần/ngày, giữ lại dù sau đó hub nhận về hoặc đổi
-          trạng thái. Khóa khử trùng và mã đơn chi tiết được lưu trong ngày; khi chốt sang ngày mới, snapshot chi tiết
-          sẽ giải phóng và bảo lưu thống kê pivot tổng hợp.
+          trạng thái. Khóa khử trùng và mã đơn chi tiết được lưu 7 ngày gần nhất (hôm nay và 6 ngày trước). Qua thời hạn này,
+          danh sách mã đơn được giải phóng; thống kê pivot tổng hợp vẫn được bảo lưu.
         </p>
       </div>
 
@@ -936,8 +936,7 @@ export function OHWorkspace({
           <p>
             {isHistorical ? (
               <>
-                <strong>Dữ liệu lịch sử ({shortDate(day)})</strong> · Snapshot chi tiết mã đơn đã tự động giải phóng
-                sau khi chốt ngày; dữ liệu lưu trữ dưới dạng pivot tổng hợp để phân tích và đối soát.
+                <strong>Dữ liệu lịch sử ({shortDate(day)})</strong> · Số liệu ngày đã chốt được giữ nguyên. Có thể xem và xuất mã đơn còn lưu trong 7 ngày gần nhất; ngoài thời hạn này chỉ giữ thống kê tổng hợp.
               </>
             ) : cumulative ? (
               <>
@@ -946,7 +945,7 @@ export function OHWorkspace({
                 {report.finalized_at
                   ? ` · Chốt ${timeLabel(report.finalized_at)}`
                   : " · Tự động chốt lúc 00:00 giờ Việt Nam."}{" "}
-                Chức năng xem và xuất mã đơn hoạt động đầy đủ trong ngày.
+                Chức năng xem và xuất mã đơn hoạt động với danh sách còn lưu trong 7 ngày gần nhất.
               </>
             ) : (
               <>

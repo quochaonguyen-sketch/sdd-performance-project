@@ -311,12 +311,10 @@ export function OHOrderDialog({
               <AlertCircle size={36} />
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              Mã đơn chi tiết chỉ lưu trong ngày hiện tại
+              Mã đơn chi tiết được lưu trong 7 ngày gần nhất
             </h3>
             <p className="max-w-md text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              Ngày <strong>{day}</strong> đã chốt qua ngày. Theo quy chế lưu trữ, snapshot mã đơn chi tiết đã được tự
-              động giải phóng khi sang ngày mới để tối ưu dung lượng và bảo mật. Dữ liệu ngày này hiện chỉ lưu trữ thống
-              kê pivot tổng hợp.
+              Ngày <strong>{day}</strong> đã hết thời hạn lưu mã đơn hoặc chưa có danh sách chi tiết. Hệ thống giữ danh sách trong 7 ngày (hôm nay và 6 ngày trước). Các mã đã xóa trước khi đổi thời hạn lưu không thể khôi phục từ thống kê tổng hợp.
             </p>
             <button
               onClick={onClose}

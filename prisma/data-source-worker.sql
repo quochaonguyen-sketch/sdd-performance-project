@@ -162,7 +162,7 @@ begin
     events=queued.events||jsonb_build_array(jsonb_build_object('at',now(),'message','Đã qua khung giờ tự động'))
     from public.data_source_settings config where queued.source_id=config.source_id and queued.status='QUEUED' and (queued.events->0 ? 'scheduled_at')
       and config.schedule_mode='interval' and public.next_data_source_window(config.window_start,config.window_end,now())>now();
-  select * into j from public.data_source_jobs where status='QUEUED' and (source_id<>'linehaul' or exists(select 1 from public.data_source_workers w where w.id=p_worker and w.version like '%lh-dashboard%')) order by requested_at,id for update skip locked limit 1;
+  select * into j from public.data_source_jobs where status='QUEUED' and (source_id<>'linehaul' or exists(select 1 from public.data_source_workers w where w.id=p_worker and w.version like '%lh-unseal%')) order by requested_at,id for update skip locked limit 1;
   if not found then return null; end if;
   update public.data_source_jobs set status='RUNNING',phase='fetching',worker_id=p_worker,started_at=now(),lease_until=now()+interval '2 minutes',message='Máy chủ đang lấy dữ liệu',
     events=events||jsonb_build_array(jsonb_build_object('at',now(),'message','Worker nhận tác vụ')) where id=j.id returning * into j;

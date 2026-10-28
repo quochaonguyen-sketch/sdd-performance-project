@@ -34,11 +34,10 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
   if (!email.endsWith("@spxexpress.com")) return null;
 
   const admin = createAdminClient();
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .select("full_name, role, email")
-    .eq("id", userId)
-    .maybeSingle();
+  const [{ data: profile, error: profileError }, { data: authUser, error: authError }] = await Promise.all([
+    admin.from("profiles").select("full_name, role, email").eq("id", userId).maybeSingle(),
+    admin.auth.admin.getUserById(userId),
+  ]);
 
   if (profileError) {
     throw new Error(`Unable to load the signed-in user's profile: ${profileError.message}`);
@@ -50,7 +49,6 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
 
   if (!byEmail) return null;
 
-  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId);
   if (authError || !authUser.user) throw new Error("Không tải được quyền hiện tại của tài khoản.");
   const page_access=await loadRoleAccess(byEmail.role);
   const storedPermissions=normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);

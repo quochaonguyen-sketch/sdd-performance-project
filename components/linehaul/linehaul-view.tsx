@@ -7,7 +7,7 @@ import { gpsIsStale, inTodayHistory, LH_PHASES, sortTrips, type LinehaulData, ty
 import styles from "./linehaul.module.css";
 import { TripRoadDistance } from "./trip-road-distance";
 import {LinehaulSummary} from "./linehaul-summary";
-import {fullyUnloaded} from "@/lib/linehaul/summary";
+import {fullyUnloaded,isTripUnloaded} from "@/lib/linehaul/summary";
 
 const Map=dynamic(()=>import("./linehaul-map"),{ssr:false,loading:()=> <p className={styles.mapLoading}>Đang mở bản đồ…</p>});
 const number=(value:number|null)=>value===null?"—":value.toLocaleString("vi-VN");
@@ -45,9 +45,10 @@ export function LinehaulView(){
  }
  const all=sortTrips(data?.trips??[]),term=query.trim().toLocaleLowerCase("vi");
  const history=all.filter(trip=>inTodayHistory(trip,data?.day??""));
- const active=all.filter(trip=>trip.source!=="history"&&trip.source!=="dashboard"&&trip.phase!=="unloaded");
+ const active=all.filter(trip=>!isTripUnloaded(trip));
  const scope=view==="history"?history:active;
- const filtered=scope.filter(trip=>(phase==="all"||(fullyUnloaded(trip)?"unloaded":trip.phase)===phase)&&(direction==="all"||trip.direction===direction)&&(!term||[trip.lt_code,trip.plate_number,trip.driver_name,trip.origin,trip.destination].join(" ").toLocaleLowerCase("vi").includes(term)));
+ const effectivePhase=(trip:LinehaulTrip)=>trip.phase;
+ const filtered=scope.filter(trip=>(phase==="all"||effectivePhase(trip)===phase)&&(direction==="all"||trip.direction===direction)&&(!term||[trip.lt_code,trip.plate_number,trip.driver_name,trip.origin,trip.destination].join(" ").toLocaleLowerCase("vi").includes(term)));
  const current=all.find(trip=>trip.trip_id===selected)??null;
  const hasActualTime=filtered.some(trip=>trip.hub_ata||trip.hub_atd||trip.hub_unloaded_at||trip.origin_atd);
  const hasCargo=filtered.some(trip=>trip.orders!==null||trip.bags!==null||trip.loose!==null||trip.pack_unknown||(view==="history"&&(trip.load_total!==null||trip.unloaded_units!==null)));
@@ -64,7 +65,7 @@ export function LinehaulView(){
    <div className={styles.tableScroll}><table><thead><tr><th>Chuyến / tài xế</th>{hasCargo&&<th>Tải trên xe</th>}<th>Trạng thái tại hub</th>{view==="active"&&<th>GPS gần nhất</th>}{hasActualTime&&<th>Mốc thực tế</th>}</tr></thead><tbody>{loading&&!data?<tr><td colSpan={2+Number(hasCargo)+Number(hasActualTime)+Number(view==="active")} className={styles.empty}>Đang đọc chuyến LH hôm nay…</td></tr>:!filtered.length?<tr><td colSpan={2+Number(hasCargo)+Number(hasActualTime)+Number(view==="active")} className={styles.empty}>Chưa có chuyến phù hợp. {data?.snapshotAt?"Đổi bộ lọc để xem thêm.":"Đồng bộ SPX để lấy danh sách hôm nay."}</td></tr>:filtered.map(trip=><tr key={trip.trip_id} data-selected={current?.trip_id===trip.trip_id} onClick={event=>{event.currentTarget.querySelector("button")?.focus();setSelected(trip.trip_id);}}>
     <td><button type="button" className={styles.selectTrip} onClick={()=>setSelected(trip.trip_id)} aria-haspopup="dialog" aria-expanded={current?.trip_id===trip.trip_id}><strong>{trip.lt_code}</strong>{(trip.plate_number||trip.vehicle)&&<span>{[trip.plate_number,trip.vehicle].filter(Boolean).join(" · ")}</span>}{trip.driver_name&&<small>{trip.driver_name}</small>}</button></td>
     {hasCargo&&<td>{trip.orders!==null&&<strong>{number(trip.orders)} <small>đơn</small></strong>}{(trip.bags!==null||trip.loose!==null)&&<span className={styles.cargo}><Boxes size={13}/>{[trip.bags!==null?`${number(trip.bags)} bao`:null,trip.loose!==null?`${number(trip.loose)} xá`:null].filter(Boolean).join(" · ")}</span>}{view==="history"&&trip.source==="dashboard"&&trip.load_total!==null?<small>Tổng {number(trip.load_total)} kiện TO</small>:view==="history"&&trip.unloaded_units!==null?<small>Đã xả: {number(trip.unloaded_units)} kiện TO</small>:null}{trip.pack_unknown?<small title={trip.pack_description}>Kiện khác: {trip.pack_unknown}</small>:null}</td>}
-    <td><span className={styles.phase} data-phase={fullyUnloaded(trip)?"unloaded":trip.phase}>{fullyUnloaded(trip)?"Đã xả đủ tải":LH_PHASES[trip.phase]}</span><small className={styles.direction}>{trip.direction==="outbound"?<ArrowUpFromLine size={12}/>:<ArrowDownToLine size={12}/>} {trip.direction==="outbound"?"Xuất hub":trip.direction==="stopover"?"Qua hub":"Xe vào hub"}</small>{view==="active"&&<TripRoadDistance trip={trip} now={now}/>}</td>
+    <td><span className={styles.phase} data-phase={effectivePhase(trip)}>{effectivePhase(trip)==="unloaded"?(fullyUnloaded(trip)?"Đã xả đủ tải":LH_PHASES.unloaded):LH_PHASES[trip.phase]}</span><small className={styles.direction}>{trip.direction==="outbound"?<ArrowUpFromLine size={12}/>:<ArrowDownToLine size={12}/>} {trip.direction==="outbound"?"Xuất hub":trip.direction==="stopover"?"Qua hub":"Xe vào hub"}</small>{trip.arrived_at_hub===true&&<span className={styles.arrivedBadge} data-at-hub="true" title={`Tọa độ lúc bấm Arrived cách Hub ${trip.arrived_distance_km??0} km`}>✓ Tại Hub SDD</span>}{trip.arrived_at_hub===false&&<span className={styles.arrivedBadge} data-at-hub="false" title={`Cảnh báo: Xe bấm Arrived cách Hub ${trip.arrived_distance_km} km`}>⚠ Bấm ngoài Hub ({trip.arrived_distance_km} km)</span>}{view==="active"&&<TripRoadDistance trip={trip} now={now}/>}</td>
     {view==="active"&&<td><GpsTimestamp trip={trip} now={now}/></td>}
     {hasActualTime&&<td>{trip.hub_ata&&<><strong>{time(trip.hub_ata)}</strong><small>Đến hub</small></>}{trip.hub_unloaded_at&&<small>Xả xong: {time(trip.hub_unloaded_at)}</small>}{trip.hub_atd&&<small>Rời hub: {time(trip.hub_atd)}</small>}{!trip.hub_ata&&trip.origin_atd&&<><strong>{time(trip.origin_atd)}</strong><small>Rời kho xuất phát</small></>}</td>}
    </tr>)}</tbody></table></div><footer className={styles.legend}>Bao / xá theo dữ liệu SPX · NA, Other = hàng xá. Bấm chuyến để xem chi tiết và bản đồ.</footer>
@@ -103,12 +104,22 @@ function TripDetail({trip,now}:{trip:LinehaulTrip;now:number}){
  const milestones=[
   {label:"Rời kho xuất phát",value:trip.origin_atd},
   {label:"Đến hub",value:trip.hub_ata},
+  {label:"Mở seal (bắt đầu xả)",value:trip.hub_unseal_at},
   {label:"Hoàn tất xả tải",value:trip.hub_unloaded_at},
   {label:"Rời hub",value:trip.hub_atd},
  ].filter(item=>item.value);
  const cargo=[{label:"Đơn hàng",value:trip.orders},{label:"Bao",value:trip.bags},{label:"Hàng xá",value:trip.loose}].filter(item=>item.value!==null);
  return <><header className={styles.detailHeader}><span className={styles.eyebrow}>CHI TIẾT CHUYẾN</span><div className={styles.vehicleTitle}><h2>{trip.plate_number||trip.lt_code}</h2>{trip.vehicle&&<span>{trip.vehicle}</span>}</div><p>{trip.lt_code}</p><span className={styles.phase} data-phase={fullyUnloaded(trip)?"unloaded":trip.phase}>{fullyUnloaded(trip)?"Đã xả đủ tải":LH_PHASES[trip.phase]}</span></header>
-  {history&&<div className={styles.completed}><CheckCircle2 size={22}/><div><strong>{trip.hub_unloaded_at?"Đã hoàn tất xả tải":fullyUnloaded(trip)?"Đã xả đủ tải":"Đã đến hub"}</strong>{trip.hub_ata&&<span>Ghi nhận lúc {time(trip.hub_ata)}</span>}</div></div>}
+  {history&&<div className={styles.completed}><CheckCircle2 size={22}/><div><strong>{trip.hub_unloaded_at?"Đã hoàn tất xả tải":isTripUnloaded(trip)?"Đã xả tải":trip.phase==="unloading"?"Đang xả hàng":"Đã đến hub"}</strong>{trip.hub_ata&&<span>Ghi nhận lúc {time(trip.hub_ata)}</span>}</div></div>}
+  {trip.hub_ata&&trip.arrived_at_hub!==undefined&&trip.arrived_at_hub!==null&&(
+   <div className={styles.arrivedLocationBox} data-at-hub={trip.arrived_at_hub}>
+    <MapPin size={16}/>
+    <div>
+     <strong>{trip.arrived_at_hub?"Đã xác minh: Bấm Arrived tại Hub SDD":"Cảnh báo: Bấm Arrived ngoài Hub"}</strong>
+     <p>{trip.arrived_at_hub?`Vị trí định vị lúc tài xế bấm Arrived (${time(trip.hub_ata)}) nằm trong phạm vi trạm SDD (cách Hub ${trip.arrived_distance_km??0} km).`:`Vị trí định vị lúc tài xế bấm Arrived (${time(trip.hub_ata)}) cách Hub SDD ${trip.arrived_distance_km} km.`}</p>
+    </div>
+   </div>
+  )}
   {cargo.length>0&&<section className={styles.cargoSummary} aria-label="Sản lượng chuyến">{cargo.map(item=><div key={item.label}><strong>{number(item.value)}</strong><span>{item.label}</span></div>)}</section>}
   {(trip.origin||trip.destination)&&<div className={styles.route}>{trip.origin&&<div><span className={styles.routeDot}/><span><small>Điểm đi</small><strong>{trip.origin}</strong></span></div>}{trip.destination&&<div><MapPin size={15}/><span><small>Điểm đến</small><strong>{trip.destination}</strong></span></div>}</div>}
   <dl className={styles.facts}>

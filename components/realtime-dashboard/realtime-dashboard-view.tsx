@@ -68,18 +68,25 @@ export function RealtimeDashboardView() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<DisplayRider | null>(null);
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [realtimeLoading, setLoading] = useState(true);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const loading = realtimeLoading || profilesLoading;
   useReportInitialDataLoading("realtime-dashboard", loading);
   const [error, setError] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
-    const supabase = createClient();
-    const result = await supabase.from("riders").select("rider_code,full_name,kv,delivery_district,delivery_ward,cot").in("kv", OPERATING_AREAS).eq("status", "active");
-    if (result.error) {
-      setError(result.error.message);
-      return;
+    try {
+      const supabase = createClient();
+      const result = await supabase.from("riders").select("rider_code,full_name,kv,delivery_district,delivery_ward,cot").in("kv", OPERATING_AREAS).eq("status", "active");
+      if (result.error) {
+        setError(result.error.message);
+        setProfiles([]);
+        return;
+      }
+      setProfiles((result.data ?? []) as RiderProfile[]);
+    } finally {
+      setProfilesLoading(false);
     }
-    setProfiles((result.data ?? []) as RiderProfile[]);
   }, []);
 
   const loadRealtime = useCallback(async () => {
@@ -253,8 +260,10 @@ export function RealtimeDashboardView() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-12 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="col-span-12 h-40 animate-pulse rounded-xl bg-[var(--color-paper-3)] md:col-span-6 lg:col-span-4 xl:col-span-3" />)}
+          <div className="rt-area-layout" aria-busy="true" aria-label="Đang tải 5 khu vực">
+            <div className="rt-area-grid">
+              {OPERATING_AREAS.map(kv => <KvBentoTile key={kv} kv={kv} detail={null} active={false} loading onSelect={() => {}} />)}
+            </div>
           </div>
         ) : districtDetails.length === 0 && kvAggregates.kvs.every(({ detail }) => !detail) ? (
           <p className="rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-8 text-center text-sm text-[var(--color-muted)]">Chưa có dữ liệu realtime.</p>
@@ -314,13 +323,13 @@ export const KpiCard = memo(function KpiCard({ icon: Icon, label, value, helper,
   return <article className={cn("rt-kpi min-h-36 rounded-xl border border-slate-200 bg-white p-4", className)}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-slate-600">{label}</p><p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-950">{loading ? "—" : typeof value === "number" ? value.toLocaleString("vi-VN") : value}</p></div><span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", colors[tone])}><Icon size={18} /></span></div><p className="mt-4 text-xs text-slate-500">{helper}</p></article>;
 });
 
-function KvBentoTile({ kv, detail, active, onSelect }: { kv: string; detail: DistrictDetail | null; active: boolean; onSelect: () => void }) {
+function KvBentoTile({ kv, detail, active, onSelect, loading = false }: { kv: string; detail: DistrictDetail | null; active: boolean; onSelect: () => void; loading?: boolean }) {
   const pct = detail ? Math.min(100, detail.rate) : 0;
-  return <button type="button" onClick={onSelect} aria-pressed={active} data-area={kv} className={cn("rt-area-card", active && "is-selected")}>
+  return <button type="button" onClick={onSelect} disabled={loading} aria-busy={loading} aria-pressed={active} data-area={kv} className={cn("rt-area-card", active && "is-selected")}>
     <div className="rt-area-top"><span className="rt-area-code">{kv}</span><ChevronRight size={16} /></div>
     <h3>Khu vực {kv.slice(-1)}</h3>
-    <p className="rt-area-riders"><UsersRound size={13} />{detail ? `${detail.riders.length.toLocaleString("vi-VN")} rider` : "Chưa có rider"}</p>
-    <div className="rt-area-progress"><strong>{pct}<small>%</small></strong><span>đã giao</span></div>
+    <p className="rt-area-riders"><UsersRound size={13} />{loading ? "Đang tải rider…" : detail ? `${detail.riders.length.toLocaleString("vi-VN")} rider` : "Chưa có rider"}</p>
+    <div className="rt-area-progress"><strong>{loading ? "—" : pct}<small>%</small></strong><span>đã giao</span></div>
     <div className="rt-area-track" role="progressbar" aria-label={`Tiến độ ${kv}`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
     <div className="rt-area-stats"><span>Đang giao<strong>{(detail?.delivering ?? 0).toLocaleString("vi-VN")}</strong></span><span>Đã gán<strong>{(detail?.totalAssigned ?? 0).toLocaleString("vi-VN")}</strong></span></div>
     <div className={cn("rt-area-footer", detail?.warning && "has-warning")}>{detail?.warning ? <><CircleAlert size={13} />{detail.warning} rider cần chú ý</> : <><CheckCircle2 size={13} />{detail ? "Không có cảnh báo" : "Chưa có dữ liệu"}</>}</div>

@@ -33,8 +33,8 @@ begin
   update public.onhold_daily_reports set finalized_at=p_now
     where collection_mode='cumulative' and finalized_at is null and report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date;
   get diagnostics n=row_count;
-  delete from public.onhold_daily_seen where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date;
-  delete from public.onhold_daily_orders where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date;
+  delete from public.onhold_daily_seen where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date-6;
+  delete from public.onhold_daily_orders where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date-6;
   return n;
 end $$;
 

@@ -37,7 +37,7 @@
 .rt-flow-stats strong { font-size: 23px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.035em; color: var(--color-ink); }
 .rt-flow-stats small { margin-left: auto; font-size: 12px; color: var(--color-muted); }
 .rt-area-layout { display: grid; gap: 18px; }.rt-area-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; }
-.rt-area-card { padding: 18px 18px 0; text-align: left; background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: 12px; color: var(--color-ink); cursor: pointer; overflow: hidden; transition: border-color .18s, background .18s; }
+.rt-area-card { min-height: 285px; padding: 18px 18px 0; text-align: left; background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: 12px; color: var(--color-ink); cursor: pointer; overflow: hidden; transition: border-color .18s, background .18s; }
 .rt-area-card:hover { border-color: var(--color-focus); background: var(--color-paper-2); }.rt-area-card:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
 .rt-area-top { display: flex; align-items: center; justify-content: space-between; color: var(--color-muted); }.rt-area-code { font-size: 10px; font-weight: 600; letter-spacing: .09em; }
 .rt-area-card h3 { margin-top: 13px; font-size: 17px; font-weight: 500; letter-spacing: -.025em; }.rt-area-riders { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--color-muted); }
@@ -82,3 +82,8 @@
 .rt-area-card.is-selected .rt-area-track > span { background: white; }
 .rt-area-card.is-selected .rt-area-footer { background: #00000014; border-color: #ffffff33; }
 .dark .rt-area-card:not(.is-selected) .rt-area-progress strong { color: color-mix(in srgb, var(--rt-area-color) 50%, white); }
+
+/* Stable slots prevent loading text and long warnings from moving later sections. */
+.rt-area-riders { min-height: 16px; }
+.rt-area-footer { min-height: 42px; }
+.rt-area-card[aria-busy="true"] { cursor: progress; }

@@ -19,11 +19,11 @@ do $$
 declare source text; replacement text;
 begin
  source:=pg_get_functiondef('public.claim_data_source_job(text)'::regprocedure);
- if position('lh-dashboard' in source)=0 then
-  source:=replace(source,'lh-history','lh-dashboard');
-  if position('lh-dashboard' in source)>0 then execute source; return; end if;
+ if position('lh-unseal' in source)=0 then
+  source:=replace(replace(source,'lh-history','lh-unseal'),'lh-dashboard','lh-unseal');
+  if position('lh-unseal' in source)>0 then execute source; return; end if;
   replacement:=replace(source,'where status=''QUEUED'' order by',
-   'where status=''QUEUED'' and (source_id<>''linehaul'' or exists(select 1 from public.data_source_workers w where w.id=p_worker and w.version like ''%lh-dashboard%'')) order by');
+   'where status=''QUEUED'' and (source_id<>''linehaul'' or exists(select 1 from public.data_source_workers w where w.id=p_worker and w.version like ''%lh-unseal%'')) order by');
   if replacement=source then raise exception 'Claim function differs from expected definition'; end if;
   execute replacement;
  end if;
@@ -46,7 +46,7 @@ begin
  select * into j from public.data_source_jobs where id=p_job and source_id='linehaul' and report_date=day
  and worker_id=p_worker and status in ('RUNNING','CANCEL_REQUESTED') and phase='publishing' and lease_until>now() for update;
  if not found then raise exception 'Invalid LH job ownership'; end if;
- if not exists(select 1 from public.data_source_workers where id=p_worker and version like '%lh-dashboard%' and last_seen_at>now()-interval '45 seconds')
+ if not exists(select 1 from public.data_source_workers where id=p_worker and version like '%lh-unseal%' and last_seen_at>now()-interval '45 seconds')
  then raise exception 'LH worker upgrade required'; end if;
  if p_station<>'4232' or p_station is null or p_at is null or p_at>now()+interval '1 minute'
  or (p_at at time zone 'Asia/Ho_Chi_Minh')::date<>day or p_at<now()-interval '10 minutes'
@@ -55,7 +55,7 @@ begin
  or (r->>'trip_day')::date is distinct from day or nullif(r->>'lt_code','') is null
  or nullif(trim(r->>'driver_name'),'') is null
  or coalesce(r->>'direction','') not in ('inbound','outbound','stopover')
- or coalesce(r->>'phase','') not in ('waiting','en_route','at_hub','departed','unloaded')
+ or coalesce(r->>'phase','') not in ('waiting','en_route','at_hub','unloading','departed','unloaded')
  or (r->>'lat')::numeric not between -90 and 90 or (r->>'lng')::numeric not between -180 and 180
  or (r->>'orders')::numeric<0 or (r->>'bags')::numeric<0 or (r->>'loose')::numeric<0)
  or (select count(distinct r->>'trip_id') from jsonb_array_elements(p_rows) r)<>jsonb_array_length(p_rows)

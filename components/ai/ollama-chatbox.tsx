@@ -178,12 +178,12 @@ const greeting: ChatMessage = {
   content: "Chào bạn. Tôi là AI nội bộ chạy trên máy này. Bật “Dữ liệu trang này” để tôi đọc số liệu Supabase đã được giới hạn và phân tích theo ngày/snapshot.",
 };
 
-export function OllamaChatbox() {
+export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean } = {}) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([greeting]);
   const [loading, setLoading] = useState(false);

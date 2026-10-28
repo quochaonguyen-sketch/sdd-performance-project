@@ -38,6 +38,13 @@
  const oldGps=new Date(now-30*60000).toISOString();trip.gps_at=oldGps;hook=0;
  const staleGpsHtml=renderToStaticMarkup(React.createElement(LinehaulView));
  assert.ok(staleGpsHtml.includes(`dateTime="${oldGps}"`));assert.ok(staleGpsHtml.includes('GPS cũ'));
+ trip.phase='unloading';trip.arrived_at_hub=true;trip.arrived_distance_km=0.5;hook=0;
+ const unloadingHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+ assert.ok(unloadingHtml.includes('Đang xả hàng'));assert.ok(unloadingHtml.includes('Tại Hub SDD'));
+ trip.phase='at_hub';trip.arrived_at_hub=false;trip.arrived_distance_km=4.2;trip.hub_ata=stamp;hook=0;
+ const farArrivedHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+ assert.ok(farArrivedHtml.includes('Bấm ngoài Hub (4.2 km)'));
+ trip.phase='en_route';trip.arrived_at_hub=undefined;trip.hub_ata=null;
  trip.gps_at='invalid';hook=0;
  const invalidGpsHtml=renderToStaticMarkup(React.createElement(LinehaulView));assert.ok(invalidGpsHtml.includes('Chưa có thời gian GPS'));assert.ok(!invalidGpsHtml.includes('Invalid Date'));
  trip.gps_at=stamp;
@@ -74,6 +81,12 @@
   const emptyCargoHtml=renderToStaticMarkup(React.createElement(LinehaulView));
   assert.ok(!emptyCargoHtml.includes('Tải trên xe'));
   assert.ok(!emptyCargoHtml.includes('Sản lượng chuyến'));
+ view='active';selected=null;fixture.trips=[
+  {...trip,trip_id:'UNSEAL',lt_code:'LT0QAS51NOMU5',source:'active',phase:'unloading',hub_ata:stamp,hub_unseal_at:stamp,hub_unloaded_at:null,expected_unload:247,unloaded_units:247},
+  {...trip,trip_id:'ARRIVED',lt_code:'LT0QAS51NOMT4',source:'dashboard',phase:'at_hub',hub_ata:stamp,hub_unloaded_at:null,expected_unload:null,unloaded_units:null}];
+ hook=0;const stagesHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+ for(const text of ['LT0QAS51NOMU5','LT0QAS51NOMT4','Đang xả hàng','Đang chờ xả'])assert.ok(stagesHtml.includes(text),`Incorrect LH status: ${text}`);
+ assert.ok(!stagesHtml.includes('Đã xả đủ tải'));
  console.log('LH API permissions, active/history/dashboard UI, no ETA, absent fields hidden and real zero cargo passed.');
  if(process.argv.includes('--preview')){
   const css=fs.readFileSync('components/linehaul/linehaul.module.css','utf8');

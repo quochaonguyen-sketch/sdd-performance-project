@@ -34,10 +34,10 @@ begin
     values(yesterday,j,1,0,1,'cumulative',now()-interval '1 day') on conflict(report_date) do nothing;
   insert into public.onhold_daily_seen values(yesterday,repeat('b',64)) on conflict do nothing;
   perform public.finalize_onhold_days();
-  if exists(select 1 from public.onhold_daily_seen where report_date<today) or not exists(select 1 from public.onhold_daily_seen where report_date=today and order_key=repeat('a',64)) then raise exception 'Midnight cleanup wrong scope'; end if;
+  if not exists(select 1 from public.onhold_daily_seen where report_date=yesterday and order_key=repeat('b',64)) or not exists(select 1 from public.onhold_daily_seen where report_date=today and order_key=repeat('a',64)) then raise exception 'Midnight cleanup wrong scope'; end if;
   if (select finalized_at from public.onhold_daily_reports where report_date=yesterday) is null then raise exception 'Previous day not finalized'; end if;
   perform public.finalize_onhold_days(((today+1)::timestamp at time zone 'Asia/Ho_Chi_Minh'));
-  if exists(select 1 from public.onhold_daily_seen where report_date=today) or (select total_orders from public.onhold_daily_reports where report_date=today)<>baseline then raise exception 'Close did not retain pivot only'; end if;
+  if not exists(select 1 from public.onhold_daily_seen where report_date=today and order_key=repeat('a',64)) or (select total_orders from public.onhold_daily_reports where report_date=today)<>baseline then raise exception 'Close did not retain order keys and totals'; end if;
   begin
     perform public.record_central_onhold(j2,'qa-restarted',events,1,0,now());
     raise exception 'Closed day reopened';

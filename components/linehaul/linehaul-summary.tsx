@@ -1,11 +1,11 @@
 "use client";
 import {useState} from "react";
-import {ArrowDownToLine,Navigation,Package,Truck} from "lucide-react";
+import {ArrowDownToLine,Navigation,Package,PackageOpen,Truck} from "lucide-react";
 import type {LinehaulTrip} from "@/lib/linehaul/model";
 import {linehaulSummary,LOAD_STAGE_KEYS,LOAD_STAGES,loadStage,stageOrders,type LoadStage} from "@/lib/linehaul/summary";
 import styles from "./linehaul.module.css";
 
-const nf=new Intl.NumberFormat("vi-VN"),icons={unloaded:ArrowDownToLine,incoming:Navigation,loading:Truck,at_hub:Package};
+const nf=new Intl.NumberFormat("vi-VN"),icons={unloaded:ArrowDownToLine,unloading:PackageOpen,incoming:Navigation,loading:Truck,at_hub:Package};
 export function LinehaulSummary({trips,day,loading,onSelect}:{trips:LinehaulTrip[];day:string;loading:boolean;onSelect:(id:string)=>void}){
  const [stage,setStage]=useState<LoadStage|"all">("all"),[hour,setHour]=useState<number|null>(null);
  const {groups,hourly,unplaced}=linehaulSummary(trips,day);
@@ -21,7 +21,7 @@ export function LinehaulSummary({trips,day,loading,onSelect}:{trips:LinehaulTrip
    return <button type="button" key={key} className={styles.loadCard} data-stage={key} aria-pressed={stage===key} onClick={()=>{setStage(value=>value===key?"all":key);setHour(null);}}>
     <span>{group.label}<Icon size={18} aria-hidden="true"/></span><strong>{loading?"…":group.trips.length&&!hasKnown?"—":`${group.missing?"≥ ":""}${nf.format(group.knownOrders)}`}<small>đơn</small></strong>
     <span>{group.trips.length?`${nf.format(group.trips.length)} chuyến${group.missing?` · ${group.missing} chuyến chưa rõ số đơn`:" · Đã có số đơn"}`:"Chưa có chuyến trong nhóm này"}</span>
-    <small>{key==="unloaded"?"Chỉ cộng số đơn khi xác nhận xả đủ tải tại hub":key==="loading"?"Chờ xuất phát · số đơn đã báo tải":key==="incoming"?"Tổng tải các chuyến đang di chuyển về hub":"Xe đã đến, chưa đủ bằng chứng hoàn tất xả"}</small>
+    <small>{key==="unloaded"?"Đã hoàn tất xả hàng tại hub":key==="unloading"?"Đang mở seal hoặc đang dỡ kiện xuống hub":key==="loading"?"Chờ xuất phát · số đơn đã báo tải":key==="incoming"?"Tổng tải các chuyến đang di chuyển về hub":"Xe đã đến trạm, đang chờ xả hàng"}</small>
    </button>;
   })}</div>
   <div className={styles.loadCharts}>
@@ -36,7 +36,7 @@ export function LinehaulSummary({trips,day,loading,onSelect}:{trips:LinehaulTrip
       <span className={styles.columnValue}>{total?`${nf.format(total)}${missing?"+?":""}`:missing?"?":""}</span><span className={styles.columnTrack}>{keys.map(key=><span key={key} data-stage={key} style={{height:`${bucket.orders[key]/maximum*100}%`}}/>)}</span><span className={styles.hourLabel}>{String(bucket.hour).padStart(2,"0")}:00</span>
      </button>;
     })}</div></div>
-    <p className={styles.chartFootnote}>Bấm cột giờ để xem các chuyến tương ứng. Đã đến hub dùng giờ đến thực tế (ATA).</p>
+    <p className={styles.chartFootnote}>Bấm cột giờ để xem các chuyến tương ứng. Đang chờ xả dùng giờ đến thực tế (ATA).</p>
     {keys.some(key=>unplaced[key]>0)&&<p className={styles.chartWarning}>{keys.filter(key=>unplaced[key]>0).map(key=>`${LOAD_STAGES[key]}: ${unplaced[key]} chuyến chưa có mốc giờ phù hợp`).join(" · ")}. Vẫn tính trong tổng, không tự gán giờ lên biểu đồ.</p>}
    </section>
    <section className={styles.tripChartPanel} aria-label="Chi tiết sản lượng theo chuyến"><header><div><h3>{hour===null?"Chi tiết tải theo chuyến":`Các chuyến tại mốc ${String(hour).padStart(2,"0")}:00`}</h3><p>{stage==="all"?"Tất cả trạng thái":LOAD_STAGES[stage]} · {details.length} chuyến · Bấm để mở chi tiết</p></div></header>

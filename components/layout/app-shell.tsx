@@ -17,7 +17,7 @@ import { ProductUpdateNotifications } from "@/components/feedback/product-update
 import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
-import { OllamaChatbox } from "@/components/ai/ollama-chatbox";
+import { AiLauncher } from "@/components/ai/ai-launcher";
 import {pageForPath,canViewPage,type PageAccess} from "@/lib/auth/page-access";
 
 const volumeItems = [
@@ -233,7 +233,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             </div>
           </div>
           <div className="app-header-account">
-            <OllamaChatbox />
+            <AiLauncher />
             <OffRequestNotifications />
             <FeedbackPopup />
             <ProductUpdateNotifications />

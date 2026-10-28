@@ -31,6 +31,7 @@
 .loadCards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .loadCard { display:flex; flex-direction:column; gap:12px; padding:20px; border:1px solid var(--color-rule); border-top:3px solid var(--stage-color); border-radius:12px; text-align:left; color:var(--color-ink); background:var(--color-paper); cursor:pointer; }
 .loadOverview [data-stage="unloaded"] { --stage-color:#16856b; }
+.loadOverview [data-stage="unloading"] { --stage-color:#d97706; }
 .loadOverview [data-stage="incoming"] { --stage-color:#315e91; }
 .loadOverview [data-stage="loading"] { --stage-color:#a76a13; }
 .loadOverview [data-stage="at_hub"] { --stage-color:#7855a6; }
@@ -108,9 +109,18 @@
 .cargo { display:flex; align-items:center; gap:5px; margin-top:6px; font-size:10px; white-space:nowrap; color:var(--color-ink-2); }
 .phase { display:inline-flex; padding:4px 7px; border-radius:5px; background:var(--color-paper-2); color:var(--color-ink-2); font-size:10px; white-space:nowrap; }
 .phase[data-phase="en_route"] { background:#e9f3ef; color:#246c57; }
+.phase[data-phase="unloading"] { background:#fef3e6; color:#b45309; }
 .phase[data-phase="at_hub"] { background:#e9eff8; color:#365d8e; }
 .phase[data-phase="waiting"] { background:#fbf2e1; color:#936420; }
 .phase[data-phase="unloaded"] { background:#e9f3ef; color:#246c57; }
+.arrivedBadge { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; margin-top:4px; width:fit-content; }
+.arrivedBadge[data-at-hub="true"] { background:#e9f5ec; color:#1b7a3e; }
+.arrivedBadge[data-at-hub="false"] { background:#fde8e8; color:#c5221f; border:1px solid #f8b4b4; }
+.arrivedLocationBox { display:flex; align-items:flex-start; gap:10px; margin:16px 20px 0; padding:12px 14px; border-radius:8px; font-size:12px; }
+.arrivedLocationBox[data-at-hub="true"] { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.arrivedLocationBox[data-at-hub="false"] { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+.arrivedLocationBox strong { display:block; font-size:13px; }
+.arrivedLocationBox p { margin:4px 0 0; font-size:11px; opacity:0.9; }
 .viewSwitch { display:flex; gap:8px; }
 .viewSwitch button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:10px 15px; border:1px solid var(--color-rule); border-radius:8px; background:var(--color-paper); font-size:12px; color:var(--color-ink-2); cursor:pointer; }
 .viewSwitch button[aria-pressed="true"] { background:#1e344d; border-color:#1e344d; color:#f3f7fd; }

@@ -1,4 +1,4 @@
--- Current-day dedup keys survive worker restarts. Only aggregate history survives day close.
+-- Retain dedup keys for seven Vietnam calendar days; aggregate history survives day close.
 alter table public.onhold_daily_reports add column if not exists collection_mode text not null default 'snapshot' check(collection_mode in ('snapshot','cumulative'));
 alter table public.onhold_daily_reports add column if not exists collection_started_at timestamptz;
 alter table public.onhold_daily_reports add column if not exists finalized_at timestamptz;
@@ -38,7 +38,7 @@ begin
   update public.onhold_daily_reports set finalized_at=p_now
     where collection_mode='cumulative' and finalized_at is null and report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date;
   get diagnostics n=row_count;
-  delete from public.onhold_daily_seen where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date;
+  delete from public.onhold_daily_seen where report_date<(p_now at time zone 'Asia/Ho_Chi_Minh')::date-6;
   return n;
 end $$;
 
