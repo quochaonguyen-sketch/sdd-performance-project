@@ -6,6 +6,7 @@
  Module._resolveFilename=function(name,parent,...args){return resolve.call(this,name.startsWith('@/')?path.join(root,name.slice(2)):name,parent,...args);};
  Module._load=function(name,...args){
   if(name==='@/components/layout/app-loading-store')return {useReportInitialDataLoading:()=>{}};
+  if(name==='@/components/layout/filter-memory')return {useRememberedState:(_key,initial)=>Module._load('react',module).useState(initial)};
   const result=originalLoad.call(this,name,...args);
   if(name==='react')return {...result,useState:initial=>{const index=hook++;return result.useState(index===1?fixture:index===2?false:index===11?selected:initial);}};
   return result;
@@ -29,6 +30,19 @@
    const base=':root{--color-paper:#fff;--color-paper-2:#f4f7fb;--color-ink:#1e344d;--color-ink-2:#60738b;--color-rule:#dce4ed;--color-accent:#315e91;--color-error:#b42336}body{margin:0;padding:24px;background:#f5f7fa;font-family:Segoe UI,Arial,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}button{background:transparent}svg{vertical-align:middle}';
    fs.writeFileSync(path.join(root,`.next/overnight-preview${code?'-expanded':''}.html`),`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${base}${css}</style></head><body>${html}</body></html>`);
   }
+ }
+ for(const [sync,expected] of [
+  [{},'Chưa đồng bộ SPX'],
+  [{status_sync_requested_at:'2026-10-28T02:00:00Z'},'Đang chờ worker'],
+  [{status_sync_token:'lease'},'Đang lấy trạng thái từ SPX'],
+  [{status_synced_at:'2026-10-28T02:00:00Z'},'Đồng bộ SPX:'],
+  [{status_sync_error:'SPX unavailable'},'SPX unavailable'],
+ ]){
+  fixture.snapshot={cutoff_date:'2026-10-26',captured_at:'2026-10-26T16:04:00Z',...sync};
+  hook=0;selected='TEST-A';
+  const html=renderToStaticMarkup(React.createElement(OvernightHoldsView,{initialDay:'2026-10-26'}));
+  assert.ok(html.includes(expected),`Missing sync state: ${expected}`);
+  assert.ok(html.includes(sync.status_synced_at?'Sync SPX:':'Chưa đồng bộ SPX'));
  }
  console.log('Rider board SSR: grouped counts, saved notes, accessible expansion and all 120 order details passed.');
 })().catch(error=>{console.error(error.stack);process.exitCode=1;});

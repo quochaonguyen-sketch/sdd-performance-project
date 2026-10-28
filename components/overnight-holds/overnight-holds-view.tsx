@@ -57,10 +57,11 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
   useReportInitialDataLoading("overnight-holds", loading);
 
   const loadData = useCallback(
-    async (targetDay = day, targetPage = page) => {
+    async (targetDay = day, targetPage = page, background = false) => {
+      if (background && pendingLoad.current) return;
       pendingLoad.current?.abort();
       const controller=new AbortController();pendingLoad.current=controller;
-      setLoading(true);
+      if (!background) setLoading(true);
       try {
         const params = new URLSearchParams({
           day: targetDay,
@@ -86,7 +87,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
           message: err instanceof Error ? err.message : "Đã xảy ra lỗi khi tải dữ liệu",
         });
       } finally {
-        if(!controller.signal.aborted)setLoading(false);
+        if(!controller.signal.aborted){setLoading(false);pendingLoad.current=null;}
       }
     },
     [day, page, areaFilter, cutoffStatusFilter, currentStatusFilter, noteFilter, query]
@@ -95,6 +96,15 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
   useEffect(() => {
     const timer=setTimeout(()=>void loadData(day, page),0);
     return ()=>{clearTimeout(timer);pendingLoad.current?.abort();};
+  }, [loadData, day, page]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadData(day, page, true);
+    };
+    const timer = setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [loadData, day, page]);
 
   // Cập nhật trạng thái liên tục
@@ -114,7 +124,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
       }
       setFeedback({
         type: "success",
-        message: `Đã đồng bộ trạng thái mới nhất cho các đơn ngày ${day}. (${result.resolved_count} đơn đã hoàn tất / trả hub).`,
+        message: "Đã yêu cầu lấy trạng thái từ SPX. Kết quả sẽ tự cập nhật khi worker hoàn tất.",
       });
       await loadData(day, page);
     } catch (err) {
@@ -388,7 +398,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
                             {order.current_status}
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            Sync: {new Date(order.last_synced_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone:"Asia/Ho_Chi_Minh" })}
+                            {snapshot?.status_synced_at ? `Sync SPX: ${new Date(order.last_synced_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone:"Asia/Ho_Chi_Minh" })}` : "Chưa đồng bộ SPX"}
                           </span>
                         </div>
                       </td>
@@ -498,10 +508,10 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
             variant="outline"
             className={s.primaryAction}
             onClick={handleSyncStatus}
-            disabled={syncing || !snapshot}
+            disabled={syncing || !snapshot || Boolean(snapshot.status_sync_token || snapshot.status_sync_requested_at)}
           >
             <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Đang cập nhật..." : "Cập nhật trạng thái"}
+            {syncing || snapshot?.status_sync_token || snapshot?.status_sync_requested_at ? "Đang đồng bộ SPX..." : "Cập nhật trạng thái"}
           </Button>
 
           <Button
@@ -527,7 +537,7 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
             </span>
           </div>
           <span className="text-slate-500">
-            Cập nhật trạng thái gần nhất: {new Date(snapshot.updated_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone:"Asia/Ho_Chi_Minh" })}
+            {snapshot.status_sync_error ? snapshot.status_sync_error : snapshot.status_sync_token ? "Đang lấy trạng thái từ SPX..." : snapshot.status_sync_requested_at ? "Đang chờ worker lấy trạng thái SPX..." : snapshot.status_synced_at ? `Đồng bộ SPX: ${new Date(snapshot.status_synced_at).toLocaleString("vi-VN", { timeZone:"Asia/Ho_Chi_Minh" })} · Tự cập nhật mỗi 5 phút` : "Chưa đồng bộ SPX · Tự cập nhật mỗi 5 phút"}
           </span>
         </div>
       ) : (

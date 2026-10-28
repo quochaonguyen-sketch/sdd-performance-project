@@ -9,6 +9,11 @@ export type OvernightHoldSnapshot = {
   status: string;
   created_at: string;
   updated_at: string;
+  status_synced_at?: string | null;
+  status_sync_requested_at?: string | null;
+  status_sync_started_at?: string | null;
+  status_sync_token?: string | null;
+  status_sync_error?: string | null;
 };
 
 export type OvernightHoldOrder = {
