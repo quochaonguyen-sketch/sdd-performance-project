@@ -31,13 +31,14 @@ const navItems = [
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
-  { href: "/linehaul", label: "Quản lý LH", icon: Truck },
+  { href: "/linehaul", label: "Linehaul Management", icon: Truck },
   { href: "/lmhub-inventory", label: "Pickup Backlog", icon: PackageOpen },
   { href: "/inventory-delivery", label: "Delivery Backlog", icon: Truck },
   { href: "/backlog-history", label: "Backlog History", icon: BarChart3 },
   ...volumeItems,
   { href: "/performance", label: "Rider Performance", icon: BarChart3 },
   { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
+  { href: "/return-orders", label: "Return Orders", icon: PackageSearch },
   { href: "/overnight-holds", label: "Giữ hàng qua đêm", icon: Moon },
   { href: "/notes", label: "Notes", icon: ListChecks },
   { href: "/feedback", label: "Báo lỗi & góp ý", icon: ListChecks },
@@ -64,9 +65,6 @@ const mobileNavItems = navItems.filter(item => ["/dashboard", "/realtime-dashboa
 const pickupItems = [
   { href: "/pickup-management", view: null, label: "Pickup Points", icon: ListChecks },
   { href: "/pickup-management?view=replacement", view: "replacement", label: "Pickup Coverage", icon: Truck },
-];
-const returnItems = [
-  { href: "/return-orders", view: null, label: "Return Orders", icon: PackageSearch },
 ];
 const toolItems = [
   { href: "/zones", label: "Zones", icon: PencilRuler },
@@ -103,21 +101,18 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleToolItems = toolItems.filter(item=>allowedHref(item.href));
   const memberToolRestricted = visibleToolItems.length===0;
   const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
-  const visibleReturnItems = returnItems.filter(item=>allowedHref(item.href));
   const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
   const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
   const moreNavItems = [
-    ...workspaceItems.filter((item) => item.href !== "/pickup-management" && item.href !== "/return-orders" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
-    ...visibleReturnItems,
+    ...workspaceItems.filter((item) => item.href !== "/pickup-management" && (!memberToolRestricted || !memberHiddenItems.has(item.href))),
     ...visiblePickupItems,
     ...visibleToolItems,
     ...systemItems,
     ...navItems.filter((item) => item.href === "/feedback"&&allowedHref(item.href)),
   ];
   const pickupActive = pathname.startsWith("/pickup-management");
-  const returnActive = pathname.startsWith("/return-orders");
   const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
     : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
     : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
@@ -137,9 +132,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     : selectedModule === "settings" ? systemItems
     : workspaceItems.filter((item) => !teamPaths.includes(item.href) && !dataPaths.includes(item.href));
   const moreRouteActive = pathname.startsWith("/feedback") || morePaths.some((path) => pathname.startsWith(path));
-  const currentPage = returnActive
-    ? returnItems.find((item) => item.view === searchParams.get("view")) ?? returnItems[0]
-    : pickupActive
+  const currentPage = pickupActive
       ? pickupItems.find((item) => item.view === searchParams.get("view")) ?? pickupItems[0]
       : [...navItems, ...toolItems].find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const splitItems = navItems.filter((item) => item.href!==pathname&&allowedHref(item.href));
@@ -209,7 +202,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             })}
             {selectedModule === "operations" ? <>
               <p className="app-nav-eyebrow app-nav-eyebrow-secondary">Operations Management</p>
-              {visibleReturnItems.map((item) => <Link key={item.href} href={rememberedHref(item.href)} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={17} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
               {visiblePickupItems.length ? <NavigationGroup key={`pickup:${pathname}:${searchParams.get("view") ?? ""}`} label="Pickup Management" icon={ListChecks} active={visiblePickupItems.some(item => isNavigationItemActive(item, pathname, searchParams.get("view")))}>
                 {visiblePickupItems.map((item) => <Link key={item.href} href={rememberedHref(item.href)} aria-current={isNavigationItemActive(item, pathname, searchParams.get("view")) ? "page" : undefined} className={cn("app-nav-link", isNavigationItemActive(item, pathname, searchParams.get("view")) && "is-active")}><item.icon size={16} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>)}
               </NavigationGroup> : null}

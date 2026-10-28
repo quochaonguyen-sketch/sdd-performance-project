@@ -5,7 +5,7 @@ import Link from "next/link";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays,Download, PackageCheck, RefreshCcw, Search,SlidersHorizontal, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, TriangleAlert,Download, PackageCheck, RefreshCcw, Search,SlidersHorizontal, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import tableStyles from "./performance-table.module.css";
 import filterStyles from "./performance-filters.module.css";
 import { performanceConversion } from "@/lib/performance/conversion";
 import { parsePerformanceFilters } from "@/lib/performance/filters";
+import { PerformanceDatePicker } from "./performance-date-picker";
+import { pickupCotWarning } from "@/lib/performance/pickup-warning";
 import { allocateCotRemainder } from "@/lib/performance/cot-allocation";
 import {
   type PerformanceDirection,
@@ -272,17 +274,6 @@ function PerformanceFilters({
     return () => window.clearTimeout(timer);
   }, [filters.q, queryInput, updateParams]);
 
-  function changeDate(value: string) {
-    updateParams((params) => {
-      params.set("date", value);
-      params.set("page", "1");
-      params.delete("preset");
-      params.delete("mode");
-      params.delete("start");
-      params.delete("end");
-    });
-  }
-
   function changeFilter(field: "kv" | "district" | "ward" | "cot", value: string) {
     updateParams((params) => {
       if (value === "all") params.delete(field);
@@ -302,36 +293,8 @@ function PerformanceFilters({
     <section className={cn("perf-filters",filterStyles.panel)} aria-label="Bộ lọc performance">
       <div className={filterStyles.heading}><div><SlidersHorizontal size={17} aria-hidden="true"/><h2>Bộ lọc dữ liệu</h2>{activeCount>0&&<span>{activeCount} đang áp dụng</span>}</div><button type="button" disabled={!activeCount} onClick={()=>updateParams(params=>{for(const key of ["kv","district","ward","cot","q"])params.delete(key);params.set("page","1");})}>Đặt lại bộ lọc</button></div>
       <div className={filterStyles.timeRow}>
-        <div className={filterStyles.periodControl}>
-        <span className="perf-field-label">Thời gian thống kê</span>
-        <div className="perf-period-toggle" role="group" aria-label="Chọn chu kỳ thống kê">
-          {(["day", "week", "month", "range"] as const).map((period) => (
-            <button
-              key={period}
-              type="button"
-              aria-pressed={filters.period === period}
-              className={cn("perf-period-option", filters.period === period && "is-active")}
-              onClick={() =>
-                updateParams((params) => {
-                  params.set("period", period);
-                  if(period==="range"){params.set("start",filters.start);params.set("end",filters.end);}
-                  else {params.delete("start");params.delete("end");}
-                  params.set("page", "1");
-                })
-              }
-            >
-              {periodLabel(period)}
-            </button>
-          ))}
-        </div>
-        </div>
-        {filters.period==="range"?<PerformanceDateRange key={`${filters.start}:${filters.end}`} start={filters.start} end={filters.end} updateParams={updateParams}/>:<label className={filterStyles.singleDate} htmlFor="performance-date">
-          <span className="perf-field-label">Chọn ngày</span>
-          <div className="relative">
-            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
-            <Input id="performance-date" type="date" className="pl-9" value={filters.date} onChange={(event) => changeDate(event.target.value)} aria-label="Chọn ngày xem performance" />
-          </div>
-        </label>}
+        <PerformanceDatePicker key={`${filters.period}:${filters.start}:${filters.end}`} filters={filters} updateParams={updateParams}/>
+
       </div>
 
       <div className={filterStyles.grid}>
@@ -394,25 +357,9 @@ function PerformanceFilters({
           Tải lại
         </Button>
       </div>
-      <div className={filterStyles.caption}><span>Kết quả và file Excel dùng cùng khoảng ngày, bộ lọc đang áp dụng.</span><span role="status" aria-live="polite">{isLoading?"Đang cập nhật dữ liệu…":"Bấm tên rider để xem chi tiết"}</span></div>
+      <div className={filterStyles.caption}><span>Kết quả và file Excel dùng cùng khoảng ngày, bộ lọc đang áp dụng. Pick COT1: đến 13:00; sau 13:00: COT2.</span><span role="status" aria-live="polite">{isLoading?"Đang cập nhật dữ liệu…":"Bấm tên rider để xem chi tiết"}</span></div>
     </section>
   );
-}
-
-function PerformanceDateRange({start,end,updateParams}:{start:string;end:string;updateParams:UpdateParams}){
-  const [from,setFrom]=useState(start),[to,setTo]=useState(end),[error,setError]=useState("");
-  return <form className={filterStyles.dateRange} onSubmit={event=>{
-    event.preventDefault();
-    try{
-      parsePerformanceFilters(new URLSearchParams({period:"range",start:from,end:to}));setError("");
-      updateParams(params=>{params.set("period","range");params.set("start",from);params.set("end",to);params.set("date",to);params.set("page","1");});
-    }catch(caught){setError(caught instanceof Error?caught.message:"Khoảng ngày không hợp lệ");}
-  }}>
-    <label><span className="perf-field-label">Từ ngày</span><Input type="date" required value={from} max={to||undefined} onChange={event=>setFrom(event.target.value)} aria-label="Performance từ ngày"/></label>
-    <label><span className="perf-field-label">Đến ngày</span><Input type="date" required value={to} min={from||undefined} onChange={event=>setTo(event.target.value)} aria-label="Performance đến ngày"/></label>
-    <Button type="submit"><CalendarDays size={16}/>Xem dữ liệu</Button>
-    {error&&<p className={filterStyles.error} role="alert">{error}</p>}
-  </form>;
 }
 
 function PerformanceKpiCards({
@@ -574,10 +521,11 @@ function PerformanceTableRow({ row }: { row: PerformanceRow }) {
   const pickPercent = deliPercent === null ? null : 100-deliPercent;
   const percent = (value: number) => value.toLocaleString("vi-VN",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
   const cot = (row.cot??"").replace(/\s/g,"").toLowerCase();
+  const pickupWarning = pickupCotWarning(row);
   const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
   return <tr className={tableStyles.row}>
     <th scope="row" className={tableStyles.identity}>
-      <strong title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}</strong>
+      <strong className={tableStyles.riderName} title={row.rider_name??row.driver_name??row.driver_id}>{row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}{pickupWarning&&<span className={tableStyles.pickupWarning} role="img" aria-label={pickupWarning} title={pickupWarning}><TriangleAlert size={13} aria-hidden="true"/></span>}</strong>
       <small>{row.driver_id}</small>
     </th>
     <td className={tableStyles.kvCell}><strong>{row.kv??"—"}</strong><span data-cot={cot.startsWith("cot1")?"1":cot.startsWith("cot2")?"2":"unknown"}>{row.cot||"—"}</span></td>

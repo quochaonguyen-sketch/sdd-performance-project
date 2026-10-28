@@ -119,6 +119,13 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
   const orderBy = orderClause(filters.sort, filters.dir);
   const offset = (filters.page - 1) * filters.pageSize;
   const { start, end } = filters;
+  // Reject stale daily splits before summing, so another day's totals cannot legitimize them.
+  const validPickupCot = Prisma.sql`
+    coalesce(p.pickup_assigned_cot1, 0) + coalesce(p.pickup_assigned_cot2, 0) <= coalesce(p.pickup_assigned, 0)
+    and coalesce(p.pickup_picked_cot1, 0) + coalesce(p.pickup_picked_cot2, 0) <= coalesce(p.pickup_picked, 0)
+    and coalesce(p.pickup_picked_cot1, 0) <= coalesce(p.pickup_assigned_cot1, 0)
+    and coalesce(p.pickup_picked_cot2, 0) <= coalesce(p.pickup_assigned_cot2, 0)
+  `;
   const reportDateSelect = filters.period === "day" || dailyRows
     ? Prisma.sql`p.report_date::date`
     : Prisma.sql`${end}::date`;
@@ -217,10 +224,10 @@ async function loadDriverPerformance(filters:PerformanceFilters,revision:string,
         sum(coalesce(p.delivery_delivered_cot2, 0))::bigint as delivery_delivered_cot2,
         sum(coalesce(p.pickup_assigned, 0))::bigint as pickup_assigned,
         sum(coalesce(p.pickup_picked, 0))::bigint as pickup_picked,
-        sum(coalesce(p.pickup_assigned_cot1, 0))::bigint as pickup_assigned_cot1,
-        sum(coalesce(p.pickup_picked_cot1, 0))::bigint as pickup_picked_cot1,
-        sum(coalesce(p.pickup_assigned_cot2, 0))::bigint as pickup_assigned_cot2,
-        sum(coalesce(p.pickup_picked_cot2, 0))::bigint as pickup_picked_cot2,
+        sum(case when ${validPickupCot} then coalesce(p.pickup_assigned_cot1, 0) else 0 end)::bigint as pickup_assigned_cot1,
+        sum(case when ${validPickupCot} then coalesce(p.pickup_picked_cot1, 0) else 0 end)::bigint as pickup_picked_cot1,
+        sum(case when ${validPickupCot} then coalesce(p.pickup_assigned_cot2, 0) else 0 end)::bigint as pickup_assigned_cot2,
+        sum(case when ${validPickupCot} then coalesce(p.pickup_picked_cot2, 0) else 0 end)::bigint as pickup_picked_cot2,
         null::text as cot_breakdown_raw
       from public.driver_performance_daily p
       join rider_scope r on r.rider_code = p.driver_id

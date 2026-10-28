@@ -71,3 +71,15 @@ export function parsePerformanceFilters(params: SearchParamsLike): PerformanceFi
   };
 }
 
+
+/** One date control for both a single date and an inclusive custom range. */
+export function setPerformanceDates(params: URLSearchParams, start: string, end = start) {
+  if (!dateSchema.safeParse(start).success || !dateSchema.safeParse(end).success) throw new RangeError("Chọn ngày hợp lệ.");
+  const selected = parsePerformanceFilters(new URLSearchParams({ period: "range", start, end }));
+  params.set("period", start === end ? "day" : "range");
+  params.set("date", selected.end);
+  params.set("page", "1");
+  params.delete("preset"); params.delete("mode");
+  if (start === end) { params.delete("start"); params.delete("end"); }
+  else { params.set("start", selected.start); params.set("end", selected.end); }
+}

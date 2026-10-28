@@ -4,7 +4,7 @@ export const PAGE_ACCESS_OPTIONS=[
  {key:"dashboard",label:"Dashboard",path:"/dashboard"},
  {key:"delivery_realtime",label:"Delivery Realtime",path:"/realtime-dashboard"},
  {key:"pickup_realtime",label:"Pickup Realtime",path:"/pickup-realtime"},
- {key:"linehaul",label:"Quản lý LH",path:"/linehaul"},
+ {key:"linehaul",label:"Linehaul Management",path:"/linehaul"},
  {key:"pickup_backlog",label:"Pickup Backlog",path:"/lmhub-inventory"},
  {key:"delivery_backlog",label:"Delivery Backlog",path:"/inventory-delivery"},
  {key:"backlog_history",label:"Backlog History",path:"/backlog-history"},

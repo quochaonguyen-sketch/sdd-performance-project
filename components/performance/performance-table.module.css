@@ -65,3 +65,7 @@
 .riderHeading,.kvHeading { text-align:left; }
 @media(max-width:800px) { .header { align-items:flex-start; }.headerActions { align-self:flex-end; } }
 @media(prefers-reduced-motion:reduce) { .row { transition:none; } }
+
+.riderName { display:flex!important; align-items:center; gap:6px; }
+.riderName>a { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.pickupWarning { flex:none; display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:5px; background:#fef3c7; color:#b45309; }
