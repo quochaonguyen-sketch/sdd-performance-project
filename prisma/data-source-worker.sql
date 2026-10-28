@@ -173,6 +173,14 @@ create or replace function public.pulse_data_source_job(p_job uuid,p_worker text
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
 declare j public.data_source_jobs;
 begin
+  -- A publisher holds this row until commit; heartbeats must never queue behind it.
+  select * into j from public.data_source_jobs where id=p_job and worker_id=p_worker
+    and status in ('RUNNING','CANCEL_REQUESTED') for update skip locked;
+  if not found then
+    select * into j from public.data_source_jobs where id=p_job and worker_id=p_worker and status in ('RUNNING','CANCEL_REQUESTED');
+    if not found then return null; end if;
+    return jsonb_build_object('status',j.status,'phase',j.phase);
+  end if;
   update public.data_source_jobs set lease_until=now()+interval '2 minutes' where id=p_job and worker_id=p_worker and status in ('RUNNING','CANCEL_REQUESTED') returning * into j;
   if not found then return null; end if;
   update public.lmhub_fetch_jobs set updated_at=now() where id in
@@ -183,7 +191,7 @@ end $$;
 create or replace function public.begin_data_source_publish(p_job uuid,p_worker text)
 returns boolean language plpgsql security invoker set search_path=pg_catalog as $$
 begin
-  update public.data_source_jobs set phase='publishing',message='Đang ghi dữ liệu; yêu cầu dừng sẽ chờ lượt ghi hoàn tất',
+  update public.data_source_jobs set phase='publishing',lease_until=now()+interval '5 minutes',message='Đang ghi dữ liệu; yêu cầu dừng sẽ chờ lượt ghi hoàn tất',
     events=events||jsonb_build_array(jsonb_build_object('at',now(),'message','Bắt đầu ghi dữ liệu'))
     where id=p_job and worker_id=p_worker and status='RUNNING' and lease_until>now() and phase='fetching';
   return found;
@@ -255,7 +263,7 @@ end $$;
 revoke all on function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) from public,anon,authenticated;
 grant execute on function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) to service_role;
 -- Only this bounded publication gets a longer budget; other API queries keep their existing limits.
-alter function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) set statement_timeout='60s';
+alter function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) set statement_timeout='120s';
 notify pgrst,'reload schema';
 
 -- Preserve the old "fetch both" button, acknowledging it only after both child sources finish.

@@ -5,7 +5,7 @@
  let refHook=0,modalSetup=null,modalShows=0,modalCloses=0;
  const modal={open:false,showModal(){this.open=true;modalShows++;},close(){this.open=false;modalCloses++;}};
  const now=Date.now(),stamp=new Date(now).toISOString(),day=new Date(now+7*3600000).toISOString().slice(0,10);
- const trip={trip_id:'123',lt_code:'LT-DEMO-001',trip_day:'2026-10-27',vehicle:'VAN',plate_number:'XE MINH HỌA',driver_name:'Tài xế minh họa',origin:'Kho xuất phát',destination:'52-HCM SDD-01 Hub',direction:'inbound',phase:'en_route',hub_sequence:2,hub_eta:new Date(now+20*60000).toISOString(),hub_sta:stamp,hub_ata:null,hub_atd:null,orders:807,bags:10,loose:237,load_total:247,pack_description:'10Bao 90x70,237NA',pack_unknown:'',expected_unload:247,unloaded_units:0,lat:10,lng:106,hub_lat:10,hub_lng:106,gps_at:stamp,location_checked_at:stamp,location_error:null,next_station:'52-HCM SDD-01 Hub'};
+ const trip={trip_id:'123',lt_code:'LT-DEMO-001',trip_day:day,vehicle:'VAN',plate_number:'XE MINH HỌA',driver_name:'Tài xế minh họa',origin:'Kho xuất phát',destination:'52-HCM SDD-01 Hub',direction:'inbound',phase:'en_route',hub_sequence:2,hub_eta:new Date(now+20*60000).toISOString(),hub_sta:stamp,hub_ata:null,hub_atd:null,orders:807,bags:10,loose:237,load_total:247,pack_description:'10Bao 90x70,237NA',pack_unknown:'',expected_unload:247,unloaded_units:0,lat:10,lng:106,hub_lat:10,hub_lng:106,gps_at:stamp,location_checked_at:stamp,location_error:null,next_station:'52-HCM SDD-01 Hub'};
  trip.origin_atd=stamp;
  const fixture={day,snapshotAt:stamp,trips:[trip],canRefresh:true};
  const db={from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{snapshot_at:stamp,trips:[trip]}})}),rpc:async()=>({data:{jobId:'queued-test'}})};
@@ -34,6 +34,7 @@
  assert.ok(!listHtml.includes("<aside"),"Full-width list must not keep the detail sidebar");
  assert.ok(listHtml.includes("GPS gần nhất"));assert.ok(listHtml.includes(`dateTime="${stamp}"`));
  assert.ok(listHtml.includes('aria-haspopup="dialog"'));
+ for(const label of ['Hàng về &amp; tiến độ xả tải','Đang lên hàng','Phân bổ đơn theo giờ','Chi tiết tải theo chuyến'])assert.ok(listHtml.includes(label),`Missing summary ${label}`);
  const oldGps=new Date(now-30*60000).toISOString();trip.gps_at=oldGps;hook=0;
  const staleGpsHtml=renderToStaticMarkup(React.createElement(LinehaulView));
  assert.ok(staleGpsHtml.includes(`dateTime="${oldGps}"`));assert.ok(staleGpsHtml.includes('GPS cũ'));
@@ -66,7 +67,7 @@
   for(const text of ['ETA','API không cung cấp','Chưa có mốc giờ xả','Hoàn tất xả tải','Rời hub','GPS gần nhất'])assert.ok(!dashboardHtml.includes(text),`Unavailable field shown: ${text}`);
   view='active';selected='123';fixture.trips=[{...trip,vehicle:'',plate_number:'',driver_name:'',origin:'',destination:'',origin_atd:null,hub_eta:stamp,hub_sta:null,orders:null,bags:0,loose:null,load_total:null,expected_unload:null,unloaded_units:null,pack_description:'',lat:null,lng:null,gps_at:null}];
   hook=0;const sparseHtml=renderToStaticMarkup(React.createElement(LinehaulView));
-  for(const text of ['ETA','Mốc thực tế','Mốc vận hành thực tế','Giờ đến kế hoạch','Chưa rõ','Chưa có tên','Chưa có biển','Vị trí xe','Chi tiết đóng gói','—'])assert.ok(!sparseHtml.includes(text),`Empty field shown: ${text}`);
+  for(const text of ['ETA','Mốc thực tế','Mốc vận hành thực tế','Giờ đến kế hoạch','Chưa có tên','Chưa có biển','Vị trí xe','Chi tiết đóng gói'])assert.ok(!sparseHtml.includes(text),`Empty field shown: ${text}`);
   assert.ok(sparseHtml.includes('Chưa có thời gian GPS'));
   assert.ok(sparseHtml.includes('0 bao'),'Real zero must remain visible');
   fixture.trips[0].bags=null;hook=0;

@@ -5,7 +5,7 @@ begin
   update public.data_source_settings set auto_enabled=false;
   if exists(select 1 from public.data_source_jobs where status in ('QUEUED','RUNNING','CANCEL_REQUESTED')) then raise exception 'Run integration test with idle central queue'; end if;
   if has_table_privilege('authenticated','public.data_source_jobs','select') or has_function_privilege('anon','public.claim_data_source_job(text)','execute') then raise exception 'Private control plane exposed'; end if;
-  if not exists(select 1 from pg_proc where oid='public.publish_central_pickup'::regproc and 'statement_timeout=60s'=any(proconfig)) then raise exception 'Missing bounded publication timeout'; end if;
+  if not exists(select 1 from pg_proc where oid='public.publish_central_pickup'::regproc and 'statement_timeout=120s'=any(proconfig)) then raise exception 'Missing bounded publication timeout'; end if;
   perform public.pulse_data_source_worker('test-worker','test-host','test',2);
   a:=public.control_data_source('pickup_inventory','run',current_date,null);
   b:=public.control_data_source('pickup_inventory','run',current_date,null);

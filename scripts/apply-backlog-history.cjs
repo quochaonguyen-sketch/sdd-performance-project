@@ -49,7 +49,7 @@ async function main() {
     const end = source.indexOf('revoke all on function public.publish_central_pickup', start);
     if (start < 0 || end < 0 || !source.slice(start, end).includes('r.district')) throw new Error('Pickup publisher definition missing');
     for (const sql of statements(source.slice(start, end))) await tx.$executeRawUnsafe(sql);
-    await tx.$executeRawUnsafe("alter function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) set statement_timeout='60s'");
+    await tx.$executeRawUnsafe("alter function public.publish_central_pickup(uuid,text,text,timestamptz,jsonb,text[],boolean) set statement_timeout='120s'");
     await tx.$queryRawUnsafe('select public.enqueue_backlog_checkpoints()');
   }, { timeout: 60000 });
   console.log('Backlog history schema, publication trigger and UTC+7 checkpoint schedule installed.');

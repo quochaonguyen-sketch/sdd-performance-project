@@ -27,6 +27,16 @@ Web chỉ tạo job PENDING trong `lmhub_fetch_jobs`. Python worker của SPX La
 
 ## Kiểm tra sau khi cấu hình
 
+### Sửa lỗi ghi Tồn Pickup bị timeout
+
+Lỗi `publish_central_pickup: HTTP 500, mã 57014` xuất hiện sau khi đã đọc đủ SPX là timeout bước ghi database. Ngân sách RPC này là 120 giây, HTTP worker 150 giây; các RPC khác giữ 20 giây. Worker gửi JSON UTF-8 gọn để giảm payload tiếng Việt. Không tự retry mù một publication đang chạy; phiên bản hiện tại giữ upsert + xóa snapshot cũ + xác nhận + lịch sử backlog trong cùng giao dịch, giữ kiểm tra ownership, duplicate và nguồn rỗng hoàn chỉnh.
+
+Publisher khóa dòng job trong lúc commit. `pulse_data_source_job` dùng `FOR UPDATE SKIP LOCKED`; khi dòng đang bận thì chỉ đọc lại owner/status/phase thay vì chờ khóa và làm daemon báo lỗi kết nối. Trước publication, lease được cấp 5 phút để bao phủ giới hạn ghi 120 giây; các heartbeat bình thường vẫn cập nhật theo cơ chế cũ. Không tự đổi owner hay đánh dấu thành công khi heartbeat không cập nhật được lease.
+
+Áp dụng: `node --env-file=.env --env-file=.env.local scripts/apply-pickup-publication-timeout.cjs`, đồng thời cập nhật `C:/code/sdd-web-data/sdd_data/source_control.py`. Tiến trình con nạp module mỗi job; thay đổi RPC có hiệu lực sau reload schema, không cần dừng các job đang chạy. `--test` kiểm publisher với 12.000 bản ghi, cùng indexes và audit trigger, ownership, idempotency, nguồn lỗi/rỗng và phạm vi KV trong các bảng tạm; toàn bộ fixture rollback và không thay tồn thật.
+
+Đối chiếu lượt chạy thật bằng ba số: `lmhub_fetch_jobs.row_count`, số dòng snapshot mới trong `pickup_48h_no_api2` và `backlog_snapshots.total_orders`. Kiểm tra heartbeat trong giai đoạn publishing phải trả về nhanh, không đợi transaction ghi xong.
+
 1. Đăng nhập bằng tài khoản có quyền Pickup, mở `/inventory-delivery` hoặc `/lmhub-inventory` từ menu.
 2. Bấm Fetch, kiểm tra job chuyển PENDING → RUNNING → DONE; lỗi worker hiển thị ERROR.
 3. Kiểm tra snapshot mới xuất hiện, số tồn và chi tiết phường khớp dữ liệu SPX. Thử lọc COT, tìm phường và xuất dữ liệu.
