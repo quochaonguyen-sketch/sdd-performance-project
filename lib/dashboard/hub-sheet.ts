@@ -1,4 +1,9 @@
 export const HUB_SHEET_ID = "1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU";
+export function sheetDateTime(value: unknown) {
+  // Sheets UNFORMATTED_VALUE returns date cells as local spreadsheet serials.
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1 || value > 2958465) return null;
+  return new Date(Date.UTC(1899,11,30)+Math.round(value*86400000)).toISOString().slice(0,19).replace("T"," ");
+}
 export const HUB_METRICS = [
   ["lm_hub_inbounded_order_qty_eod", "Inbound"],
   ["Picked", "Picked"],
@@ -27,14 +32,14 @@ export function parseHubSheet(grid: unknown[][]) {
   }
   const rows = grid.slice(1).filter(row => row.some(v => String(v ?? "").trim())).map(row => {
     const get = (key: string) => String(row[headers.indexOf(key)] ?? "").trim();
-    const date = get("snapshot_date");
+    const date = sheetDateTime(row[headers.indexOf("snapshot_date")])?.slice(0,10) ?? get("snapshot_date");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !get("station_id")) throw Error("Ngày hoặc station_id không hợp lệ");
     const metrics = Object.fromEntries(HUB_METRICS.map(([key]) => {
       const raw = get(key), value = raw === "" ? null : Number(raw);
       if (value !== null && (!Number.isSafeInteger(value) || value < 0)) throw Error(`Giá trị ${key} không hợp lệ`);
       return [key, value];
     }));
-    return { stationId: get("station_id"), stationName: get("station_name"), date, fetchedAt: get("fetched_at"), status: get("data_status"), metrics };
+    return { stationId: get("station_id"), stationName: get("station_name"), date, fetchedAt: sheetDateTime(row[headers.indexOf("fetched_at")]) ?? get("fetched_at"), status: get("data_status"), metrics };
   });
   if (!rows.length) throw Error("Nguồn dashboard chưa có dữ liệu");
   const latestDate = rows.map(r => r.date).sort().at(-1)!;

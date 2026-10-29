@@ -1,3 +1,5 @@
+import { sheetDateTime } from "./hub-sheet.ts";
+
 const counts = ["planned_people", "actual_people", "actual_fte", "actual_os", "actual_bpo"] as const;
 type Count = typeof counts[number];
 export function summarizeHubRoster(grid: unknown[][], stationIds: string[], now = new Date()) {
@@ -10,7 +12,8 @@ export function summarizeHubRoster(grid: unknown[][], stationIds: string[], now 
   const rows = grid.slice(1).filter(r => r.some(v => String(v ?? "").trim())).flatMap(row => {
     const get = (key: string) => String(row[headers.indexOf(key)] ?? "").trim();
     if (!stationIds.includes(get("station_id"))) return [];
-    const date = get("event_date_iso"), shiftDate = get("shift_date_iso"), shift = get("shift");
+    const getDate = (key: string) => sheetDateTime(row[headers.indexOf(key)])?.slice(0,10) ?? get(key);
+    const date = getDate("event_date_iso"), shiftDate = getDate("shift_date_iso"), shift = get("shift");
     const validDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0,10) === v;
     if (!validDate(date) || !validDate(shiftDate)) throw Error("Roster có ngày không hợp lệ");
     const time = shift.match(/^([01]\d|2[0-3]):([0-5]\d)\s*[-–]\s*([01]\d|2[0-3]):([0-5]\d)$/);
@@ -27,7 +30,7 @@ export function summarizeHubRoster(grid: unknown[][], stationIds: string[], now 
       if (value !== null && (!Number.isSafeInteger(value) || value < 0)) throw Error(`Roster có ${key} không hợp lệ`);
       return [key, value];
     })) as Record<Count, number | null>;
-    return [{ date, shiftDate, shift, start, end, values, fetchedAt: get("fetched_at") }];
+    return [{ date, shiftDate, shift, start, end, values, fetchedAt: sheetDateTime(row[headers.indexOf("fetched_at")]) ?? get("fetched_at") }];
   });
   const date = rows.map(r => r.date).filter(d => d <= today).sort().at(-1);
   if (!date) throw Error("Chưa có roster cho ngày hiện tại hoặc trước đó");

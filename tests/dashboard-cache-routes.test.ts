@@ -47,7 +47,7 @@ test("OH route checks access before cache, bypasses on refresh and retries failu
 
 test("Sheet caches expire independently, share reads and recalculate shifts from cached roster", async t => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-29T08:59:30+07:00") });
-  const reads = { hub: 0, roster: 0, fc: 0 };
+  const reads = { hub: 0, roster: 0, fc: 0, hiring: 0 };
   const grid = [["station_id", "event_date_iso", "shift_date_iso", "shift", "planned_people", "actual_people", "actual_fte", "actual_os", "actual_bpo"], ["1", "2026-10-29", "2026-10-29", "08:00-09:00", 2, 2, 2, 0, 0]];
   const get = route("app/api/dashboard/hub-sheet/route.ts", {
     "@/lib/auth/current-user": { getCurrentUserContext: async () => ({ user: { id: "a" } }) },
@@ -55,24 +55,26 @@ test("Sheet caches expire independently, share reads and recalculate shifts from
     "@/lib/dashboard/hub-sheet": { HUB_SHEET_ID: "test", parseHubSheet: () => ({ stations: [{ stationId: "1" }] }) },
     "@/lib/dashboard/hub-roster": { summarizeHubRoster },
     "@/lib/dashboard/hub-fc": { parseHubFc: () => ({ rows: [] }) },
+    "@/lib/google/rider-plan": { parseRiderPlan: () => ({rows:[]}) },
+    "@/lib/dashboard/rider-hiring": { summarizeRiderHiring: () => ({current:0}) },
   }, (async url => {
     const path = decodeURIComponent(String(url));
-    const key = path.includes("Roster") ? "roster" : path.includes("FC!") ? "fc" : "hub";
+    const key = path.includes("Roster") ? "roster" : path.includes("FC!") ? "fc" : path.includes("Sheet1!") ? "hiring" : "hub";
     reads[key]++;
     return Response.json({ values: key === "roster" ? grid : [] });
   }) as typeof fetch);
   const [first] = await Promise.all([get(request()), get(request())]);
   assert.equal((await first.json()).roster.data.active.actual_people, 2);
-  assert.deepEqual(reads, { hub: 1, roster: 1, fc: 1 });
+  assert.deepEqual(reads, { hub: 1, roster: 1, fc: 1, hiring: 1 });
   t.mock.timers.tick(60_001);
   assert.equal((await (await get(request())).json()).roster.data.active.actual_people, 0);
-  assert.deepEqual(reads, { hub: 2, roster: 1, fc: 1 });
+  assert.deepEqual(reads, { hub: 2, roster: 1, fc: 1, hiring: 1 });
   t.mock.timers.tick(240_000);
   await get(request());
-  assert.deepEqual(reads, { hub: 3, roster: 2, fc: 1 });
+  assert.deepEqual(reads, { hub: 3, roster: 2, fc: 1, hiring: 2 });
   t.mock.timers.tick(600_000);
   await get(request());
-  assert.deepEqual(reads, { hub: 4, roster: 3, fc: 2 });
+  assert.deepEqual(reads, { hub: 4, roster: 3, fc: 2, hiring: 3 });
   await get(request(true));
-  assert.deepEqual(reads, { hub: 5, roster: 4, fc: 3 });
+  assert.deepEqual(reads, { hub: 5, roster: 4, fc: 3, hiring: 4 });
 });

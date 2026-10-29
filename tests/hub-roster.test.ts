@@ -21,3 +21,10 @@ test("duplicate shifts, invalid dates/counts are rejected; blanks remain unavail
   assert.equal(summarizeHubRoster([header,r],["4232"],new Date("2026-10-29T08:00:00+07:00")).active?.actual_fte,null);
   r[6]="-1";assert.throws(()=>summarizeHubRoster([header,r],["4232"]),/không hợp lệ/);
 });
+
+test("roster dates and timestamps accept Google serials without shifting local ca boundaries",()=>{
+ const values: unknown[]=[...row("16:00-23:00"),46324.5];values[1]=46324;values[2]=46324;
+ const data=summarizeHubRoster([[...header,"fetched_at"],values],["4232"],new Date("2026-10-29T17:00:00+07:00"));
+ assert.equal(data.date,"2026-10-29");assert.equal(data.active?.actual_fte,4);
+ assert.equal(data.fetchedAt,"2026-10-29 12:00:00");
+});

@@ -19,3 +19,15 @@ test("blank is unavailable, zero is valid, duplicates and invalid counts are rej
   assert.throws(() => parseHubSheet([header, r]), /không hợp lệ/);
   assert.throws(() => parseHubSheet([]));
 });
+
+test("Google date serials preserve the local day and fetched time after Sheet formatting changes", () => {
+  const values: unknown[] = [...row("2026-10-29"), 46324.5];
+  values[2] = 46324;
+  const result = parseHubSheet([[...header,"fetched_at"],values]);
+  assert.equal(result.date,"2026-10-29");
+  assert.equal(result.stations[0].fetchedAt,"2026-10-29 12:00:00");
+  assert.equal(result.totals.Picked,10);
+  for (const invalid of [-1,Infinity,2958466]) {
+    assert.throws(()=>parseHubSheet([[...header,"fetched_at"],values.map((v,i)=>i===2?invalid:v)]), /không hợp lệ/);
+  }
+});
