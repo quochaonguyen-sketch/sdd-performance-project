@@ -24,4 +24,13 @@ begin
     if sqlerrm<>'Invalid delivery realtime ownership' then raise; end if;
   end;
   if (select count(*) from public.realtime_delivery_riders where snapshot_id=j)<>2 then raise exception 'Bad publication changed existing snapshot'; end if;
+  -- Another writer may publish while the central worker is reading SPX.
+  n:=public.publish_central_delivery_realtime(bad,'integration',rows,stamp-interval '1 second');
+  if n<>0 or (select count(*) from public.realtime_delivery_riders where snapshot_id=j)<>2 then raise exception 'Older snapshot changed newer data'; end if;
+  if not exists(select 1 from public.data_source_jobs where id=bad and events @> '[{"message":"Đã có snapshot mới hơn; giữ nguyên dữ liệu hiện tại"}]'::jsonb) then raise exception 'Skipped snapshot has no explanation'; end if;
+  if not public.finish_data_source_job(bad,'integration','SUCCEEDED') then raise exception 'Skip acknowledgement failed'; end if;
+  if not exists(select 1 from public.data_source_jobs where id=bad and status='SUCCEEDED' and message='Đã có snapshot mới hơn; giữ nguyên dữ liệu hiện tại') then raise exception 'Skip reason was lost'; end if;
+  update public.data_source_jobs set status='RUNNING',phase='publishing',lease_until=stamp+interval '2 minutes' where id=bad;
+  n:=public.publish_central_delivery_realtime(bad,'integration',rows,stamp+interval '1 second');
+  if n<>2 or (select count(*) from public.realtime_delivery_riders where snapshot_id=bad)<>2 then raise exception 'Newer snapshot was not published'; end if;
 end $$;

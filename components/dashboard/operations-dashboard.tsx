@@ -14,15 +14,18 @@ import spotlight from "./dashboard-spotlight.module.css";
 import s from "./operations-dashboard.module.css";
 import { DashboardVolume } from "./dashboard-volume";
 import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
+import { DashboardOnhold } from "./dashboard-onhold";
+import { shiftOHDay } from "@/lib/dashboard/onhold-overview";
+import type { OHData } from "@/lib/onhold/model";
 
 type PickupLive = { riders: PickupRider[]; riderSnapshotAt: string | null; snapshotAt: string | null; riderStale?: boolean };
 type PickupBacklog = { rows: { area: string; zone: string; cot: string; orders: number }[]; snapshotAt: string | null };
 type Source<T> = { data: T | null; error: string | null; loading?: boolean };
 export type DashboardOverviewData = {
   operations: Source<OperationsOverview>; performance: Source<PerformanceResult>;
-  pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>;
+  pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>; onhold: Source<OHData>;
 };
-const empty: DashboardOverviewData = { operations: { data: null, error: null }, performance: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null } };
+const empty: DashboardOverviewData = { operations: { data: null, error: null }, performance: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null }, onhold: { data: null, error: null } };
 const fmt = (n: number | null | undefined) => n == null ? "—" : n.toLocaleString("vi-VN");
 const pct = (n: number | null | undefined) => n == null ? "—" : `${n.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
 const dayLabel = (date: string) => `${date.slice(8,10)}/${date.slice(5,7)}`;
@@ -63,7 +66,7 @@ export function OperationsDashboard() {
         const payload = await res.json();
         if (!res.ok || payload.success === false) throw new Error(payload.error || "Không tải được dữ liệu");
         if (id !== request.current || abort.signal.aborted) return;
-        // Keep only this mounted dashboard's five sources; never persist user data.
+        // Keep only this mounted dashboard's sources; never persist user data.
         const partialFailure = payload.live?.error || payload.backlog?.error || payload.delivery?.error || payload.pickup?.error;
         if (!partialFailure) sourceCache.current.set(key, { value: payload, expiresAt: Date.now() + ttl, url: requestKey });
         publish({ data: payload, error: null } as DashboardOverviewData[K]);
@@ -83,6 +86,7 @@ export function OperationsDashboard() {
       source("pickup", "/api/pickup-realtime", 30_000),
       source("pickupBacklog", "/api/pickup-inventory?view=zone-board&p_status=Assigned", 30_000),
       source("volume", "/api/dashboard/volume", 120_000),
+      source("onhold", `/api/onhold?from=${shiftOHDay(today, -26)}&to=${today}`, 120_000),
     ]);
     if (id !== request.current || abort.signal.aborted) return;
     inFlight.current = false;
@@ -126,13 +130,13 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
   const pickupRate = pickup ? completionRate(pickup.picked, pickup.assigned) : null;
   const liveError = data.operations.error ?? data.operations.data?.live.error;
   const deliveryError = data.operations.error ?? data.operations.data?.backlog.error;
-  const issues = [liveError && "Live Dashboard", data.performance.error && "Rider Performance", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume"].filter(Boolean);
+  const issues = [liveError && "Live Dashboard", data.performance.error && "Rider Performance", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume", data.onhold.error && "Onhold"].filter(Boolean);
   return <div className={s.dashboard}>
     <header className={s.header}>
       <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
       <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
-    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Volume","#volume-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"]].map(([label,href]) => <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
+    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"]].map(([label,href]) => <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
     <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn · Hiệu suất 7 ngày gần nhất</span><span>Tự cập nhật mỗi 60 giây · UTC+7</span></div>
     {!!issues.length && <div className={s.notice} role="status">Chưa tải được: {issues.join(", ")}. Các phần còn lại vẫn hiển thị dữ liệu đã tải.<button type="button" disabled={loading} onClick={onRefresh}>Thử lại</button></div>}
 
@@ -146,7 +150,10 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
     <SectionTitle number="01" title="Volume Overview" sub="Sản lượng giao nhận · ngày gần nhất và xu hướng 7/14 ngày" />
     <section id="volume-overview" aria-label="Tổng hợp Volume"><DashboardVolume source={data.volume} loading={data.volume.loading ?? loading}/></section>
 
-    <SectionTitle number="02" title="Live Operations" sub="Tiến độ hiện tại" />
+    <SectionTitle number="02" title="Onhold Analytics" sub="Biến động theo ngày · Rider, phường và lý do OH nổi bật" />
+    <DashboardOnhold source={data.onhold} end={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(updated ? new Date(updated) : new Date())} loading={data.onhold.loading ?? loading}/>
+
+    <SectionTitle number="03" title="Live Operations" sub="Tiến độ hiện tại" />
     <div className={s.twoColumns}>
       <Panel title="Delivery progress" eyebrow="LIVE DASHBOARD" href="/realtime-dashboard" icon={<Activity size={17}/>}>
         <SourceStatus error={liveError} at={data.operations.data?.live.snapshotAt} loading={data.operations.loading ?? loading} />
@@ -164,7 +171,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
       </Panel>
     </div>
 
-    <SectionTitle number="03" title="Rider Performance" sub={performance ? `${dayLabel(performance.analysis.start)}–${dayLabel(performance.analysis.end)} · 7 ngày` : "Hiệu suất 7 ngày gần nhất"}/>
+    <SectionTitle number="04" title="Rider Performance" sub={performance ? `${dayLabel(performance.analysis.start)}–${dayLabel(performance.analysis.end)} · 7 ngày` : "Hiệu suất 7 ngày gần nhất"}/>
     <div className={s.performanceGrid}>
       <Panel title="Xu hướng hoàn thành" eyebrow="7-DAY TREND" href="/performance" icon={<BarChart3 size={17}/>}>
         {data.performance.error ? <p className={s.error}>Không tải được hiệu suất. Thử làm mới.</p> : null}
@@ -187,7 +194,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
       </Panel>
     </div>
 
-    <SectionTitle number="04" title="Backlog Control" sub="Hai nguồn tồn độc lập · không cộng với đơn đang giao/đang lấy"/>
+    <SectionTitle number="05" title="Backlog Control" sub="Hai nguồn tồn độc lập · không cộng với đơn đang giao/đang lấy"/>
     <div className={s.twoColumns}>
       <Panel title="Pickup Backlog" eyebrow="ASSIGNED · CHỜ LẤY" href="/lmhub-inventory" icon={<Layers3 size={17}/>}>
         <SourceStatus error={data.pickupBacklog.error} at={data.pickupBacklog.data?.snapshotAt} loading={data.pickupBacklog.loading ?? loading}/>
@@ -204,7 +211,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
       </Panel>
     </div>
 
-    <SectionTitle number="05" title="Area Overview" sub="So sánh 5 khu vực · tỷ lệ live và backlog từ các snapshot riêng"/>
+    <SectionTitle number="06" title="Area Overview" sub="So sánh 5 khu vực · tỷ lệ live và backlog từ các snapshot riêng"/>
     <section className={s.panel} aria-label="Tổng hợp theo khu vực"><div className={s.tableWrap}><table className={s.areaTable}><thead><tr><th>Khu vực</th><th>Delivery live<small>Đã giao / gán</small></th><th>Pickup live<small>Đã lấy / gán theo rider</small></th><th>Delivery rate<small>Snapshot giao</small></th><th>Pickup rate<small>Snapshot lấy</small></th><th>Pickup backlog</th><th>Delivery backlog</th></tr></thead><tbody>{OPERATING_AREAS.map(area => {
       const d = live?.areas.find(r=>r.area===area);
       const pickupRiders = pickup?.riders.filter(r=>r.area===area && r.metrics) ?? [];

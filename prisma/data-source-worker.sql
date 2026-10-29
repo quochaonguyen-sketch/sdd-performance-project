@@ -141,7 +141,7 @@ end $$;
 
 create or replace function public.pulse_data_source_worker(p_worker text,p_hostname text,p_version text,p_concurrency integer)
 returns boolean language sql security invoker set search_path=pg_catalog as $$
-  insert into public.data_source_workers(id,hostname,version,concurrency,last_seen_at) values(p_worker,left(p_hostname,100),left(p_version,30),p_concurrency,now())
+  insert into public.data_source_workers(id,hostname,version,concurrency,last_seen_at) values(p_worker,left(p_hostname,100),left(p_version,100),p_concurrency,now())
   on conflict(id) do update set last_seen_at=now(),version=excluded.version,concurrency=excluded.concurrency returning true;
 $$;
 
@@ -225,7 +225,8 @@ begin
   select * into j from public.data_source_jobs where id=p_job and worker_id=p_worker and status in ('RUNNING','CANCEL_REQUESTED') for update;
   if not found then return false; end if;
   if p_status='SUCCEEDED' and j.legacy_job_id is not null and not exists(select 1 from public.lmhub_fetch_jobs where id=j.legacy_job_id and status='DONE') then raise exception 'Inventory publication not confirmed'; end if;
-  msg:=case p_status when 'SUCCEEDED' then 'Đồng bộ thành công' when 'CANCELLED' then 'Đã dừng trước bước ghi dữ liệu' else 'Tác vụ thất bại; xem nhật ký trên máy chủ' end;
+  msg:=case when p_status='SUCCEEDED' and j.source_id='delivery_realtime' and j.message='Đã có snapshot mới hơn; giữ nguyên dữ liệu hiện tại' then j.message
+    when p_status='SUCCEEDED' then 'Đồng bộ thành công' when p_status='CANCELLED' then 'Đã dừng trước bước ghi dữ liệu' else 'Tác vụ thất bại; xem nhật ký trên máy chủ' end;
   update public.data_source_jobs set status=p_status,phase='finished',finished_at=now(),lease_until=null,message=msg,
     events=events||jsonb_build_array(jsonb_build_object('at',now(),'message',msg)) where id=p_job;
   update public.lmhub_fetch_jobs set status='ERROR',error_message=msg,finished_at=now(),updated_at=now() where id=j.legacy_job_id and status='RUNNING';

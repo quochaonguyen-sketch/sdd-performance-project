@@ -10,7 +10,7 @@ const filters = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
-export async function GET(request: Request) {
+async function readActivity(request: Request) {
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   if (context.profile.role !== "admin") return NextResponse.json({ error: "Chỉ admin được xem nhật ký" }, { status: 403 });
@@ -32,5 +32,10 @@ export async function GET(request: Request) {
   ]);
   const error = logs.error ?? members.error;
   if (error) return NextResponse.json({ error: "Không tải được nhật ký người dùng" }, { status: 500 });
-  return NextResponse.json({ events: logs.data, members: members.data, total: logs.count ?? 0, page, page_size: 40 });
+  return NextResponse.json({ events: logs.data, members: members.data, total: logs.count ?? 0, page, page_size: 40 }, { headers: { "Cache-Control": "private, no-store" } });
+}
+
+export async function GET(request: Request) {
+  try { return await readActivity(request); }
+  catch { return NextResponse.json({ error: "Chưa tải được nhật ký. Vui lòng thử lại." }, { status: 503, headers: { "Cache-Control": "private, no-store" } }); }
 }

@@ -36,7 +36,12 @@ begin
     or coalesce((r->>'delivered')::integer,-1)<0 or coalesce((r->>'delivering')::integer,-1)<0
     or coalesce((r->>'failed')::integer,-1)<0 or coalesce((r->>'idle_delivery_seconds')::integer,-1)<0)
     or (select count(distinct r->>'driver_id') from jsonb_array_elements(p_rows) r)<>n then raise exception 'Invalid delivery rider'; end if;
-  if exists(select 1 from public.realtime_delivery_riders where snapshot_at>p_at) then raise exception 'Newer delivery snapshot already exists'; end if;
+  if exists(select 1 from public.realtime_delivery_riders where snapshot_at>p_at) then
+    update public.data_source_jobs set message='Đã có snapshot mới hơn; giữ nguyên dữ liệu hiện tại',
+      events=events||jsonb_build_array(jsonb_build_object('at',now(),'message','Đã có snapshot mới hơn; giữ nguyên dữ liệu hiện tại','source_at',p_at))
+      where id=p_job;
+    return 0;
+  end if;
   insert into public.realtime_delivery_riders(work_date,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at,raw_data)
   select day,r.driver_id,r.driver_name,r.total_assigned,r.delivered,r.delivering,r.failed,r.zone_id,r.first_delivery_at,r.idle_delivery_seconds,p_job,p_at,null
     from jsonb_populate_recordset(null::public.realtime_delivery_riders,p_rows) r
