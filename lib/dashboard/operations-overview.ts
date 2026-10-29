@@ -21,7 +21,7 @@ export function summarizeLiveDelivery(rows: LiveDeliveryRow[], profiles: { rider
   const assignedIds = new Set(scoped.filter(r => num(r.total_assigned) > 0).map(r => r.driver_id));
   const roster = [...new Map(profiles.filter(p => assignedIds.has(p.rider_code) && normalizeOperatingArea(p.kv)).map(p => [p.rider_code, p])).values()];
   const cot = (p: typeof roster[number]) => p.cot?.replace(/\s/g, "").toUpperCase();
-  return { ...sum(scoped), riders: scoped.length,
+  return { ...sum(scoped), outboundAssigned: sum(rows).assigned, riders: scoped.length,
     headcount: { total: roster.length, cot1: roster.filter(p=>cot(p)==="COT1").length, cot2: roster.filter(p=>cot(p)==="COT2").length, unknownCot: roster.filter(p=>!["COT1","COT2"].includes(cot(p)??"")).length, areas: OPERATING_AREAS.map(area=>({area,total:roster.filter(p=>normalizeOperatingArea(p.kv)===area).length})) },
     completedRiders: scoped.filter(r => r.total_assigned > 0 && r.delivered >= r.total_assigned).length,
     idleRiders: scoped.filter(r => r.idle_delivery_seconds >= 3600 && r.total_assigned > r.delivered).length,

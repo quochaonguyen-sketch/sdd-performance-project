@@ -14,9 +14,9 @@ export function drawDailyReport(canvas:HTMLCanvasElement,report:DailyReport) {
   box(0,0,width,138,"#14263e");box(40,34,5,68,"#f4532b");
   text("SDD OPERATIONS  /  COT 1 & COT 2",62,49,13,"#bacce2",true);
   text(`Báo cáo vận hành · ${report.day.split("-").reverse().join("/")}`,60,92,34,"#ffffff",true);
-  text("KV1–KV5 · Nhân sự cả ngày · Rider có Assigned hôm nay",1878,91,15,"#bacce2",false,"right");
+  text("KV1–KV5 · Nhân sự cả ngày · Total Driver từ Hub",1878,91,15,"#bacce2",false,"right");
   text(`Chốt bản xem: ${new Date(report.createdAt).toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",hour12:false})} · UTC+7`,40,172,13,"#52657d");
-  const highlights=[{label:"TOTAL INBOUND",value:report.metrics[2].actual,note:"Tổng nhập hub",tone:"#2459d3",bg:"#eaf1ff"},{label:"OUTBOUND VOLUME",value:report.metrics[3].actual,note:"Assigned Delivery hôm nay",tone:"#087b61",bg:"#e9f7f1"},{label:"PENDING OUTBOUND",value:report.metrics[4].actual,note:"Onhold + Non-attempt",tone:"#9a5b00",bg:"#fff5df"},{label:"RIDER CÓ ASSIGNED",value:report.staff.find(r=>r.label==="Rider")?.value??null,note:"Driver ID duy nhất · KV1–KV5",tone:"#7651b5",bg:"#f3eefa"}];
+  const highlights=[{label:"TOTAL INBOUND",value:report.metrics[2].actual,note:"Tổng nhập hub",tone:"#2459d3",bg:"#eaf1ff"},{label:"OUTBOUND VOLUME",value:report.metrics[3].actual,note:"Assigned hôm nay · Gồm rider Không rõ",tone:"#087b61",bg:"#e9f7f1"},{label:"PENDING OUTBOUND",value:report.metrics[4].actual,note:"Onhold + Non-attempt",tone:"#9a5b00",bg:"#fff5df"},{label:"TOTAL DRIVER · HUB",value:report.staff.find(r=>r.label==="Rider")?.value??null,note:"Tổng tài xế trong snapshot hub",tone:"#7651b5",bg:"#f3eefa"}];
   highlights.forEach((item,i)=>{const x=40+i*465;box(x,194,445,112,item.bg);box(x,194,445,4,item.tone);text(item.label,x+20,223,12,item.tone,true);text(number(item.value),x+20,267,36,item.tone,true);text(item.note,x+20,290,12,"#52657d");});
   const left=40,middle=410,right=1110,lw=340,mw=670,rw=770,top=358;
   const title=(label:string,x:number,w:number)=>{text(label,x,338,19,"#172b43",true);box(x,348,w,3,"#f4532b");};
@@ -25,11 +25,12 @@ export function drawDailyReport(canvas:HTMLCanvasElement,report:DailyReport) {
   row(left,top,[230,110],["Nhóm nhân sự","HC"],"header");
   report.staff.forEach((r,i)=>row(left,top+(i+1)*38,[230,110],[r.label,number(r.value)],i===report.staff.length-1?"total":"normal"));
   let ly=top+9*38+38;
-  text("RIDER THEO KHU VỰC",left,ly,13,"#52657d",true);ly+=16;
+  text("RIDER CÓ ASSIGNED THEO KV",left,ly,13,"#52657d",true);ly+=16;
   row(left,ly,[230,110],["Khu vực","HC"],"header");
   report.areas.forEach((r,i)=>row(left,ly+(i+1)*38,[230,110],[r.area,number(r.total)]));
-  text("HC rider: Assigned Delivery > 0 hôm nay.",left,ly+7*38+4,12,"#52657d");
-  text("FTE: actual ngày − 10 LEAD/SUP (tối thiểu 0).",left,ly+7*38+24,12,"#52657d");
+  text("Rider: Total Driver từ Hub Overview.",left,ly+7*38+4,12,"#52657d");
+  text("COT/KV: rider có Assigned hôm nay.",left,ly+7*38+24,12,"#52657d");
+  text("FTE: actual ngày − 10 LEAD/SUP (tối thiểu 0).",left,ly+7*38+44,12,"#52657d");
   title("02  Sản lượng & tiến độ",middle,mw);
   row(middle,top,[290,130,130,120],["Chỉ số","Actual","Forecast","%FC"],"header",42);
   report.metrics.forEach((r,i)=>row(middle,top+42+i*48,[290,130,130,120],[r.label,number(r.actual),number(r.forecast),r.rate===null?"—":`${r.rate.toLocaleString("vi-VN",{maximumFractionDigits:2})}%`],["Total Inbound","Pending Outbound"].includes(r.label)?"total":"normal",48));
@@ -45,7 +46,7 @@ export function drawDailyReport(canvas:HTMLCanvasElement,report:DailyReport) {
   });
   text("Thang thanh: 0–100% · Nhãn giữ %FC thực tế khi vượt kế hoạch.",middle+20,sy+218,12,"#52657d");
   const noteY=sy+262;
-  ["Outbound = Assigned Delivery của tài xế.","Pending Outbound = OH hôm nay + Non-attempt.","WH Inbound = tổng đơn LH đã xả hôm nay.","MP Inbound = Total Inbound − WH Inbound.","Forecast lấy đúng ngày từ tab FC."].forEach((line,i)=>text(line,middle,noteY+i*22,13,"#52657d"));
+  ["Outbound = Assigned toàn bộ rider, gồm Không rõ.","Pending Outbound = OH hôm nay + Non-attempt.","WH Inbound = tổng đơn LH đã xả hôm nay.","MP Inbound = Total Inbound − WH Inbound.","Forecast lấy đúng ngày từ tab FC."].forEach((line,i)=>text(line,middle,noteY+i*22,13,"#52657d"));
   title("03  Non-attempt · Tồn tại hub",right,rw);
   const dw=[95,275,95,95,100,110];
   row(right,top,dw,["Khu vực","Quận / huyện","COT 1","COT 2","Khác COT","Tổng"],"header",36);

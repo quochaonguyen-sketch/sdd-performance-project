@@ -1,6 +1,7 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
 import { RiderSheetStatus } from "./rider-sheet-status";
+import { RiderHiringSection } from "./rider-hiring";
 
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -159,6 +160,7 @@ export function RidersView({
   const [importIssues, setImportIssues] = useState<ImportIssue[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hiringRefresh, setHiringRefresh] = useState(0);
   useReportInitialDataLoading("riders", false);
   const [error, setError] = useState<string | null>(initialError);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -650,7 +652,7 @@ export function RidersView({
               Thêm rider
             </Button>
           </> : null}
-          <Button type="button" variant="secondary" className="riders-action" onClick={refresh} disabled={loading}>
+          <Button type="button" variant="secondary" className="riders-action" onClick={() => { refresh(); setHiringRefresh(value => value + 1); }} disabled={loading}>
             <RefreshCcw size={16} />
             <span className="hidden sm:inline">Tải lại</span>
             <span className="sm:hidden">Lại</span>
@@ -835,6 +837,8 @@ export function RidersView({
           <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3"><p className="text-sm text-slate-500">Trang <strong className="text-slate-700">{safePage}/{pageCount}</strong></p><div className="flex gap-2"><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang trước" disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /></Button><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang sau" disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}><ChevronRight size={16} /></Button></div></div>
         </section>
       </div>
+
+      <RiderHiringSection refreshKey={hiringRefresh}/>
 
       {selected && showDetail ? (
         <RiderDetailModal selected={selected} canManageRiders={canManageRiders && editableRiderAreas.includes(selected.kv ?? "")} deleting={selected.id === deletingId} onClose={() => setShowDetail(false)} onEdit={beginEdit} onDelete={deleteRider} onUpdated={updateRiderInView} />

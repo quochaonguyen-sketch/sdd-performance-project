@@ -4,7 +4,6 @@ import { ArrowDownToLine, ArrowUpRight, CheckCheck, ChevronDown, Clock3, Package
 import { HUB_METRICS, HUB_SHEET_ID, type HubSheetData } from "@/lib/dashboard/hub-sheet";
 import type { HubRoster } from "@/lib/dashboard/hub-roster";
 import type { HubFc } from "@/lib/dashboard/hub-fc";
-import type { RiderHiring } from "@/lib/dashboard/rider-hiring";
 import s from "./dashboard-hub-sheet.module.css";
 
 const primary = [
@@ -21,7 +20,7 @@ const groups = [
 ];
 
 export function useHubSheet(refreshKey: number) {
-  const [data, setData] = useState<(HubSheetData & { roster?: { data: HubRoster | null; error: string | null }; fc?: { data: HubFc | null; error: string | null }; hiring?: { data: RiderHiring | null; error: string | null } }) | null>(null);
+  const [data, setData] = useState<(HubSheetData & { roster?: { data: HubRoster | null; error: string | null }; fc?: { data: HubFc | null; error: string | null } }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();

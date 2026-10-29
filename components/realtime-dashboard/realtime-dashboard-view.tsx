@@ -28,32 +28,13 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/utils/cn";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
-import { summarizeDeliveryProgress } from "@/lib/dashboard/delivery-progress";
+import { readAllPages } from "@/lib/pickup/realtime";
+import { enrichDeliveryRiders, buildDistrictDetails, buildKvAggregates, deliveryKvOrder, type RealtimeRider, type RiderProfile, type RiderStatus, type DisplayRider, type DistrictDetail } from "@/lib/dashboard/live-delivery-riders";
 
-type RealtimeRider = { id: string; driver_id: string; driver_name: string | null; total_assigned: number; delivered: number; delivering: number; failed: number; zone_id: string | null; first_delivery_at: string | null; idle_delivery_seconds: number; snapshot_id: string; snapshot_at: string };
-type RiderProfile = { rider_code: string; full_name: string | null; kv: string | null; delivery_district: string | null; delivery_ward: string | null; cot: string | null };
-type RiderStatus = "delivering" | "completed" | "warning";
-type DisplayRider = RealtimeRider & { name: string; kv: string; district: string; ward: string; cot: string; status: RiderStatus; progress: number };
 type SortKey = "name" | "status" | "eta" | "delivered" | "cot";
-type DistrictDetail = {
-  name: string;
-  kv: string;
-  area: string;
-  riders: DisplayRider[];
-  totalAssigned: number;
-  delivered: number;
-  delivering: number;
-  failed: number;
-  warning: number;
-  completed: number;
-  rate: number;
-  avgProgress: number;
-};
 
 const PAGE_SIZE = 15;
 const STATUS_ORDER: Record<RiderStatus, number> = { warning: 0, delivering: 1, completed: 2 };
-const HIGH_FAILURE_RATE = 0.2;
-const BACKUP_DISTRICT = "Backup";
 export function RealtimeDashboardView() {
   const [rows, setRows] = useState<RealtimeRider[]>([]);
   const [profiles, setProfiles] = useState<RiderProfile[]>([]);
@@ -75,51 +56,36 @@ export function RealtimeDashboardView() {
   const [error, setError] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
+    setProfilesLoading(true);
     try {
       const supabase = createClient();
-      const result = await supabase.from("riders").select("rider_code,full_name,kv,delivery_district,delivery_ward,cot").in("kv", OPERATING_AREAS).eq("status", "active");
-      if (result.error) {
-        setError(result.error.message);
-        setProfiles([]);
-        return;
-      }
-      setProfiles((result.data ?? []) as RiderProfile[]);
-    } finally {
-      setProfilesLoading(false);
-    }
+      const profiles = await readAllPages<RiderProfile>((from,to) => supabase.from("riders")
+        .select("rider_code,full_name,kv,delivery_district,delivery_ward,cot").order("id").range(from,to));
+      setProfiles(profiles);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tải được danh sách rider; thông tin chưa ghép hiển thị Không rõ.");
+    } finally { setProfilesLoading(false); }
   }, []);
 
   const loadRealtime = useCallback(async () => {
     const supabase = createClient();
-    setLoading(true);
-    setError(null);
-    // Realtime = snapshot moi nhat, khong loc ngay.
-    const latest = await supabase.from("realtime_delivery_riders").select("work_date,snapshot_id,snapshot_at").order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
-    if (latest.error) {
-      if (!isMissingTableError(latest.error)) setError(latest.error.message);
-      setRows([]);
-      setSnapshotAt(null);
-      setWorkDate(null);
-      setLoading(false);
-      return;
-    }
-    if (!latest.data) {
-      setRows([]);
-      setSnapshotAt(null);
-      setWorkDate(null);
-      setLoading(false);
-      return;
-    }
-    const result = await supabase.from("realtime_delivery_riders").select("id,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at").eq("work_date", latest.data.work_date).eq("snapshot_id", latest.data.snapshot_id);
-    if (result.error) {
-      if (!isMissingTableError(result.error)) setError(result.error.message);
-      setRows([]);
-    } else {
-      setRows((result.data ?? []) as RealtimeRider[]);
-    }
-    setSnapshotAt(latest.data.snapshot_at);
-    setWorkDate(latest.data.work_date);
-    setLoading(false);
+    setLoading(true); setError(null);
+    try {
+      const latest = await supabase.from("realtime_delivery_riders").select("work_date,snapshot_id,snapshot_at").order("snapshot_at", { ascending:false }).limit(1).maybeSingle();
+      if (latest.error) throw latest.error;
+      if (!latest.data) {setRows([]);setSnapshotAt(null);setWorkDate(null);return;}
+      const head = latest.data;
+      const rows = await readAllPages<RealtimeRider>((from,to) => supabase.from("realtime_delivery_riders")
+        .select("id,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at")
+        .eq("work_date",head.work_date).eq("snapshot_id",head.snapshot_id).order("driver_id").range(from,to));
+      const check = await supabase.from("realtime_delivery_riders").select("snapshot_id").order("snapshot_at",{ascending:false}).limit(1).maybeSingle();
+      if (check.error) throw check.error;
+      if (check.data?.snapshot_id !== head.snapshot_id) throw Error("Snapshot Delivery vừa thay đổi; đang giữ dữ liệu đã tải. Hãy làm mới.");
+      setRows(rows);setSnapshotAt(head.snapshot_at);setWorkDate(head.work_date);
+    } catch (e) {
+      const sourceError=e as {code?:string;message?:string};
+      if (!isMissingTableError(sourceError)) setError(sourceError.message || "Không tải được dữ liệu Delivery.");
+    } finally {setLoading(false);}
   }, []);
 
   const load = useCallback(() => {
@@ -133,42 +99,18 @@ export function RealtimeDashboardView() {
   useSupabaseRealtime({ table: "realtime_delivery_riders", onChange: loadRealtime });
   useSupabaseRealtime({ table: "riders", onChange: loadProfiles });
 
-  const riders = useMemo(() => {
-    const profileMap = new Map(profiles.map((profile) => [normalize(profile.rider_code), profile]));
-    return rows.flatMap((row): DisplayRider[] => {
-      const profile = profileMap.get(normalize(row.driver_id));
-      if (!profile) return [];
-      // Chi rider co KV hop le (KV1-KV5). Khong con bucket chung/Backup rieng:
-      // rider khong co quan duoc gom vao quan "Backup" theo KV trong profile.
-      const kv = (profile.kv ?? "").trim().toUpperCase();
-      if (!isKv56(profile.kv)) return [];
-      const progress = row.total_assigned ? Math.round((row.delivered / row.total_assigned) * 100) : 0;
-      const rawDistrict = profile.delivery_district?.trim();
-      const district = rawDistrict || BACKUP_DISTRICT;
-      const ward = profile.delivery_ward?.trim() || (rawDistrict ? "Chưa xác định phường" : BACKUP_DISTRICT);
-      return [{
-        ...row,
-        name: profile.full_name?.trim() || row.driver_name?.trim() || "Chưa có tên",
-        kv,
-        district,
-        ward,
-        cot: profile.cot?.trim() || "—",
-        status: getRiderStatus(row),
-        progress,
-      }];
-    });
-  }, [profiles, rows]);
+  const riders = useMemo(() => enrichDeliveryRiders(rows,profiles),[rows,profiles]);
 
   const zones = useMemo(() => [...new Set(riders.filter((rider) => kvFilter === "all" || rider.kv === kvFilter).map((rider) => rider.district))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders, kvFilter]);
   const kvOptions = useMemo(() => {
-    const order = ["KV1", "KV2", "KV3", "KV4", "KV5"];
+    const order = deliveryKvOrder(riders.map(rider=>rider.kv));
     const present = new Set(riders.map((rider) => rider.kv));
     return order.filter((kv) => present.has(kv));
   }, [riders]);
   const cotOptions = useMemo(() => [...new Set(riders.map((r) => r.cot).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b, "vi", { numeric: true })), [riders]);
   const districtDetails = useMemo(() => buildDistrictDetails(riders), [riders]);
   const kvAggregates = useMemo(() => buildKvAggregates(districtDetails), [districtDetails]);
-  // Mac dinh chi hien 6 o KV (+Backup). Chon KV thi so quan trong KV do ra.
+  // Keep every source rider in the area totals, including the unknown bucket.
   const visibleDistricts = useMemo(
     () => (kvFilter === "all" ? [] : districtDetails.filter((d) => d.kv === kvFilter)),
     [districtDetails, kvFilter],
@@ -183,7 +125,7 @@ export function RealtimeDashboardView() {
 
   const filtered = useMemo(() => {
     const q = normalize(query);
-    const districtFiltered = activeDistrict ? riders.filter((r) => r.district === activeDistrict) : riders;
+    const districtFiltered = activeDistrict ? riders.filter((r) => JSON.stringify([r.kv,r.district]) === activeDistrict) : riders;
     const result = districtFiltered.filter((rider) =>
       (kvFilter === "all" || rider.kv === kvFilter) &&
       (zone === "all" || rider.district === zone) &&
@@ -214,7 +156,7 @@ export function RealtimeDashboardView() {
     setPage(1);
   }, []);
 
-  const activeDistrictDetail = activeDistrict ? districtDetails.find((d) => d.name === activeDistrict) ?? null : null;
+  const activeDistrictDetail = activeDistrict ? districtDetails.find((d) => d.key === activeDistrict) ?? null : null;
 
   return (
     <div className="dashboard-control realtime-premium mx-auto max-w-[1600px] space-y-6">
@@ -223,7 +165,7 @@ export function RealtimeDashboardView() {
           <div className="rt-eyebrow"><Activity size={14} />SDD OPERATIONS<span>DELIVERY</span></div>
           <h1>Toàn cảnh giao hàng<span>.</span></h1>
           <p>Theo sát tiến độ. Nhận diện điểm nghẽn. Điều phối kịp thời.</p>
-          <div className="rt-command-meta"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span>KV1–KV5</span>{workDate ? <span>Ngày {workDate.split("-").reverse().join("/")}</span> : null}</div>
+          <div className="rt-command-meta"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span>Tất cả rider nguồn Delivery</span>{workDate ? <span>Ngày {workDate.split("-").reverse().join("/")}</span> : null}</div>
         </div>
         <div className="rt-command-side">
           <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : undefined} />Làm mới dữ liệu</Button>
@@ -280,7 +222,7 @@ export function RealtimeDashboardView() {
             ) : null}
             {visibleDistricts.map((d, idx) => {
               const isLarge = idx < 2;
-              return <DistrictBentoCard key={d.name} district={d} large={isLarge} active={activeDistrict === d.name} onSelect={() => { setActiveDistrict((cur) => cur === d.name ? null : d.name); setZone("all"); setPage(1); }} />;
+              return <DistrictBentoCard key={d.key} district={d} large={isLarge} active={activeDistrict === d.key} onSelect={() => { setActiveDistrict((cur) => cur === d.key ? null : d.key); setZone("all"); setPage(1); }} />;
             })}
             </div>
           </div>
@@ -327,7 +269,7 @@ function KvBentoTile({ kv, detail, active, onSelect, loading = false }: { kv: st
   const pct = detail ? Math.min(100, detail.rate) : 0;
   return <button type="button" onClick={onSelect} disabled={loading} aria-busy={loading} aria-pressed={active} data-area={kv} className={cn("rt-area-card", active && "is-selected")}>
     <div className="rt-area-top"><span className="rt-area-code">{kv}</span><ChevronRight size={16} /></div>
-    <h3>Khu vực {kv.slice(-1)}</h3>
+    <h3>{kv.startsWith("KV") ? `Khu vực ${kv.slice(2)}` : kv}</h3>
     <p className="rt-area-riders"><UsersRound size={13} />{loading ? "Đang tải rider…" : detail ? `${detail.riders.length.toLocaleString("vi-VN")} rider` : "Chưa có rider"}</p>
     <div className="rt-area-progress"><strong>{loading ? "—" : pct}<small>%</small></strong><span>đã giao</span></div>
     <div className="rt-area-track" role="progressbar" aria-label={`Tiến độ ${kv}`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
@@ -404,7 +346,7 @@ function DistrictBentoCard({ district, large, active, onSelect }: { district: Di
 }
 
 export function FilterBar({ zone, kvFilter, kvOptions, status, cot, zones, cotOptions, onKvChange, onZoneChange, onStatusChange, onCotChange }: { zone: string; kvFilter: string; kvOptions: string[]; status: RiderStatus | "all"; cot: string; zones: string[]; cotOptions: string[]; onKvChange: (value: string) => void; onZoneChange: (value: string) => void; onStatusChange: (value: RiderStatus | "all") => void; onCotChange: (value: string) => void }) {
-  return <section aria-label="Bộ lọc toàn cục" className="rt-filter-panel rounded-xl border border-slate-200 bg-white p-4"><div className="rt-filter-heading"><span><Search size={15} />Bộ lọc đội giao hàng</span><small>Thu hẹp danh sách rider cần theo dõi</small></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><FilterField label="Khu vực"><Select value={kvFilter} onChange={(event) => onKvChange(event.target.value)}><option value="all">Tất cả khu vực (KV1–KV5)</option>{kvOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Quận"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả quận</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{kvFilter === "all" ? "Mọi khu vực" : kvFilter}</FilterChip><FilterChip>{zone === "all" ? "Mọi quận" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
+  return <section aria-label="Bộ lọc toàn cục" className="rt-filter-panel rounded-xl border border-slate-200 bg-white p-4"><div className="rt-filter-heading"><span><Search size={15} />Bộ lọc đội giao hàng</span><small>Thu hẹp danh sách rider cần theo dõi</small></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><FilterField label="Khu vực"><Select value={kvFilter} onChange={(event) => onKvChange(event.target.value)}><option value="all">Tất cả khu vực</option>{kvOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Quận"><Select value={zone} onChange={(event) => onZoneChange(event.target.value)}><option value="all">Tất cả quận</option>{zones.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="COT"><Select value={cot} onChange={(event) => onCotChange(event.target.value)}><option value="all">Tất cả COT</option>{cotOptions.map((item) => <option key={item} value={item}>{item}</option>)}</Select></FilterField><FilterField label="Trạng thái rider"><Select value={status} onChange={(event) => onStatusChange(event.target.value as RiderStatus | "all")}><option value="all">Tất cả trạng thái</option><option value="delivering">Đang giao</option><option value="completed">Đã giao xong</option><option value="warning">Cảnh báo</option></Select></FilterField></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-500">Đang lọc:</span><FilterChip>{kvFilter === "all" ? "Mọi khu vực" : kvFilter}</FilterChip><FilterChip>{zone === "all" ? "Mọi quận" : zone}</FilterChip><FilterChip>{cot === "all" ? "Mọi COT" : cot}</FilterChip><FilterChip>{status === "all" ? "Mọi trạng thái" : statusLabel(status)}</FilterChip></div></section>;
 }
 
 export function StatusBadge({ status }: { status: RiderStatus }) {
@@ -466,49 +408,8 @@ function RiderDetails({ rider, onClose }: { rider: DisplayRider; onClose: () => 
 function SortableHeader({ label, sortKey, current, onSort, align, className }: { label: string; sortKey: SortKey; current: { key: SortKey; direction: "asc" | "desc" }; onSort: (key: SortKey) => void; align?: "right"; className?: string }) { const Icon = current.key !== sortKey ? ArrowUpDown : current.direction === "asc" ? ArrowUp : ArrowDown; return <th className={cn("px-4 py-3", className)}><button type="button" onClick={() => onSort(sortKey)} className={cn("flex items-center gap-1 font-semibold hover:text-slate-950", align === "right" && "ml-auto")}><span>{label}</span><Icon size={13} /></button></th>; }
 function FilterField({ label, children }: { label: string; children: React.ReactNode }) { return <label className="space-y-1.5"><span className="block text-xs font-semibold text-slate-600">{label}</span>{children}</label>; }
 function FilterChip({ children }: { children: React.ReactNode }) { return <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{children}</span>; }
-function getRiderStatus(row: RealtimeRider): RiderStatus { const failureRate = row.total_assigned > 0 ? row.failed / row.total_assigned : 0; if ((row.total_assigned > 0 && row.delivered === 0) || (row.delivering > 0 && row.idle_delivery_seconds > 3600) || failureRate >= HIGH_FAILURE_RATE) return "warning"; return row.delivering > 0 ? "delivering" : "completed"; }
 function compareRiders(a: DisplayRider, b: DisplayRider, key: SortKey) { if (key === "name") return a.name.localeCompare(b.name, "vi", { numeric: true }); if (key === "status") return STATUS_ORDER[a.status] - STATUS_ORDER[b.status]; if (key === "cot") return a.cot.localeCompare(b.cot, "vi", { numeric: true }); if (key === "eta") return a.idle_delivery_seconds - b.idle_delivery_seconds; return a.delivered - b.delivered; }
-function buildDistrictDetails(riders: DisplayRider[]): DistrictDetail[] {
-  const groups = new Map<string, DisplayRider[]>();
-  for (const rider of riders) groups.set(rider.district, [...(groups.get(rider.district) ?? []), rider]);
-  return Array.from(groups, ([name, entries]) => {
-    const totalAssigned = entries.reduce((s, r) => s + r.total_assigned, 0);
-    const delivered = entries.reduce((s, r) => s + r.delivered, 0);
-    const delivering = entries.reduce((s, r) => s + r.delivering, 0);
-    const failed = entries.reduce((s, r) => s + r.failed, 0);
-    const warning = entries.filter((r) => r.status === "warning").length;
-    const completed = entries.filter((r) => r.status === "completed").length;
-    const avgProgress = totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0;
-    const kvCounts = new Map<string, number>();
-    for (const r of entries) {
-      const k = (r.kv || "").toUpperCase();
-      if (/^KV[1-5]$/.test(k)) kvCounts.set(k, (kvCounts.get(k) ?? 0) + 1);
-    }
-    const topKv = [...kvCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "KV5";
-    const area = `Khu vực ${topKv.slice(-1)}`;
-    return { name, kv: topKv, area, riders: entries, totalAssigned, delivered, delivering, failed, warning, completed, rate: totalAssigned ? Math.round((delivered / totalAssigned) * 100) : 0, avgProgress };
-  }).sort((a, b) => b.totalAssigned - a.totalAssigned || a.name.localeCompare(b.name, "vi"));
-}
-function buildKvAggregates(details: DistrictDetail[]): { kvs: Array<{ kv: string; detail: DistrictDetail | null }> } {
-  const agg = (list: DistrictDetail[], kv: string, area: string): DistrictDetail | null => {
-    if (!list.length) return null;
-    const riders = list.flatMap((d) => d.riders);
-    return {
-      name: kv, kv, area,
-      riders, ...summarizeDeliveryProgress(riders),
-      delivering: riders.reduce((s, r) => s + r.delivering, 0),
-      failed: riders.reduce((s, r) => s + r.failed, 0),
-      warning: riders.filter((r) => r.status === "warning").length,
-      completed: riders.filter((r) => r.status === "completed").length,
-    };
-  };
-  const order = ["KV1", "KV2", "KV3", "KV4", "KV5"];
-  return {
-    kvs: order.map((kv) => ({ kv, detail: agg(details.filter((d) => d.kv === kv), kv, `Khu vực ${kv.slice(-1)}`) })),
-  };
-}
 function statusLabel(status: RiderStatus) { return ({ delivering: "Đang giao", completed: "Đã giao xong", warning: "Cảnh báo" } as const)[status]; }
-function isKv56(value: string | null) { return /^(?:kv|khu vuc)?\s*[1-5]$/i.test(normalize(value ?? "")); }
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").toLowerCase().trim(); }
 function formatDateTime(value: string | null | undefined) { if (!value) return "—"; const date = new Date(value); if (!Number.isFinite(date.getTime())) return "—"; return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(date); }
 function formatAge(seconds: number) { if (seconds < 60) return `${seconds} giây trước`; if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`; return formatDateTime(new Date(Date.now() - seconds * 1000).toISOString()); }

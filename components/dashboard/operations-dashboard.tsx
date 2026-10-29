@@ -15,7 +15,6 @@ import s from "./operations-dashboard.module.css";
 import { DashboardVolume } from "./dashboard-volume";
 import { DashboardHubSheet, useHubSheet } from "./dashboard-hub-sheet";
 import { DashboardFc } from "./dashboard-fc";
-import { DashboardHiring } from "./dashboard-hiring";
 import { DashboardReportButton } from "./dashboard-report-button";
 import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
 import { DashboardOnhold } from "./dashboard-onhold";
@@ -142,7 +141,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
       <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
-    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["Nhận việc mới","#hiring-overview"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
+    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
     <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn · Hiệu suất 7 ngày gần nhất</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
     {!!issues.length && <div className={s.notice} role="status">Chưa tải được: {issues.join(", ")}. Các phần còn lại vẫn hiển thị dữ liệu đã tải.<button type="button" disabled={loading} onClick={onRefresh}>Thử lại</button></div>}
 
@@ -228,7 +227,6 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       const db = delivery?.areas.find(r=>r.area===area)?.orders;
       return <tr key={area}><th><span className={s.areaBadge}>{area}</span></th><td>{d ? `${fmt(d.delivered)} / ${fmt(d.assigned)}` : "—"}</td><td>{p ? `${fmt(p.picked)} / ${fmt(p.assigned)}` : "—"}</td><td><Rate value={d ? completionRate(d.delivered,d.assigned):null} tone="blue"/></td><td><Rate value={p ? completionRate(p.picked,p.assigned):null} tone="teal"/></td><td>{fmt(pb)}</td><td>{fmt(db)}</td></tr>;
     })}</tbody></table></div></section>
-    <DashboardHiring source={hub.error ? { data: hub.data?.hiring?.data ?? null, error: "Chưa cập nhật được nguồn nhận việc. Thử làm mới dashboard." } : hub.data?.hiring} />
     <DashboardFc source={hub.error ? { data: hub.data?.fc?.data ?? null, error: "Chưa cập nhật được nguồn FC. Thử làm mới dashboard." } : hub.data?.fc} />
   </div>;
 }

@@ -9,11 +9,20 @@ test("live totals use scoped roster and weighted completion, preserving separate
     {driver_id:"outside",total_assigned:999,delivered:999,delivering:0,failed:0,idle_delivery_seconds:0},
   ], [{rider_code:"a",kv:"KV1"},{rider_code:"b",kv:"KV5"},{rider_code:"outside",kv:"KV6"}]);
   assert.equal(result.assigned,101);
+  assert.equal(result.outboundAssigned,1100);
   assert.equal(result.delivered,81);
   assert.equal(completionRate(result.delivered,result.assigned),81/101*100);
   assert.equal(result.idleRiders,1);
   assert.equal(result.completedRiders,1);
   assert.equal(result.areas.reduce((n,r)=>n+r.assigned,0),result.assigned);
+});
+
+test("outbound includes all snapshot riders regardless of registry match, KV or assigned count",()=>{
+ const row=(driver_id:string,total_assigned:number)=>({driver_id,total_assigned,delivered:0,delivering:0,failed:0,idle_delivery_seconds:0});
+ const result=summarizeLiveDelivery([row("known",100),row("unknown",371),row("outside",20),row("zero",0)], [{rider_code:"known",kv:"KV1"},{rider_code:"outside",kv:"KV6"}]);
+ assert.equal(result.outboundAssigned,491);
+ assert.equal(result.assigned,100);
+ assert.equal(summarizeLiveDelivery([],[]).outboundAssigned,0);
 });
 
 test("backlog deduplicates shipments, scopes areas and retains unknown COT", () => {
