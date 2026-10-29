@@ -46,3 +46,20 @@ for (const invalidate of ["delete", "clear"] as const) {
     assert.equal((await cache.load("a", async () => 3)).value, 2);
   });
 }
+
+test("partial failures are returned but not cached; successful retry is cached", async () => {
+  const cache = new TtlCache<{ error: string | null; value: number }>(1000, 2);
+  const accept = (value: { error: string | null }) => !value.error;
+  assert.equal((await cache.load("source", async () => ({ error: "offline", value: 1 }), accept)).value.error, "offline");
+  const retry = await cache.load("source", async () => ({ error: null, value: 2 }), accept);
+  assert.equal(retry.hit, false);
+  assert.equal(retry.value.value, 2);
+  assert.equal((await cache.load("source", async () => ({ error: null, value: 3 }), accept)).hit, true);
+});
+
+test("separate user and date keys cannot reuse another scope's data", async () => {
+  const cache = new TtlCache<string>(1000, 4);
+  await cache.load("user-a:2026-10-29", async () => "A");
+  assert.equal((await cache.load("user-b:2026-10-29", async () => "B")).value, "B");
+  assert.equal((await cache.load("user-a:2026-10-30", async () => "next-day")).value, "next-day");
+});

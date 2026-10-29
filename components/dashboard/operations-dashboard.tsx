@@ -13,6 +13,9 @@ import { SpotlightSheen, useDashboardSpotlight } from "./dashboard-spotlight";
 import spotlight from "./dashboard-spotlight.module.css";
 import s from "./operations-dashboard.module.css";
 import { DashboardVolume } from "./dashboard-volume";
+import { DashboardHubSheet, useHubSheet } from "./dashboard-hub-sheet";
+import { DashboardFc } from "./dashboard-fc";
+import { DashboardReportButton } from "./dashboard-report-button";
 import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
 import { DashboardOnhold } from "./dashboard-onhold";
 import { shiftOHDay } from "@/lib/dashboard/onhold-overview";
@@ -33,6 +36,7 @@ const stamp = (date: string | null | undefined) => date && Number.isFinite(Date.
 
 export function OperationsDashboard() {
   const [data, setData] = useState<DashboardOverviewData>(empty);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -62,13 +66,13 @@ export function OperationsDashboard() {
       }
       setData(previous => ({ ...previous, [key]: { ...previous[key], loading: true } }));
       try {
-        const res = await fetch(url, { cache: "no-store", signal: AbortSignal.any([abort.signal, AbortSignal.timeout(45_000)]) });
+        const res = await fetch(url, { cache: "no-store", headers: force ? { "x-dashboard-refresh": "1" } : undefined, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(45_000)]) });
         const payload = await res.json();
         if (!res.ok || payload.success === false) throw new Error(payload.error || "Không tải được dữ liệu");
         if (id !== request.current || abort.signal.aborted) return;
         // Keep only this mounted dashboard's sources; never persist user data.
         const partialFailure = payload.live?.error || payload.backlog?.error || payload.delivery?.error || payload.pickup?.error;
-        if (!partialFailure) sourceCache.current.set(key, { value: payload, expiresAt: Date.now() + ttl, url: requestKey });
+        if (!partialFailure) sourceCache.current.set(key, { value: payload, expiresAt: Math.min(Date.now() + ttl, Number(res.headers.get("X-Cache-Expires")) || Infinity), url: requestKey });
         publish({ data: payload, error: null } as DashboardOverviewData[K]);
       } catch (error) {
         if (id !== request.current || abort.signal.aborted) return;
@@ -82,10 +86,10 @@ export function OperationsDashboard() {
     }
     await Promise.all([
       source("operations", "/api/dashboard/operations", 30_000),
-      source("performance", `/api/driver-performance?date=${today}&period=week&pageSize=25`, 300_000),
+      source("performance", `/api/driver-performance?date=${today}&period=week&pageSize=25&dashboard=1`, 300_000),
       source("pickup", "/api/pickup-realtime", 30_000),
       source("pickupBacklog", "/api/pickup-inventory?view=zone-board&p_status=Assigned", 30_000),
-      source("volume", "/api/dashboard/volume", 120_000),
+      source("volume", "/api/dashboard/volume", 300_000),
       source("onhold", `/api/onhold?from=${shiftOHDay(today, -26)}&to=${today}`, 120_000),
     ]);
     if (id !== request.current || abort.signal.aborted) return;
@@ -93,15 +97,16 @@ export function OperationsDashboard() {
     setUpdated(new Date().toISOString()); setLoading(false);
   }, []);
   useEffect(() => {
-    const initial = setTimeout(() => void load(), 0);
+    const initial = setTimeout(() => void load(false), 0);
     const timer = setInterval(() => { if (document.visibilityState === "visible") void load(false); }, 60_000);
     return () => { clearTimeout(initial); clearInterval(timer); controller.current?.abort(); };
   }, [load]);
   useDashboardSpotlight(root, { ready: !loading, version: updated ? Date.parse(updated) : 0, scope: "operations-overview" });
-  return <div ref={root} className={spotlight.root}><DashboardOverviewContent data={data} loading={loading} updated={updated} onRefresh={() => void load()} /></div>;
+  return <div ref={root} className={spotlight.root}><DashboardOverviewContent data={data} loading={loading} updated={updated} refreshKey={refreshKey} onRefresh={() => { setRefreshKey(value => value + 1); void load(); }} /></div>;
 }
 
-export function DashboardOverviewContent({ data, loading, updated, onRefresh }: { data: DashboardOverviewData; loading: boolean; updated: string | null; onRefresh: () => void }) {
+export function DashboardOverviewContent({ data, loading, updated, onRefresh, refreshKey = 0 }: { refreshKey?: number; data: DashboardOverviewData; loading: boolean; updated: string | null; onRefresh: () => void }) {
+  const hub = useHubSheet(refreshKey);
   const live = data.operations.data?.live.data;
   const delivery = data.operations.data?.backlog.data;
   const performance = data.performance.data;
@@ -136,10 +141,12 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
       <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
       <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
-    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"]].map(([label,href]) => <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
-    <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn · Hiệu suất 7 ngày gần nhất</span><span>Tự cập nhật mỗi 60 giây · UTC+7</span></div>
+    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
+    <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn · Hiệu suất 7 ngày gần nhất</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
     {!!issues.length && <div className={s.notice} role="status">Chưa tải được: {issues.join(", ")}. Các phần còn lại vẫn hiển thị dữ liệu đã tải.<button type="button" disabled={loading} onClick={onRefresh}>Thử lại</button></div>}
 
+    <DashboardReportButton />
+    <DashboardHubSheet source={hub} />
     <section className={s.kpis} aria-label="Chỉ số điều hành">
       <Kpi label="Delivery completion" value={pct(liveRate)} detail={`${fmt(live?.delivered)} / ${fmt(live?.assigned)} đơn gán`} href="/realtime-dashboard" icon={<Truck size={19}/>} tone="blue" />
       <Kpi label="Pickup completion" value={pct(pickupRate)} detail={`${fmt(pickup?.picked)} / ${fmt(pickup?.assigned)} đơn gán`} href="/pickup-realtime" icon={<PackageCheck size={19}/>} tone="teal" />
@@ -220,6 +227,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh }: 
       const db = delivery?.areas.find(r=>r.area===area)?.orders;
       return <tr key={area}><th><span className={s.areaBadge}>{area}</span></th><td>{d ? `${fmt(d.delivered)} / ${fmt(d.assigned)}` : "—"}</td><td>{p ? `${fmt(p.picked)} / ${fmt(p.assigned)}` : "—"}</td><td><Rate value={d ? completionRate(d.delivered,d.assigned):null} tone="blue"/></td><td><Rate value={p ? completionRate(p.picked,p.assigned):null} tone="teal"/></td><td>{fmt(pb)}</td><td>{fmt(db)}</td></tr>;
     })}</tbody></table></div></section>
+    <DashboardFc source={hub.error ? { data: hub.data?.fc?.data ?? null, error: "Chưa cập nhật được nguồn FC. Thử làm mới dashboard." } : hub.data?.fc} />
   </div>;
 }
 

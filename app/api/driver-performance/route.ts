@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDriverPerformance,getDriverPerformanceExport, parsePerformanceFilters } from "@/lib/performance/driver-performance";
+import { TtlCache } from "@/lib/cache/ttl-cache";
+const dashboardCache = new TtlCache<Awaited<ReturnType<typeof getDriverPerformance>>>(300_000, 24);
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -32,7 +34,14 @@ export async function GET(request: Request) {
       const buffer=XLSX.write(workbook,{type:"buffer",bookType:"xlsx",compression:true});
       return new Response(new Uint8Array(buffer),{headers:{"Cache-Control":"private, no-store","Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":`attachment; filename="rider-performance-${mode}-${filters.start}-${filters.end}.xlsx"`}});
     }
-    const result = await getDriverPerformance(filters, new URL(request.url).searchParams.get("_r")??"");
+    if (params.get("dashboard") === "1") {
+      const key = JSON.stringify([user.id, filters]);
+      const force = request.headers.get("x-dashboard-refresh") === "1";
+      if (force) dashboardCache.delete(key);
+      const cached = await dashboardCache.load(key, () => getDriverPerformance(filters, force ? String(Date.now()) : ""));
+      return NextResponse.json({success:true,...cached.value},{headers:{"Cache-Control":"private, no-store", "X-Data-Cache": cached.hit ? "HIT" : "MISS", "X-Cache-Expires": String(cached.expiresAt)}});
+    }
+    const result = await getDriverPerformance(filters, params.get("_r")??"");
     return NextResponse.json({ success: true, ...result },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     return NextResponse.json(

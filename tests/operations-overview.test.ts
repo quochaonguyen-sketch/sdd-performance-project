@@ -30,6 +30,19 @@ test("backlog deduplicates shipments, scopes areas and retains unknown COT", () 
   assert.equal(result.topWards[0].orders,3);
 });
 
+test("report headcount counts unique assigned drivers only and reconciles COT and KV", () => {
+  const row = (driver_id:string,total_assigned:number) => ({driver_id,total_assigned,delivered:0,delivering:0,failed:0,idle_delivery_seconds:0});
+  const result=summarizeLiveDelivery([row("a",10),row("a",5),row("zero",0),row("outside",10),row("b",1),row("invalid",NaN)], [
+    {rider_code:"a",kv:"KV1",cot:"COT 1"},{rider_code:"a",kv:"KV1",cot:"COT 1"},
+    {rider_code:"b",kv:"KV5",cot:"UNKNOWN"},{rider_code:"zero",kv:"KV2",cot:"COT2"},
+    {rider_code:"unassigned",kv:"KV3",cot:"COT2"},{rider_code:"outside",kv:"KV6",cot:"COT1"},{rider_code:"invalid",kv:"KV4",cot:"COT1"},
+  ]);
+  assert.equal(result.headcount.total,2);
+  assert.equal(result.headcount.cot1,1);assert.equal(result.headcount.cot2,0);assert.equal(result.headcount.unknownCot,1);
+  assert.equal(result.headcount.areas.reduce((sum,r)=>sum+r.total,0),2);
+  assert.equal(result.headcount.areas.find(r=>r.area==="KV2")?.total,0);
+});
+
 test("no denominator is missing, real zero completion remains zero, anomalies retain actual rate", () => {
   assert.equal(completionRate(0,0),null);
   assert.equal(completionRate(0,10),0);

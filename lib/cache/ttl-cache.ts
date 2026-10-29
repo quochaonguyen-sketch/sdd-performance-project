@@ -13,7 +13,7 @@ export class TtlCache<T> {
     this.maxEntries = maxEntries;
   }
 
-  async load(key: string, loader: () => Promise<T>) {
+  async load(key: string, loader: () => Promise<T>, shouldCache: (value: T) => boolean = () => true) {
     const now = Date.now();
     for (const [entryKey, entry] of this.entries) {
       if (entry.expiresAt <= now) this.entries.delete(entryKey);
@@ -29,7 +29,7 @@ export class TtlCache<T> {
 
     const request = Promise.resolve().then(loader).then(value => {
       const entry = { value, expiresAt: Date.now() + this.ttlMs };
-      if (this.pending.get(key) === request) {
+      if (this.pending.get(key) === request && shouldCache(value)) {
         this.entries.set(key, entry);
         while (this.entries.size > this.maxEntries) {
           this.entries.delete(this.entries.keys().next().value!);

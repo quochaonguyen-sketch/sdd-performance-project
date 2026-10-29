@@ -1,0 +1,64 @@
+import type { DailyReport } from "@/lib/dashboard/daily-report";
+
+const number=(n:number|null)=>n===null?"—":n.toLocaleString("vi-VN");
+export function drawDailyReport(canvas:HTMLCanvasElement,report:DailyReport) {
+  const districts=report.districts;
+  const areas=[...new Set(districts.map(r=>r.area))];
+  const height=Math.max(1310,410+(districts.length+areas.length+1)*30+220);
+  const width=1920;
+  canvas.width=width*1.5;canvas.height=height*1.5;
+  const c=canvas.getContext("2d");if(!c)throw Error("Không tạo được ảnh báo cáo");
+  c.scale(1.5,1.5);c.fillStyle="#f4f7fb";c.fillRect(0,0,width,height);
+  const text=(s:string,x:number,y:number,size=14,color="#172b43",bold=false,align:CanvasTextAlign="left",max?:number)=>{c.fillStyle=color;c.font=`${bold?"600":"400"} ${size}px Arial`;c.textAlign=align;c.fillText(s,x,y,max);c.textAlign="left";};
+  const box=(x:number,y:number,w:number,h:number,color="#ffffff")=>{c.fillStyle=color;c.fillRect(x,y,w,h);};
+  box(0,0,width,138,"#14263e");box(40,34,5,68,"#f4532b");
+  text("SDD OPERATIONS  /  COT 1 & COT 2",62,49,13,"#bacce2",true);
+  text(`Báo cáo vận hành · ${report.day.split("-").reverse().join("/")}`,60,92,34,"#ffffff",true);
+  text("KV1–KV5 · Nhân sự cả ngày · Rider có Assigned hôm nay",1878,91,15,"#bacce2",false,"right");
+  text(`Chốt bản xem: ${new Date(report.createdAt).toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",hour12:false})} · UTC+7`,40,172,13,"#52657d");
+  const highlights=[{label:"TOTAL INBOUND",value:report.metrics[2].actual,note:"Tổng nhập hub",tone:"#2459d3",bg:"#eaf1ff"},{label:"OUTBOUND VOLUME",value:report.metrics[3].actual,note:"Assigned Delivery hôm nay",tone:"#087b61",bg:"#e9f7f1"},{label:"PENDING OUTBOUND",value:report.metrics[4].actual,note:"Onhold + Non-attempt",tone:"#9a5b00",bg:"#fff5df"},{label:"RIDER CÓ ASSIGNED",value:report.staff.find(r=>r.label==="Rider")?.value??null,note:"Driver ID duy nhất · KV1–KV5",tone:"#7651b5",bg:"#f3eefa"}];
+  highlights.forEach((item,i)=>{const x=40+i*465;box(x,194,445,112,item.bg);box(x,194,445,4,item.tone);text(item.label,x+20,223,12,item.tone,true);text(number(item.value),x+20,267,36,item.tone,true);text(item.note,x+20,290,12,"#52657d");});
+  const left=40,middle=410,right=1110,lw=340,mw=670,rw=770,top=358;
+  const title=(label:string,x:number,w:number)=>{text(label,x,338,19,"#172b43",true);box(x,348,w,3,"#f4532b");};
+  const row=(x:number,y:number,widths:number[],values:string[],kind="normal",rh=38)=>{let offset=x;const bg=kind==="header"?"#253f61":kind==="total"?"#fff0e6":kind==="subtotal"?"#edf5ff":"#ffffff";box(x,y,widths.reduce((n,w)=>n+w,0),rh,bg);values.forEach((v,i)=>{text(v,i===0?offset+12:offset+widths[i]-12,y+rh/2+5,kind==="header"?12:14,kind==="header"?"#ffffff":kind==="total"?"#9a3412":"#172b43",kind!=="normal"||i===values.length-1,i===0?"left":"right",widths[i]-22);offset+=widths[i];});c.strokeStyle="#d9e2ee";c.lineWidth=.6;c.beginPath();c.moveTo(x,y+rh);c.lineTo(offset,y+rh);c.stroke();};
+  title("01  Nhân sự ngày & rider",left,lw);
+  row(left,top,[230,110],["Nhóm nhân sự","HC"],"header");
+  report.staff.forEach((r,i)=>row(left,top+(i+1)*38,[230,110],[r.label,number(r.value)],i===report.staff.length-1?"total":"normal"));
+  let ly=top+9*38+38;
+  text("RIDER THEO KHU VỰC",left,ly,13,"#52657d",true);ly+=16;
+  row(left,ly,[230,110],["Khu vực","HC"],"header");
+  report.areas.forEach((r,i)=>row(left,ly+(i+1)*38,[230,110],[r.area,number(r.total)]));
+  text("HC rider: Assigned Delivery > 0 hôm nay.",left,ly+7*38+4,12,"#52657d");
+  text("FTE: actual ngày − 10 LEAD/SUP (tối thiểu 0).",left,ly+7*38+24,12,"#52657d");
+  title("02  Sản lượng & tiến độ",middle,mw);
+  row(middle,top,[290,130,130,120],["Chỉ số","Actual","Forecast","%FC"],"header",42);
+  report.metrics.forEach((r,i)=>row(middle,top+42+i*48,[290,130,130,120],[r.label,number(r.actual),number(r.forecast),r.rate===null?"—":`${r.rate.toLocaleString("vi-VN",{maximumFractionDigits:2})}%`],["Total Inbound","Pending Outbound"].includes(r.label)?"total":"normal",48));
+  const sy=top+42+7*48+24;
+  box(middle,sy,mw,234,"#ffffff");
+  text("TIẾN ĐỘ INBOUND SO VỚI FORECAST",middle+20,sy+27,13,"#172b43",true);
+  report.metrics.slice(0,3).forEach((metric,i)=>{
+    const y=sy+57+i*52,color=["#2459d3","#7651b5","#087b61"][i];
+    text(metric.label,middle+20,y,13,"#52657d");
+    text(metric.rate===null?"Chưa đủ dữ liệu":`${metric.rate.toLocaleString("vi-VN",{maximumFractionDigits:1})}% FC`,middle+mw-20,y,14,color,true,"right");
+    box(middle+20,y+12,mw-40,8,"#eaf0f7");
+    if(metric.rate!==null)box(middle+20,y+12,(mw-40)*Math.min(100,Math.max(0,metric.rate))/100,8,color);
+  });
+  text("Thang thanh: 0–100% · Nhãn giữ %FC thực tế khi vượt kế hoạch.",middle+20,sy+218,12,"#52657d");
+  const noteY=sy+262;
+  ["Outbound = Assigned Delivery của tài xế.","Pending Outbound = OH hôm nay + Non-attempt.","WH Inbound = tổng đơn LH đã xả hôm nay.","MP Inbound = Total Inbound − WH Inbound.","Forecast lấy đúng ngày từ tab FC."].forEach((line,i)=>text(line,middle,noteY+i*22,13,"#52657d"));
+  title("03  Non-attempt · Tồn tại hub",right,rw);
+  const dw=[95,275,95,95,100,110];
+  row(right,top,dw,["Khu vực","Quận / huyện","COT 1","COT 2","Khác COT","Tổng"],"header",36);
+  let ry=top+36;
+  for(const area of areas){const scoped=districts.filter(r=>r.area===area);for(const r of scoped){row(right,ry,dw,[r.area,r.district,number(r.cot1),number(r.cot2),number(r.unknownCot),number(r.total)],"normal",30);ry+=30;}row(right,ry,dw,[area,"Tổng khu vực",...(["cot1","cot2","unknownCot","total"] as const).map(key=>number(scoped.reduce((n,r)=>n+r[key],0)))],"subtotal",30);ry+=30;}
+  row(right,ry,dw,["TỔNG","",...(["cot1","cot2","unknownCot"] as const).map(key=>report.backlogTotal===null?"—":number(districts.reduce((n,r)=>n+r[key],0))),number(report.backlogTotal)],"total",36);
+  text("Nguồn: LMHub_Received · Đã loại trùng shipment.",right,ry+61,12,"#52657d");
+  const fy=height-165;box(40,fy,width-80,1,"#d9e2ee");
+  const stamp=(v:string|null)=>!v?"chưa có":/^\d{4}-\d{2}-\d{2}T/.test(v)&&Number.isFinite(Date.parse(v))?new Date(v).toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",hour12:false}):v;
+  text("MỐC DỮ LIỆU · UTC+7",40,fy+25,12,"#52657d",true);
+  text(`Hub: ${stamp(report.stamps.hub)}  |  LH: ${stamp(report.stamps.lh)}  |  Delivery: ${stamp(report.stamps.delivery)}`,40,fy+49,12,"#52657d");
+  text(`OH: ${stamp(report.stamps.onhold)}  |  Non-attempt: ${stamp(report.stamps.backlog)}  |  Roster: ${stamp(report.stamps.roster)}`,40,fy+72,12,"#52657d");
+  text("Snapshot riêng từng nguồn. OH lấy tổng báo cáo ngày, gồm chưa rõ KV; chưa chốt ngày. Roster chưa loại trùng người giữa ca. “—” = thiếu dữ liệu.",40,fy+99,12,"#52657d");
+  if(report.issues.length)text(`LƯU Ý: ${report.issues.join(" · ")}`,40,fy+126,12,"#9a5b00",false,"left",width-80);
+  return {width:canvas.width,height:canvas.height};
+}

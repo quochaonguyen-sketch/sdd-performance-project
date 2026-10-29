@@ -5,17 +5,23 @@ import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { readAllPages } from "@/lib/pickup/realtime";
 import { summarizeLiveDelivery, summarizeDeliveryBacklog, type LiveDeliveryRow, type DeliveryBacklogRow } from "@/lib/dashboard/operations-overview";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 
-export async function GET() {
+type RiderProfile = { rider_code: string; kv: string | null; cot: string | null };
+const profileCache = new TtlCache<RiderProfile[]>(300_000, 24);
+
+export async function GET(request: Request) {
   const db = await createClient();
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  const profileKey = JSON.stringify([context.user.id, context.profile]);
+  if (request.headers.get("x-dashboard-refresh") === "1") profileCache.delete(profileKey);
   // Use the caller's session and existing RLS, as on the source pages.
   const [live, backlog] = await Promise.allSettled([
     (async () => {
       const [head, profiles] = await Promise.all([
         db.from("realtime_delivery_riders").select("snapshot_id,snapshot_at,work_date").order("snapshot_at", { ascending: false }).limit(1).maybeSingle(),
-        readAllPages<{ rider_code: string; kv: string | null }>((from,to) => db.from("riders").select("rider_code,kv").in("kv", OPERATING_AREAS).eq("status", "active").order("id").range(from,to)),
+        profileCache.load(profileKey, () => readAllPages<RiderProfile>((from,to) => db.from("riders").select("rider_code,kv,cot").in("kv", OPERATING_AREAS).order("id").range(from,to))).then(result => result.value),
       ]);
       if (head.error) throw new Error(head.error.message);
       if (!head.data) return { data: null, snapshotAt: null, workDate: null, error: null };
@@ -34,6 +40,8 @@ export async function GET() {
       const rows = await readAllPages<DeliveryBacklogRow>((from,to) => db.from("lmhub_inventory_rows")
         .select("shipment_id,area,district,ward,cot_group,received_time").in("area", OPERATING_AREAS)
         .eq("snapshot_id", snapshot.snapshot_id).order("shipment_id").range(from,to));
+      const check = await db.from("lmhub_inventory_rows").select("snapshot_id").in("area", OPERATING_AREAS).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
+      if (check.error || check.data?.snapshot_id !== snapshot.snapshot_id) throw new Error("Snapshot tồn delivery thay đổi khi tải; hãy thử lại.");
       return { data: summarizeDeliveryBacklog(rows, Date.now()), snapshotAt: head.data.snapshot_at, error: null };
     })(),
   ]);

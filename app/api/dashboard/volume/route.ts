@@ -4,8 +4,12 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { readAllPages } from "@/lib/pickup/realtime";
 import { summarizeDashboardVolume, shiftVolumeDay, type DashboardVolumeRow } from "@/lib/dashboard/volume-overview";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 
-export async function GET() {
+type VolumePayload = { today: string; delivery: { data: ReturnType<typeof summarizeDashboardVolume> | null; error: string | null }; pickup: { data: ReturnType<typeof summarizeDashboardVolume> | null; error: string | null } };
+const cache = new TtlCache<VolumePayload>(300_000, 24);
+
+export async function GET(request: Request) {
   const context = await getCurrentUserContext();
   if (!context) return NextResponse.json({ error: "Chưa đăng nhập" }, { status:401 });
   const db = await createClient();
@@ -24,6 +28,11 @@ export async function GET() {
       return {data:summarizeDashboardVolume(rows,today),error:null};
     } catch(error) { return {data:null,error:error instanceof Error ? error.message : "Không tải được sản lượng"}; }
   }
-  const [delivery,pickup]=await Promise.all([load("delivery_order"),load("pickup_volume")]);
-  return NextResponse.json({today,delivery,pickup},{headers:{"Cache-Control":"private, no-store"}});
+  const key = JSON.stringify([context.user.id, context.profile, today]);
+  if (request.headers.get("x-dashboard-refresh") === "1") cache.delete(key);
+  const result = await cache.load(key, async () => {
+    const [delivery,pickup]=await Promise.all([load("delivery_order"),load("pickup_volume")]);
+    return {today,delivery,pickup};
+  }, value => !value.delivery.error && !value.pickup.error);
+  return NextResponse.json(result.value,{headers:{"Cache-Control":"private, no-store", "X-Data-Cache": result.hit ? "HIT" : "MISS", "X-Cache-Expires": String(result.expiresAt)}});
 }
