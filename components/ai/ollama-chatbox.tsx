@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bot, Brain, CalendarClock, Check, Database, LoaderCircle, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, Brain, Database, LoaderCircle, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useBrowserAiConfig } from "@/lib/ai/browser-config";
 
@@ -13,54 +13,6 @@ type ChatMessage = {
   dataSources?: string[];
   dataAsOf?: string;
   workDate?: string;
-  action?: OffRescheduleProposal | OffAutoScheduleProposal;
-};
-
-type OffAutoScheduleProposal = {
-  actionId: string;
-  district: string;
-  weekStart: string;
-  weekEnd: string;
-  wardScope: string | null;
-  totalAssignments: number;
-  totalSkipped: number;
-  alreadyHaveOff: number;
-  wards: Array<{
-    ward: string;
-    cot: string | null;
-    totalRiders: number;
-    assignments: Array<{
-      rider_id: string;
-      rider_code: string;
-      full_name: string | null;
-      ward: string;
-      off_date: string;
-    }>;
-    skipped: Array<{
-      rider_id: string;
-      rider_code: string;
-      full_name: string | null;
-      ward: string;
-      reason: string;
-    }>;
-  }>;
-  expiresAt: string;
-  status?: "PENDING" | "EXECUTED" | "CANCELLED" | "FAILED";
-  error?: string;
-  warning?: string;
-};
-
-type OffRescheduleProposal = {
-  actionId: string;
-  riderCode: string;
-  riderName: string | null;
-  fromDate: string;
-  toDate: string;
-  offStatus: string;
-  expiresAt: string;
-  status?: "PENDING" | "EXECUTED" | "CANCELLED" | "FAILED";
-  error?: string;
-  warning?: string;
 };
 
 type OllamaChunk = {
@@ -82,95 +34,7 @@ type MemoryResponse = {
   }>;
 };
 
-type ActionPreviewResponse = {
-  success: boolean;
-  matched?: boolean;
-  error?: string;
-  proposal?: OffRescheduleProposal;
-};
-
-type AutoSchedulePreviewResponse = {
-  success: boolean;
-  matched?: boolean;
-  error?: string;
-  proposal?: {
-    actionId: string;
-    expiresAt: string;
-    district: string;
-    week_start: string;
-    week_end: string;
-    ward_scope: string | null;
-    total_assignments: number;
-    total_skipped: number;
-    already_have_off: number;
-    wards: Array<{
-      ward: string;
-      cot: string | null;
-      total_riders: number;
-      assignments: Array<{
-        rider_id: string;
-        rider_code: string;
-        full_name: string | null;
-        ward: string;
-        off_date: string;
-      }>;
-      skipped: Array<{
-        rider_id: string;
-        rider_code: string;
-        full_name: string | null;
-        ward: string;
-        reason: string;
-      }>;
-    }>;
-  };
-};
-
-function mapAutoScheduleProposal(raw: NonNullable<AutoSchedulePreviewResponse["proposal"]>): OffAutoScheduleProposal {
-  return {
-    actionId: raw.actionId,
-    district: raw.district,
-    weekStart: raw.week_start,
-    weekEnd: raw.week_end,
-    wardScope: raw.ward_scope,
-    totalAssignments: raw.total_assignments,
-    totalSkipped: raw.total_skipped,
-    alreadyHaveOff: raw.already_have_off,
-    wards: raw.wards.map((ward) => ({
-      ward: ward.ward,
-      cot: ward.cot,
-      totalRiders: ward.total_riders,
-      assignments: ward.assignments.map((assignment) => ({
-        rider_id: assignment.rider_id,
-        rider_code: assignment.rider_code,
-        full_name: assignment.full_name,
-        ward: assignment.ward,
-        off_date: assignment.off_date,
-      })),
-      skipped: ward.skipped.map((item) => ({
-        rider_id: item.rider_id,
-        rider_code: item.rider_code,
-        full_name: item.full_name,
-        ward: item.ward,
-        reason: item.reason,
-      })),
-    })),
-    expiresAt: raw.expiresAt,
-  };
-}
-
-type AutoScheduleExecuteResponse = {
-  success: boolean;
-  error?: string;
-  result?: { created?: number; requests?: Array<{ id: string; rider_code: string; off_date: string; status: string }> };
-};
-
-const QUICK_SUGGESTIONS = [
-  "Hôm nay Quận 12 COT1 giao có những ai OFF?",
-  "Hôm nay Quận 12 COT2 giao có những ai OFF?",
-  "Xếp lịch off quận 12",
-  "Ai đang OFF hôm nay?",
-  "Tổng quan giao hôm nay",
-] as const;
+const QUICK_SUGGESTIONS = ["Tổng quan giao hôm nay", "Phân tích sản lượng pickup hôm nay"] as const;
 
 const greeting: ChatMessage = {
   id: "welcome",
@@ -192,7 +56,6 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [memoryBusy, setMemoryBusy] = useState(true);
-  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const aiConfig = useBrowserAiConfig();
 
   useEffect(() => {
@@ -272,44 +135,6 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
     abortRef.current = controller;
 
     try {
-      const autoScheduleResponse = await fetch("/api/ai/actions/off-auto-schedule/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: content }),
-        signal: controller.signal,
-      });
-      const autoSchedulePreview = await autoScheduleResponse.json() as AutoSchedulePreviewResponse;
-      if (!autoScheduleResponse.ok) throw new Error(autoSchedulePreview.error ?? "Không kiểm tra được yêu cầu xếp lịch OFF.");
-      if (autoSchedulePreview.matched) {
-        const proposal = autoSchedulePreview.proposal ? { ...mapAutoScheduleProposal(autoSchedulePreview.proposal), status: "PENDING" as const } : undefined;
-        const answer = proposal
-          ? `Tôi đã xếp lịch OFF tự động cho ${proposal.district} (${formatWeekRange(proposal.weekStart, proposal.weekEnd)}). Mỗi phường chỉ có một rider OFF mỗi ngày theo từng COT (COT1 và COT2 tính riêng); kiểm tra bản xem trước rồi xác nhận — các yêu cầu sẽ vào hàng chờ duyệt.`
-          : autoSchedulePreview.error ?? "Chưa đủ thông tin để xếp lịch OFF tự động.";
-        setMessages((current) => current.map((message) => (
-          message.id === assistantId ? { ...message, content: answer, action: proposal } : message
-        )));
-        return;
-      }
-
-      const previewResponse = await fetch("/api/ai/actions/off-reschedule/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: content }),
-        signal: controller.signal,
-      });
-      const preview = await previewResponse.json() as ActionPreviewResponse;
-      if (!previewResponse.ok) throw new Error(preview.error ?? "Không kiểm tra được yêu cầu chỉnh lịch OFF.");
-      if (preview.matched) {
-        const proposal = preview.proposal ? { ...preview.proposal, status: "PENDING" as const } : undefined;
-        const answer = proposal
-          ? `Tôi đã tìm thấy lịch OFF cần chuyển. Kiểm tra thông tin bên dưới rồi xác nhận; hệ thống chưa thay đổi dữ liệu.`
-          : preview.error ?? "Chưa đủ thông tin để tạo yêu cầu đổi lịch OFF.";
-        setMessages((current) => current.map((message) => (
-          message.id === assistantId ? { ...message, content: answer, action: proposal } : message
-        )));
-        return;
-      }
-
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -422,105 +247,6 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
     }
   }
 
-  async function confirmOffReschedule(messageId: string, action: OffRescheduleProposal) {
-    if (actionBusyId) return;
-    setActionBusyId(action.actionId);
-    setError(null);
-    try {
-      const response = await fetch("/api/ai/actions/off-reschedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId: action.actionId }),
-      });
-      const result = await response.json() as { success: boolean; error?: string; sheet_sync?: { success: boolean; error?: string } };
-      if (!response.ok || !result.success) throw new Error(result.error ?? "Không thể chuyển lịch OFF.");
-      const warning = result.sheet_sync && !result.sheet_sync.success
-        ? `Đã đổi trong hệ thống nhưng Google Sheet chưa đồng bộ: ${result.sheet_sync.error ?? "lỗi không xác định"}`
-        : undefined;
-      setMessages((current) => current.map((message) => (
-        message.id === messageId
-          ? { ...message, content: `Đã chuyển lịch OFF của ${action.riderName ?? action.riderCode} từ ${formatActionDate(action.fromDate)} sang ${formatActionDate(action.toDate)}.${warning ? " Cần xử lý cảnh báo đồng bộ bên dưới." : " Google Sheet đã được cập nhật."}`, action: { ...action, status: "EXECUTED", warning } }
-          : message
-      )));
-    } catch (caught) {
-      const actionError = caught instanceof Error ? caught.message : "Không thể chuyển lịch OFF.";
-      setMessages((current) => current.map((message) => (
-        message.id === messageId ? { ...message, action: { ...action, status: "FAILED", error: actionError } } : message
-      )));
-    } finally {
-      setActionBusyId(null);
-    }
-  }
-
-  async function cancelOffReschedule(messageId: string, action: OffRescheduleProposal) {
-    if (actionBusyId) return;
-    setActionBusyId(action.actionId);
-    try {
-      const response = await fetch("/api/ai/actions/off-reschedule", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId: action.actionId }),
-      });
-      const result = await response.json() as { success: boolean; error?: string };
-      if (!response.ok || !result.success) throw new Error(result.error ?? "Không thể hủy action.");
-      setMessages((current) => current.map((message) => (
-        message.id === messageId ? { ...message, content: "Đã hủy yêu cầu chuyển lịch OFF.", action: { ...action, status: "CANCELLED" } } : message
-      )));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể hủy action.");
-    } finally {
-      setActionBusyId(null);
-    }
-  }
-
-  async function confirmOffAutoSchedule(messageId: string, action: OffAutoScheduleProposal) {
-    if (actionBusyId) return;
-    setActionBusyId(action.actionId);
-    setError(null);
-    try {
-      const response = await fetch("/api/ai/actions/off-auto-schedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId: action.actionId }),
-      });
-      const result = await response.json() as AutoScheduleExecuteResponse;
-      if (!response.ok || !result.success) throw new Error(result.error ?? "Không thể xếp lịch OFF.");
-      setMessages((current) => current.map((message) => (
-        message.id === messageId
-          ? { ...message, content: `Đã tạo ${result.result?.created ?? 0} yêu cầu OFF chờ duyệt cho ${action.district} (${formatWeekRange(action.weekStart, action.weekEnd)}). Vào trang Xếp lịch OFF để duyệt từng yêu cầu.`, action: { ...action, status: "EXECUTED" } }
-          : message
-      )));
-    } catch (caught) {
-      const actionError = caught instanceof Error ? caught.message : "Không thể xếp lịch OFF.";
-      setMessages((current) => current.map((message) => (
-        message.id === messageId ? { ...message, action: { ...action, status: "FAILED", error: actionError } } : message
-      )));
-    } finally {
-      setActionBusyId(null);
-    }
-  }
-
-  async function cancelOffAutoSchedule(messageId: string, action: OffAutoScheduleProposal) {
-    if (actionBusyId) return;
-    setActionBusyId(action.actionId);
-    try {
-      const response = await fetch("/api/ai/actions/off-auto-schedule", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId: action.actionId }),
-      });
-      const result = await response.json() as { success: boolean; error?: string };
-      if (!response.ok || !result.success) throw new Error(result.error ?? "Không thể hủy action.");
-      setMessages((current) => current.map((message) => (
-        message.id === messageId ? { ...message, content: "Đã hủy yêu cầu xếp lịch OFF.", action: { ...action, status: "CANCELLED" } } : message
-      )));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể hủy action.");
-    } finally {
-      setActionBusyId(null);
-    }
-  }
-
   return (
     <div ref={panelRef} className="relative z-[400]">
       {open ? (
@@ -579,22 +305,10 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-busy={loading}>
             {messages.map((message) => {
-              const action = message.action;
               return (
               <article key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-6", message.role === "user" ? "rounded-br-md bg-slate-950 text-white dark:bg-white dark:text-slate-950" : "rounded-bl-md border border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100")}>
                   {message.content ? <p className="whitespace-pre-wrap">{message.content}</p> : <span className="inline-flex items-center gap-2 text-slate-500 dark:text-slate-400"><LoaderCircle size={15} className="animate-spin" aria-hidden="true" />Đang suy nghĩ…</span>}
-                  {action ? (
-                    <ChatActionCard
-                      messageId={message.id}
-                      action={action}
-                      busy={actionBusyId === action.actionId}
-                      onConfirmAuto={confirmOffAutoSchedule}
-                      onCancelAuto={cancelOffAutoSchedule}
-                      onConfirmReschedule={confirmOffReschedule}
-                      onCancelReschedule={cancelOffReschedule}
-                    />
-                  ) : null}
                   {message.role === "assistant" && message.dataSources?.length ? (
                     <p className="mt-2 border-t border-slate-200/80 pt-2 text-[0.65rem] leading-4 text-slate-500 dark:border-slate-700 dark:text-slate-400">
                       Supabase · {message.workDate ?? "—"} · {formatContextTime(message.dataAsOf)}<br />
@@ -691,146 +405,4 @@ function formatContextTime(value?: string) {
     minute: "2-digit",
     timeZone: "Asia/Ho_Chi_Minh",
   }).format(date);
-}
-
-function OffRescheduleCard({ action, busy, onConfirm, onCancel }: { action: OffRescheduleProposal; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
-  const pending = (action.status ?? "PENDING") === "PENDING";
-  const heading = pending ? "Chờ xác nhận" : action.status === "EXECUTED" ? "Đã chuyển lịch" : action.status === "CANCELLED" ? "Đã hủy" : "Không thực hiện được";
-  return (
-    <section className="mt-3 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 text-slate-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-slate-100" aria-label="Xác nhận chuyển lịch OFF">
-      <div className="flex items-center gap-2 border-b border-amber-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-amber-800 dark:border-amber-800 dark:text-amber-200">
-        <CalendarClock size={15} aria-hidden="true" /> {heading}
-      </div>
-      <div className="space-y-2 px-3 py-3 text-xs leading-5">
-        <p><strong>{action.riderName ?? "Chưa có tên"}</strong> · {action.riderCode}</p>
-        <div className="flex items-center gap-2 font-semibold">
-          <span>{formatActionDate(action.fromDate)}</span><ArrowRight size={14} aria-hidden="true" /><span>{formatActionDate(action.toDate)}</span>
-        </div>
-        <p className="text-slate-600 dark:text-slate-300">{formatOffStatus(action.offStatus)}</p>
-        {pending ? <p className="text-slate-500 dark:text-slate-400">Bản xem trước hết hạn sau 10 phút.</p> : null}
-        {action.error ? <p role="alert" className="text-red-700 dark:text-red-300">{action.error}</p> : null}
-        {action.warning ? <p role="status" className="text-amber-800 dark:text-amber-200">{action.warning}</p> : null}
-      </div>
-      {pending ? (
-        <div className="grid grid-cols-2 gap-2 border-t border-amber-200 p-2 dark:border-amber-800">
-          <button type="button" onClick={onCancel} disabled={busy} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-100 active:bg-slate-200 disabled:cursor-wait disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Hủy</button>
-          <button type="button" onClick={onConfirm} disabled={busy} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white outline-none hover:bg-emerald-800 active:bg-emerald-900 disabled:cursor-wait disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
-            {busy ? <LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> : <Check size={14} aria-hidden="true" />} Xác nhận
-          </button>
-        </div>
-      ) : (
-        <p className="border-t border-amber-200 px-3 py-2 text-xs font-semibold dark:border-amber-800">
-          {action.status === "EXECUTED" ? "Đã thực hiện" : action.status === "CANCELLED" ? "Đã hủy" : "Không thực hiện được"}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function formatActionDate(value: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(date);
-}
-
-
-function ChatActionCard({
-  messageId,
-  action,
-  busy,
-  onConfirmAuto,
-  onCancelAuto,
-  onConfirmReschedule,
-  onCancelReschedule,
-}: {
-  messageId: string;
-  action: OffRescheduleProposal | OffAutoScheduleProposal;
-  busy: boolean;
-  onConfirmAuto: (messageId: string, action: OffAutoScheduleProposal) => Promise<void>;
-  onCancelAuto: (messageId: string, action: OffAutoScheduleProposal) => Promise<void>;
-  onConfirmReschedule: (messageId: string, action: OffRescheduleProposal) => Promise<void>;
-  onCancelReschedule: (messageId: string, action: OffRescheduleProposal) => Promise<void>;
-}) {
-  if ("wards" in action) {
-    const autoAction: OffAutoScheduleProposal = action;
-    return (
-      <OffAutoScheduleCard
-        action={autoAction}
-        busy={busy}
-        onConfirm={() => void onConfirmAuto(messageId, autoAction)}
-        onCancel={() => void onCancelAuto(messageId, autoAction)}
-      />
-    );
-  }
-  const rescheduleAction: OffRescheduleProposal = action;
-  return (
-    <OffRescheduleCard
-      action={rescheduleAction}
-      busy={busy}
-      onConfirm={() => void onConfirmReschedule(messageId, rescheduleAction)}
-      onCancel={() => void onCancelReschedule(messageId, rescheduleAction)}
-    />
-  );
-}
-
-function OffAutoScheduleCard({ action, busy, onConfirm, onCancel }: { action: OffAutoScheduleProposal; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
-  const pending = (action.status ?? "PENDING") === "PENDING";
-  const heading = pending ? "Chờ xác nhận" : action.status === "EXECUTED" ? "Đã tạo lịch" : action.status === "CANCELLED" ? "Đã hủy" : "Không thực hiện được";
-  return (
-    <section className="mt-3 overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50 text-slate-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-slate-100" aria-label="Xác nhận xếp lịch OFF tự động">
-      <div className="flex items-center gap-2 border-b border-emerald-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-emerald-800 dark:border-emerald-800 dark:text-emerald-200">
-        <CalendarClock size={15} aria-hidden="true" /> {heading}
-      </div>
-      <div className="space-y-2 px-3 py-3 text-xs leading-5">
-        <p><strong>{action.district}</strong> · {formatWeekRange(action.weekStart, action.weekEnd)}{action.wardScope ? ` · phường ${action.wardScope}` : ""}</p>
-        <div className="flex items-center gap-3 font-semibold">
-          <span>{action.totalAssignments} lịch mới</span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 dark:text-slate-300">{action.alreadyHaveOff} đã có OFF</span>
-          {action.totalSkipped > 0 ? <><span className="text-slate-400">·</span><span className="text-amber-700 dark:text-amber-300">{action.totalSkipped} chưa xếp</span></> : null}
-        </div>
-        <div className="space-y-2">
-          {action.wards.map((ward) => (
-            <div key={ward.ward} className="rounded-lg border border-emerald-200/80 bg-white/60 p-2 dark:border-emerald-800 dark:bg-slate-900/60">
-              <p className="font-bold text-emerald-900 dark:text-emerald-100">Phường {ward.ward}{ward.cot ? ` (${ward.cot})` : ""} <span className="font-normal text-slate-500 dark:text-slate-400">· {ward.totalRiders} rider</span></p>
-              {ward.assignments.length ? <ul className="mt-1 grid gap-0.5">
-                {ward.assignments.map((assignment) => (
-                  <li key={assignment.rider_code} className="flex items-center justify-between gap-2 text-slate-700 dark:text-slate-200">
-                    <span>{assignment.full_name || assignment.rider_code}</span>
-                    <strong>{formatActionDate(assignment.off_date)}</strong>
-                  </li>
-                ))}
-              </ul> : null}
-              {ward.skipped.length ? <p className="mt-1 text-slate-500 dark:text-slate-400">{ward.skipped.map((item) => item.full_name || item.rider_code).join(", ")}: {ward.skipped[0].reason}</p> : null}
-            </div>
-          ))}
-        </div>
-        {pending ? <p className="text-slate-500 dark:text-slate-400">Bản xem trước hết hạn sau 10 phút. Khi xác nhận, các yêu cầu được tạo ở trạng thái Chờ duyệt.</p> : null}
-        {action.error ? <p role="alert" className="text-red-700 dark:text-red-300">{action.error}</p> : null}
-        {action.warning ? <p role="status" className="text-amber-800 dark:text-amber-200">{action.warning}</p> : null}
-      </div>
-      {pending ? (
-        <div className="grid grid-cols-2 gap-2 border-t border-emerald-200 p-2 dark:border-emerald-800">
-          <button type="button" onClick={onCancel} disabled={busy} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-100 active:bg-slate-200 disabled:cursor-wait disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Hủy</button>
-          <button type="button" onClick={onConfirm} disabled={busy} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white outline-none hover:bg-emerald-800 active:bg-emerald-900 disabled:cursor-wait disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
-            {busy ? <LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> : <Check size={14} aria-hidden="true" />} Xác nhận
-          </button>
-        </div>
-      ) : (
-        <p className="border-t border-emerald-200 px-3 py-2 text-xs font-semibold dark:border-emerald-800">
-          {action.status === "EXECUTED" ? "Đã tạo lịch" : action.status === "CANCELLED" ? "Đã hủy" : "Không thực hiện được"}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function formatWeekRange(start: string, end: string) {
-  return `${formatActionDate(start)} – ${formatActionDate(end)}`;
-}
-
-function formatOffStatus(value: string) {
-  if (value === "OFF_APPROVED") return "OFF phép";
-  if (value === "OFF_UNEXPECTED") return "OFF đột xuất";
-  return "OFF tuần";
 }

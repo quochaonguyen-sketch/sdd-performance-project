@@ -1,16 +1,5 @@
 export type Role = "admin" | "leader" | "viewer" | "member";
 
-export type WardConflict = {
-  ward: string;
-  cot: string | null;
-  count: number;
-  has_approved: boolean;
-  riders: Array<{
-    rider_code: string;
-    full_name: string | null;
-    status: "PENDING" | "APPROVED";
-  }>;
-};
 
 export type Zone = {
   id: string;
@@ -105,32 +94,6 @@ export type AttendanceLog = {
   };
 };
 
-export type RiderOffRequest = {
-  id: string;
-  batch_id: string;
-  rider_id: string;
-  rider_code: string;
-  off_date: string;
-  request_type: "WEEKLY" | "PLANNED" | "EMERGENCY";
-  shift: "FULL_DAY" | "MORNING" | "AFTERNOON";
-  reason: string | null;
-  evidence_path: string | null;
-  evidence_name: string | null;
-  evidence_type: string | null;
-  evidence_url?: string | null;
-  requester_email: string | null;
-  email_notification_status: "PENDING" | "SENT" | "FAILED" | "NOT_CONFIGURED";
-  email_notification_error: string | null;
-  email_notified_at: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  created_at: string;
-  updated_at: string;
-  ward_conflict?: WardConflict | null;
-  rider?: Pick<Rider, "full_name" | "kv" | "cot" | "delivery_district" | "delivery_ward" | "pickup_district" | "pickup_ward" | "current_shift">;
-};
 
 export type DeliveryVolume = {
   id: string;
@@ -158,25 +121,4 @@ export type ActivityLog = {
   message: string;
   raw_data: Record<string, unknown> | null;
   created_at: string;
-};
-
-export type RiderViolationRecord = {
-  id: string;
-  rider_id: string | null;
-  rider_code: string;
-  rider_name: string | null;
-  work_date: string;
-  violation_type: "LATE_CHECKIN" | "NO_SHOW" | "SLA_BREACH" | "SAFETY" | "POLICY" | "OFF_UNEXPECTED" | "WORKING_REST_DAY";
-  severity: "LOW" | "MEDIUM" | "HIGH";
-  zone: string | null;
-  note: string | null;
-  status: "OPEN" | "RESOLVED";
-  resolved_at: string | null;
-  resolved_by: string | null;
-  resolution_note: string | null;
-  source: string;
-  dedupe_key: string | null;
-  raw_data: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
 };

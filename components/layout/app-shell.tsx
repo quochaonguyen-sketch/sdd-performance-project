@@ -12,7 +12,6 @@ import { NavigationPendingIndicator } from "@/components/layout/navigation-pendi
 import { RouteReveal } from "@/components/layout/route-reveal";
 import { SidebarNavigation } from "@/components/layout/sidebar-navigation";
 import { NavigationGroup } from "@/components/layout/navigation-group";
-import { OffRequestNotifications } from "@/components/layout/off-request-notifications";
 import { ProductUpdateNotifications } from "@/components/feedback/product-update-notifications";
 import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
@@ -42,9 +41,6 @@ const navItems = [
   { href: "/overnight-holds", label: "Giữ hàng qua đêm", icon: Moon },
   { href: "/notes", label: "Notes", icon: ListChecks },
   { href: "/feedback", label: "Báo lỗi & góp ý", icon: ListChecks },
-  { href: "/off-schedule", label: "Time Off", icon: ListChecks },
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
-  { href: "/violations", label: "Violations", icon: ListChecks },
   { href: "/route-sheet", label: "Operations Sheets", icon: ListChecks },
   { href: "/imports", label: "Data Import", icon: PackagePlus },
   { href: "/data-sources", label: "Data Sources", icon: Activity },
@@ -71,7 +67,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/off-schedule", "/tasks", "/violations", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
@@ -102,7 +98,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const memberToolRestricted = visibleToolItems.length===0;
   const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
   const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
-  const teamPaths = ["/riders", "/team", "/notes", "/off-schedule", "/tasks", "/violations"];
+  const teamPaths = ["/riders", "/team", "/notes"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
   const moreNavItems = [
@@ -226,7 +222,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           </div>
           <div className="app-header-account">
             <AiLauncher />
-            <OffRequestNotifications />
             <FeedbackPopup />
             <ProductUpdateNotifications />
             <button type="button" className={cn("app-split-toggle", splitOpen && "is-active")} aria-pressed={splitOpen} aria-label={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} title={splitOpen ? "Tắt chia màn hình" : "Chia màn hình"} onClick={() => setSplitOpen((current) => !current)}>

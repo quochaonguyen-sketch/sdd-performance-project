@@ -1,5 +1,6 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
+import { RiderSheetStatus } from "./rider-sheet-status";
 
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -281,6 +282,10 @@ export function RidersView({
   const refresh = useCallback(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    const timer = setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
   const suppressRealtimeEcho = useCallback((...keys: Array<string | null | undefined>) => {
     const now = Date.now();
@@ -591,6 +596,7 @@ export function RidersView({
 
   return (
     <div className="riders-workbench mx-auto max-w-[1600px]">
+      <RiderSheetStatus />
       <header className="riders-command-header">
         <div className="riders-command-title">
           <div className="flex min-w-0 items-center gap-3">
@@ -821,9 +827,9 @@ export function RidersView({
             {!loading && paginated.length === 0 ? <EmptyRiders /> : null}
           </div> : null}
           {isDesktopLayout ? <div className="riders-table-frame hidden lg:block">
-            <table className="w-full min-w-[860px] table-fixed text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr>{canManageRiders ? <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Chọn tất cả rider trên trang" checked={editableVisible.length > 0 && visibleChecked === editableVisible.length} onChange={toggleVisible} /></th> : null}<SortableRiderHeader label="Rider" sortKey="name" current={sort} onSort={changeSort} className="w-[30%]" /><SortableRiderHeader label="Trạng thái" sortKey="status" current={sort} onSort={changeSort} className="w-[14%]" /><SortableRiderHeader label="Khu vực" sortKey="zone" current={sort} onSort={changeSort} /><SortableRiderHeader label="COT" sortKey="cot" current={sort} onSort={changeSort} /><SortableRiderHeader label="Cập nhật" sortKey="updated" current={sort} onSort={changeSort} align="right" />{canManageRiders ? <th className="w-16" /> : null}</tr></thead>
-              <tbody className="divide-y divide-slate-100">{loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-16 animate-pulse"><td colSpan={canManageRiders ? 7 : 5} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : paginated.map((rider) => <RiderDesktopRow key={rider.id} rider={rider} districts={districts} checked={checkedIds.has(rider.id)} canManageRiders={canManageRiders} canEditRider={editableRiderAreas.includes(rider.kv ?? "")} onCheck={() => toggleChecked(rider.id)} onOpen={() => { setSelected(rider); setShowDetail(true); }} onEdit={() => beginEdit(rider)} />)}{!loading && paginated.length === 0 ? <tr><td colSpan={canManageRiders ? 7 : 5} className="h-80 text-center text-sm text-slate-500">Không có rider nào khớp bộ lọc hiện tại.</td></tr> : null}</tbody>
+            <table className="w-full min-w-[940px] table-fixed text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr>{canManageRiders ? <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Chọn tất cả rider trên trang" checked={editableVisible.length > 0 && visibleChecked === editableVisible.length} onChange={toggleVisible} /></th> : null}<SortableRiderHeader label="Rider" sortKey="name" current={sort} onSort={changeSort} className="w-[30%]" /><SortableRiderHeader label="Trạng thái" sortKey="status" current={sort} onSort={changeSort} className="w-[14%]" /><th scope="col" className="w-20 px-4 py-3">KV</th><SortableRiderHeader label="Quận / phường giao" sortKey="zone" current={sort} onSort={changeSort} /><SortableRiderHeader label="COT" sortKey="cot" current={sort} onSort={changeSort} /><SortableRiderHeader label="Cập nhật" sortKey="updated" current={sort} onSort={changeSort} align="right" />{canManageRiders ? <th className="w-16" /> : null}</tr></thead>
+              <tbody className="divide-y divide-slate-100">{loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-16 animate-pulse"><td colSpan={canManageRiders ? 8 : 6} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : paginated.map((rider) => <RiderDesktopRow key={rider.id} rider={rider} districts={districts} checked={checkedIds.has(rider.id)} canManageRiders={canManageRiders} canEditRider={editableRiderAreas.includes(rider.kv ?? "")} onCheck={() => toggleChecked(rider.id)} onOpen={() => { setSelected(rider); setShowDetail(true); }} onEdit={() => beginEdit(rider)} />)}{!loading && paginated.length === 0 ? <tr><td colSpan={canManageRiders ? 8 : 6} className="h-80 text-center text-sm text-slate-500">Không có rider nào khớp bộ lọc hiện tại.</td></tr> : null}</tbody>
             </table>
           </div> : null}
           <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3"><p className="text-sm text-slate-500">Trang <strong className="text-slate-700">{safePage}/{pageCount}</strong></p><div className="flex gap-2"><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang trước" disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /></Button><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang sau" disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}><ChevronRight size={16} /></Button></div></div>
@@ -873,7 +879,8 @@ const RiderDesktopRow = memo(function RiderDesktopRow({
       {canManageRiders ? <td className="px-4" onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`Chọn ${rider.full_name ?? rider.rider_code}`} disabled={!canEditRider} checked={checked} onChange={onCheck} /></td> : null}
       <td className="px-4 py-2"><div className="flex min-w-0 items-center gap-3"><RiderAvatar rider={rider} size="sm" /><div className="min-w-0"><p className="truncate font-semibold text-slate-950">{rider.full_name ?? "Chưa có tên"}</p><p className="truncate font-mono text-xs text-slate-500">{rider.rider_code}{riderPhone(rider) ? ` · ${riderPhone(rider)}` : ""}</p></div></div></td>
       <td className="px-4"><RiderStatusBadge status={rider.status} /></td>
-      <td className="px-4"><p className="truncate font-medium text-slate-800">{districtDisplayName(rider.delivery_district, districts) || "Chưa gán"}</p><p className="truncate text-xs text-slate-500">{rider.delivery_ward ?? rider.kv ?? "—"}</p></td>
+      <td className="px-4 font-semibold text-blue-700">{rider.kv ?? "—"}</td>
+      <td className="px-4"><p className="truncate font-medium text-slate-800">{districtDisplayName(rider.delivery_district, districts) || "Chưa gán"}</p><p className="truncate text-xs text-slate-500">{rider.delivery_ward ?? "—"}</p></td>
       <td className="px-4 font-semibold text-slate-700">{rider.cot ?? "—"}</td>
       <td className="px-4 text-right"><p className="text-sm tabular-nums text-slate-700">{formatRelativeTime(rider.updated_at)}</p><p className="text-xs tabular-nums text-slate-400">{formatShortDate(rider.updated_at)}</p></td>
       {canManageRiders ? <td className="pr-3 text-right"><Button type="button" variant="ghost" disabled={!canEditRider} aria-label={`Sửa ${rider.full_name ?? rider.rider_code}`} className="size-9 p-0" onClick={(event) => { event.stopPropagation(); onEdit(); }}><Pencil size={15} /></Button></td> : null}
@@ -905,8 +912,9 @@ const RiderMobileCard = memo(function RiderMobileCard({ rider, districts, checke
         </div>
         <RiderStatusBadge status={rider.status} />
         <dl className="rider-mobile-specs">
-          <div><dt>Khu vực</dt><dd>{districtDisplayName(rider.delivery_district, districts) || "Chưa gán"}</dd></div>
-          <div><dt>Phường / KV</dt><dd>{rider.delivery_ward ?? rider.kv ?? "—"}</dd></div>
+          <div><dt>KV</dt><dd>{rider.kv ?? "—"}</dd></div>
+          <div><dt>Quận giao</dt><dd>{districtDisplayName(rider.delivery_district, districts) || "Chưa gán"}</dd></div>
+          <div><dt>Phường giao</dt><dd>{rider.delivery_ward ?? "—"}</dd></div>
           <div><dt>COT</dt><dd>{rider.cot ?? "—"}</dd></div>
           <div><dt>Cập nhật</dt><dd>{formatRelativeTime(rider.updated_at)}</dd></div>
         </dl>

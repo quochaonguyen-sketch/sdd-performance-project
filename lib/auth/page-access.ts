@@ -18,9 +18,6 @@ export const PAGE_ACCESS_OPTIONS=[
  {key:"pickup_management",label:"Pickup Management (Points / Coverage)",path:"/pickup-management"},
  {key:"return",label:"Return Orders",path:"/return-orders"},
  {key:"notes",label:"Notes",path:"/notes"},
- {key:"off_schedule",label:"Time Off",path:"/off-schedule"},
- {key:"tasks",label:"Tasks",path:"/tasks"},
- {key:"violations",label:"Violations",path:"/violations"},
  {key:"sheets",label:"Operations Sheets",path:"/route-sheet"},
  {key:"imports",label:"Data Import",path:"/imports"},
  {key:"sources",label:"Data Sources",path:"/data-sources"},
@@ -58,19 +55,18 @@ const API_PAGES:Array<[string,PageAccessKey[]]>=[
  ["lmhub-inventory",["pickup_backlog","delivery_backlog"]],["backlog-history",["backlog_history"]],
  ["overnight-holds",["overnight"]],["onhold",["onhold"]],["driver-performance",["performance"]],
  ["morning-delivery",["delivery_realtime"]],["return-orders",["return"]],
- ["riders",["riders","performance","pickup_management","off_schedule","tasks","violations","delivery_realtime","sheets"]],
- ["notes",["notes"]],["off-requests",["off_schedule","pickup_management","dashboard"]],
- ["attendance",["off_schedule","pickup_management","delivery_realtime"]],["tasks",["tasks"]],
- ["violations",["violations"]],["operations-sheet",["sheets"]],["data-sources",["sources"]],
+ ["riders",["riders","performance","pickup_management","delivery_realtime","sheets"]],
+ ["notes",["notes"]],
+ ["attendance",["pickup_management","delivery_realtime"]],
+ ["operations-sheet",["sheets"]],["data-sources",["sources"]],
  ["dashboard",["dashboard","delivery_volume","pickup_volume","delivery_backlog","return"]],
- ["feedback",["feedback"]],["ai/actions",["off_schedule"]],
+ ["feedback",["feedback"]],
 ];
 export function pagesForApi(path:string,method="GET"):PageAccessKey[]|"admin"|null{
  // Token-authenticated ingestion, public forms, auth and telemetry retain their own guards.
  if(path==="/api/attendance/schedule/google-webhook")return null;
  if(path==="/api/admin"||path.startsWith("/api/admin/"))return "admin";
  if(!["GET","HEAD","OPTIONS"].includes(method)&&(/^\/api\/riders(?:\/|$)/.test(path)))return ["riders"];
- if(path==="/api/off-requests/pending")return null;
  return API_PAGES.find(([prefix])=>path===`/api/${prefix}`||path.startsWith(`/api/${prefix}/`))?.[1]??null;
 }
 export function viewPermissions(base:MemberPermissions,access:PageAccess):MemberPermissions{

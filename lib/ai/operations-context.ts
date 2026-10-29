@@ -24,12 +24,6 @@ type AttendanceRow = {
   work_date: string;
 };
 
-type OffRequestRow = {
-  rider_id: string;
-  rider_code: string;
-  request_type: "WEEKLY" | "PLANNED" | "EMERGENCY";
-  off_date: string;
-};
 
 type RealtimeRow = {
   driver_id: string;
@@ -62,11 +56,6 @@ export type AiOperationsContext = {
 };
 
 const offStatuses = new Set(["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED"]);
-const offRequestStatus = {
-  WEEKLY: "OFF_WEEKLY",
-  PLANNED: "OFF_APPROVED",
-  EMERGENCY: "OFF_UNEXPECTED",
-} as const;
 const OFF_DETAIL_LIMIT = 100;
 
 export async function loadAiOperationsContext({
@@ -82,7 +71,7 @@ export async function loadAiOperationsContext({
   const workDate = dateScope.referenceDate;
   const includeVolume = /volume|pickup|delivery|đơn|don/i.test(question);
 
-  const [riderResult, attendanceResult, offRequestResult, latestRealtimeResult, deliveryVolumeResult, pickupVolumeResult, sheetOffResult] = await Promise.all([
+  const [riderResult, attendanceResult, latestRealtimeResult, deliveryVolumeResult, pickupVolumeResult, sheetOffResult] = await Promise.all([
     admin
       .from("riders")
       .select("id,rider_code,full_name,kv,cot,status,delivery_district,delivery_ward,pickup_district,pickup_ward").in("kv", OPERATING_AREAS)
@@ -93,13 +82,6 @@ export async function loadAiOperationsContext({
       .select("rider_id,rider_code,status,work_date")
       .gte("work_date", dateScope.start)
       .lte("work_date", dateScope.end)
-      .limit(5000),
-    admin
-      .from("rider_off_requests")
-      .select("rider_id,rider_code,request_type,off_date")
-      .gte("off_date", dateScope.start)
-      .lte("off_date", dateScope.end)
-      .eq("status", "APPROVED")
       .limit(5000),
     admin
       .from("realtime_delivery_riders")
@@ -120,7 +102,6 @@ export async function loadAiOperationsContext({
   const firstError =
     riderResult.error ??
     attendanceResult.error ??
-    offRequestResult.error ??
     latestRealtimeResult.error ??
     deliveryVolumeResult.error ??
     pickupVolumeResult.error;
@@ -128,7 +109,6 @@ export async function loadAiOperationsContext({
 
   const riders = (riderResult.data ?? []) as RiderRow[];
   const attendance = (attendanceResult.data ?? []) as AttendanceRow[];
-  const approvedOffRequests = (offRequestResult.data ?? []) as OffRequestRow[];
   const { offEntries: sheetOffEntries, coveredKeys: sheetCoveredKeys } = sheetOffResult;
   const useSheetData = sheetOffEntries.length > 0;
   const latestSnapshot = latestRealtimeResult.data ?? null;
@@ -174,16 +154,7 @@ export async function loadAiOperationsContext({
       .filter((row) => offStatuses.has(row.status))
       .filter((row) => !useSheetData || !sheetCoveredKeys.has(`${row.rider_code}|${row.work_date}`))
       .map((row) => ({ ...row, source: "attendance_logs" as const })),
-    // 3. Approved off requests (skip rider+dates already in sheet)
-    ...approvedOffRequests
-      .filter((row) => !useSheetData || !sheetCoveredKeys.has(`${row.rider_code}|${row.off_date}`))
-      .map((row) => ({
-        rider_id: row.rider_id,
-        rider_code: row.rider_code,
-        status: offRequestStatus[row.request_type],
-        work_date: row.off_date,
-        source: "rider_off_requests" as const,
-      })),
+
   ];
   const offByRiderDate = new Map<string, {
     rider_code: string;
@@ -288,7 +259,6 @@ export async function loadAiOperationsContext({
       included_sources: [
         ...(useSheetData ? ["google_sheet (Lịch Rider — nguồn chính xác nhất)"] : []),
         "attendance_logs",
-        "approved rider_off_requests",
       ],
       definition: "Chỉ tính rider active và khử trùng theo rider_code + work_date. Câu hỏi theo tuần dùng đủ thứ Hai–Chủ nhật và giữ từng ngày OFF. Nếu câu hỏi nói giao/delivery thì lọc delivery district; nói pickup/lấy hàng thì lọc pickup district; nếu không nói rõ mới dùng khu vực vận hành mặc định.",
     },
@@ -309,7 +279,6 @@ export async function loadAiOperationsContext({
     "riders",
     ...(useSheetData ? ["google_sheet (Lịch Rider)"] : []),
     "attendance_logs",
-    "rider_off_requests",
     "realtime_delivery_riders",
   ];
   if (includeVolume) {
@@ -326,7 +295,7 @@ export async function loadAiOperationsContext({
     work_date: workDate,
     date_scope: dateScope,
     page_path: pagePath,
-    scope_note: `Dữ liệu lịch theo date_scope ${dateScope.label}; realtime chỉ dùng ngày tham chiếu ${workDate}. Danh sách OFF hợp nhất từ Google Sheet "Lịch Rider" (nguồn chính xác nhất), attendance_logs và rider_off_requests. Khi Google Sheet có dữ liệu, nó ghi đè dữ liệu Supabase cho cùng rider+ngày. Câu hỏi nhắc tên rider phải dùng attendance.matched_rider_off_schedule. Chỉ gọi danh sách là đầy đủ khi off_riders_truncated=false.`,
+    scope_note: `Dữ liệu lịch theo date_scope ${dateScope.label}; realtime chỉ dùng ngày tham chiếu ${workDate}. Danh sách OFF hợp nhất từ Google Sheet "Lịch Rider" (nguồn chính xác nhất), attendance_logs. Khi Google Sheet có dữ liệu, nó ghi đè dữ liệu Supabase cho cùng rider+ngày. Câu hỏi nhắc tên rider phải dùng attendance.matched_rider_off_schedule. Chỉ gọi danh sách là đầy đủ khi off_riders_truncated=false.`,
     sources,
     data,
   };

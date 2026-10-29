@@ -58,41 +58,10 @@ model Rider {
   updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   zone             Zone?             @relation(fields: [zoneId], references: [id])
   attendance       AttendanceLog[]
-  offRequests      RiderOffRequest[]
 
   @@map("riders")
 }
 
-model RiderOffRequest {
-  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  batchId                 String    @default(dbgenerated("gen_random_uuid()")) @map("batch_id") @db.Uuid
-  riderId                 String    @map("rider_id") @db.Uuid
-  riderCode               String    @map("rider_code")
-  offDate                 DateTime  @map("off_date") @db.Date
-  requestType             String    @map("request_type")
-  shift                   String    @default("FULL_DAY")
-  reason                  String?
-  evidencePath            String?   @map("evidence_path")
-  evidenceName            String?   @map("evidence_name")
-  evidenceType            String?   @map("evidence_type")
-  requesterEmail          String?   @map("requester_email")
-  emailNotificationStatus String    @default("PENDING") @map("email_notification_status")
-  emailNotificationError  String?   @map("email_notification_error")
-  emailNotifiedAt         DateTime? @map("email_notified_at") @db.Timestamptz(6)
-  status                  String    @default("PENDING")
-  reviewedBy              String?   @map("reviewed_by") @db.Uuid
-  reviewedAt              DateTime? @map("reviewed_at") @db.Timestamptz(6)
-  reviewNote              String?   @map("review_note")
-  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  rider                   Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
-
-  @@unique([riderId, offDate])
-  @@index([offDate])
-  @@index([status])
-  @@index([batchId])
-  @@map("rider_off_requests")
-}
 
 model AttendanceLog {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -209,19 +178,4 @@ model AiMessage {
   @@index([userId, createdAt])
   @@index([conversationId, createdAt])
   @@map("ai_messages")
-}
-
-model AiPendingAction {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  actionType String    @map("action_type")
-  status     String    @default("PENDING")
-  payload    Json
-  expiresAt  DateTime  @default(dbgenerated("now() + interval '10 minutes'")) @map("expires_at") @db.Timestamptz(6)
-  executedAt DateTime? @map("executed_at") @db.Timestamptz(6)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  @@index([userId, createdAt])
-  @@map("ai_pending_actions")
 }

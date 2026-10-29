@@ -18,6 +18,7 @@
   pathname=route;
   const html=renderToStaticMarkup(React.createElement(AppShell,{user:{email:'preview@example.com',fullName:'Preview',role}},React.createElement('p',null,'Preview')));
   const sidebar=html.split('aria-label="Main navigation"')[1].split('</nav>')[0];
+  for(const removed of ['/off-schedule','/tasks','/violations'])assert.ok(!html.includes(`href="${removed}`),`Removed feature visible for ${role}: ${removed}`);
   const groups=[...sidebar.matchAll(/<details[^>]*>[\s\S]*?<\/details>/g)].map(match=>match[0]);
   const volume=groups.find(group=>group.includes('<span>Volume</span>'));
   assert.ok(volume,'Volume submenu missing');

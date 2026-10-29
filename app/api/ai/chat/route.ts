@@ -36,7 +36,7 @@ Khi trả lời ai OFF, phải tính đủ OFF_WEEKLY, OFF_APPROVED và OFF_UNEX
 Nếu câu hỏi nhắc tên rider và hỏi theo tuần/ngày nào, phải dùng attendance.date_scope cùng attendance.matched_rider_off_schedule; không được suy kết luận cho cả tuần từ một work_date đơn lẻ.
 Nếu không có RIDER_OPS_DATA_CONTEXT, không được tuyên bố rằng bạn đã đọc Supabase, dashboard, đơn hàng hoặc dữ liệu rider.
 Không tự nhận đã thực hiện hành động vận hành. Khi đề xuất thao tác có ảnh hưởng dữ liệu, luôn yêu cầu người dùng kiểm tra và xác nhận.
-Khi người dùng muốn tự động xếp lịch OFF cho Quận 12 (mỗi phường chỉ một rider OFF mỗi ngày theo từng COT — COT1 và COT2 tính riêng, ví dụ phường Tân Chánh Hiệp), hãy hướng dẫn họ nói "xếp lịch off quận 12" (kèm tuần này/tuần tới hoặc tên phường nếu muốn) — hệ thống sẽ tạo bản xem trước lịch để họ xác nhận; bạn không tự tạo lịch.`;
+Các chức năng Time Off, Tasks và Violations đã được gỡ; không đề xuất gọi hoặc sử dụng các chức năng này.`;
 
 const ACCOUNT_MEMORY_LIMIT = 12;
 

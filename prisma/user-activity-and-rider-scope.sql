@@ -166,7 +166,6 @@ begin
   update public.riders set kv=kv where id=target_id;
   if not found then return false; end if;
   update public.attendance_logs set rider_id=null where rider_id=target_id;
-  update public.rider_violations set rider_id=null where rider_id=target_id;
   delete from public.riders where id=target_id;
   return true;
 end $fn$;
