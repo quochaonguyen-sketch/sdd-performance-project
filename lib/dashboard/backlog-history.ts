@@ -8,6 +8,7 @@ export type BacklogCheckpoint = { source: BacklogSource; scheduled_for: string; 
 export type BacklogDetail = { snapshot: BacklogSnapshot; rows: BacklogPivotRow[] };
 export type BacklogLevel = "area" | "district" | "ward";
 export type BacklogCot = "orders" | "cot1" | "cot2" | "other";
+export type BacklogSort = "change" | "rising" | "falling" | "area";
 export type BacklogHourlyPoint = {
   hour: number; scheduled_for: string; status: string; is_final: boolean; snapshot_id: string | null;
   source_started_at: string | null; source_snapshot_at: string | null; total_orders: number | null;
@@ -57,4 +58,9 @@ export function compareBacklog(before: BacklogPivotRow[], after: BacklogPivotRow
   return [...groups.values()].map(row => ({ ...row, delta: row.after - row.before,
     percent: row.before ? (row.after - row.before) / row.before * 100 : null,
   })).sort((a, b) => a.area.localeCompare(b.area, "vi") || a.district.localeCompare(b.district, "vi") || a.ward.localeCompare(b.ward, "vi"));
+}
+
+export function sortBacklogRows(rows: ReturnType<typeof compareBacklog>, sort: BacklogSort) {
+  return [...rows].sort((a,b) => (sort === "change" ? Math.abs(b.delta)-Math.abs(a.delta) : sort === "rising" ? b.delta-a.delta : sort === "falling" ? a.delta-b.delta : 0)
+    || a.area.localeCompare(b.area,"vi") || a.district.localeCompare(b.district,"vi") || a.ward.localeCompare(b.ward,"vi"));
 }
