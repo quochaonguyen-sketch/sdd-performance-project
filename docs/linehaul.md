@@ -20,7 +20,7 @@ Nguồn chạy mỗi 5 phút; trang đọc snapshot mỗi 30 giây khi hiển th
 
 Chạy `scripts/apply-linehaul.cjs` bằng env dự án để cài schema; `--test` kiểm tra trong transaction rollback. Collector dùng cookie SPX riêng của SDD Web Data. Máy worker phải hoạt động để đồng bộ; không có lệnh sửa chuyến hay gán tài xế trên SPX.
 
-Tab **Đã về / xả hôm nay** dùng POST `https://spx.shopee.vn/mgmt/api/pc/dashboard/lm/linehaul_trips` với body `{}`, thay cho nguồn `trip/history/list`. Chỉ giữ dòng `trip_status=3`, có tài xế, đúng station/arrived_station 4232, STA và ATA hôm nay theo giờ Việt Nam. API dashboard không có trip ID nội bộ, dùng mã LT làm định danh khi chưa ghép được với ID của chuyến đang chạy; khử trùng theo mã LT, ưu tiên dữ liệu dashboard.
+Tab **Đã về / xả hôm nay** dùng POST `https://spx.shopee.vn/mgmt/api/pc/dashboard/lm/linehaul_trips` với body `{}`, thay cho nguồn `trip/history/list`. Chỉ giữ dòng `trip_status=3`, có tài xế, đúng station/arrived_station 4232 và ATA hôm nay theo giờ Việt Nam; không lọc theo STA để giữ xe dự kiến về hôm trước nhưng thực tế đến hôm nay, kể cả thiếu STA. API dashboard không có trip ID nội bộ, dùng mã LT làm định danh khi chưa ghép được với ID của chuyến đang chạy; khử trùng theo mã LT, ưu tiên dữ liệu dashboard.
 
 Số đơn lấy từ `trip_order_qty_td`, tổng TO từ `trip_to_qty_td`, loại xe từ `vehicle_group_type`. Pack type mới có dạng `Bao 90x70 10,Other 25`: 10 bao, 25 xá (Other tương ứng NA trong danh sách vận tải cùng LT). Trường hợp không phân tích được giữ mô tả gốc và không tự thay bằng 0.
 

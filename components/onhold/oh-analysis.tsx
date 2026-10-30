@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, ChartNoAxesCombined, Clock3, MapPin, Users } from "lucide-react";
-import { buildOHOverview, type OHOverviewRank, type ohChange } from "@/lib/dashboard/onhold-overview";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, ChartNoAxesCombined, Clock3, MapPin, RefreshCw, Users } from "lucide-react";
+import { buildOHOverview, shiftOHDay, type OHOverviewRank, type ohChange } from "@/lib/dashboard/onhold-overview";
 import type { OHData } from "@/lib/onhold/model";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
-import s from "./dashboard-onhold.module.css";
+import s from "./oh-analysis.module.css";
 
 const fmt = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
 const dateLabel = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
@@ -14,8 +13,34 @@ const share = (orders: number, total: number | null) => total ? `${fmt(orders / 
 const barWidth = (orders: number, total: number | null) => `${total ? orders / total * 100 : 0}%`;
 type Change = ReturnType<typeof ohChange>;
 
-export function DashboardOnhold({ source, end, loading }: {
-  source: { data: OHData | null; error: string | null }; end: string; loading: boolean;
+export function OHAnalysis({ end }: { end: string }) {
+  const [source, setSource] = useState<{ data: OHData | null; error: string | null }>({ data: null, error: null });
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey(key => key + 1), []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/onhold?from=${shiftOHDay(end, -26)}&to=${end}`, { cache: "no-store", signal: controller.signal });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Không tải được phân tích OH.");
+        if (!controller.signal.aborted) setSource({ data: payload, error: null });
+      } catch (error) {
+        if (!controller.signal.aborted) setSource(previous => ({ ...previous, error: error instanceof Error ? error.message : "Không tải được phân tích OH." }));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 0);
+    const interval = setInterval(() => { if (!document.hidden) refresh(); }, 120_000);
+    return () => { clearTimeout(timer); clearInterval(interval); controller.abort(); };
+  }, [end, refreshKey, refresh]);
+  return <OHAnalysisContent source={source} end={end} loading={loading} onRefresh={refresh} />;
+}
+
+export function OHAnalysisContent({ source, end, loading, onRefresh }: {
+  source: { data: OHData | null; error: string | null }; end: string; loading: boolean; onRefresh: () => void;
 }) {
   const [days, setDays] = useState(7);
   const [area, setArea] = useState("all");
@@ -40,7 +65,7 @@ export function DashboardOnhold({ source, end, loading }: {
         <div className={s.controls}>
           <label className={s.area}>Khu vực<select aria-label="Khu vực OH" value={area} onChange={e => setArea(e.target.value)}><option value="all">Tất cả KV</option>{OPERATING_AREAS.map(a => <option key={a}>{a}</option>)}</select></label>
           <div className={s.segment} role="group" aria-label="Khoảng ngày OH">{[7, 14].map(n => <button key={n} type="button" aria-pressed={days === n} onClick={() => setDays(n)}>{n} ngày</button>)}</div>
-          <Link className={s.detail} href="/onhold">Báo cáo OH<ArrowUpRight size={14} aria-hidden="true"/></Link>
+          <button type="button" className={s.detail} onClick={onRefresh} disabled={loading}><RefreshCw size={14} aria-hidden="true"/>{loading ? "Đang tải…" : "Làm mới phân tích"}</button>
         </div>
       </header>
       {source.error && <p className={s.warning} role="status">{source.error}{source.data ? " · Dữ liệu lần tải trước." : ""}</p>}
@@ -76,7 +101,7 @@ export function DashboardOnhold({ source, end, loading }: {
           <p className={s.weekNote}>{view.week.coverage}/7 ngày có báo cáo{view.week.partial ? " · Có ngày chưa chốt" : ""}. Tổng lượt OH theo ngày; một đơn có thể xuất hiện nhiều ngày. {!view.week.comparable && "Chưa so sánh tuần trước vì chưa đủ 14 ngày có báo cáo hoàn tất."}</p>
           <div className={s.tableWrap}><table className={s.table}><caption className={s.srOnly}>Top {limit} {kind === "rider" ? "rider" : "phường"} OH từ {view.week.start} đến {view.week.end}</caption><thead><tr><th scope="col">#</th><th scope="col">{kind === "rider" ? "Rider / Mã rider" : "Phường / Quận"}</th><th scope="col" className={s.locationCol}>Khu vực / Địa bàn</th><th scope="col">Đơn OH</th><th scope="col">Tỷ trọng OH</th><th scope="col">So với tuần trước</th></tr></thead><tbody>{ranks.slice(0, limit).map((row, i) => <RankRow key={row.key} row={row} index={i} kind={kind} total={weekTotal}/>)}</tbody></table></div>
           {!ranks.length && <p className={s.empty}>{weekTotal === null ? "Chưa có báo cáo trong tuần này" : "Không ghi nhận OH trong phạm vi đã chọn"}</p>}
-          <footer className={s.tableFooter}><span>{Math.min(limit, ranks.length)}/{fmt(ranks.length)} {kind === "rider" ? "rider" : "phường"} · Tỷ trọng trên {weekTotal === null ? "—" : fmt(weekTotal)} lượt OH / tuần</span><Link href="/onhold">Xem toàn bộ<ArrowUpRight size={13} aria-hidden="true"/></Link></footer>
+          <footer className={s.tableFooter}><span>{Math.min(limit, ranks.length)}/{fmt(ranks.length)} {kind === "rider" ? "rider" : "phường"} · Tỷ trọng trên {weekTotal === null ? "—" : fmt(weekTotal)} lượt OH / tuần</span><a href="#onhold-details">Xem báo cáo chi tiết<ArrowUpRight size={13} aria-hidden="true"/></a></footer>
         </section>
         <details className={s.dataNotes}><summary>Cách đọc dữ liệu</summary><p>OH gồm các trạng thái ghi nhận 1 và 5 trong nguồn phân tích OH. “—” / N/A là thiếu báo cáo; 0 là không có OH. Tỷ trọng = số OH của nhóm / tổng OH trong ngày và khu vực đang chọn, không phải tỷ lệ trên đơn gán. Bảng điểm tập trung cộng 7 ngày kết thúc ở ngày phân tích, so với 7 ngày liền trước đó. Một đơn có thể được ghi nhận ở nhiều ngày. Biến động chỉ hiển thị khi cả hai kỳ đủ báo cáo và không còn đang cập nhật.</p></details>
       </>}

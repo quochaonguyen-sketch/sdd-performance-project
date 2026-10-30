@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         queued: false,
         kind,
         ...result.status,
-        message: result.message ?? "Job cùng loại đã nằm trong hàng đợi. Worker sẽ chạy tuần tự.",
+        message: result.message ?? "Job cùng loại đã nằm trong hàng đợi hoặc đang chạy.",
       });
     }
 
@@ -93,10 +93,10 @@ export async function POST(request: Request) {
       ...result.status,
       message:
         kind === "pickup"
-          ? "Đã xếp tồn pickup vào hàng đợi chung. Nếu đang chạy tồn delivery thì job này đợi."
+          ? "Đã xếp job Pickup Backlog. Pickup và Delivery có thể chạy song song khi worker còn slot."
           : kind === "all"
-            ? "Đã xếp tồn pickup + delivery vào hàng đợi chung."
-            : "Đã xếp tồn delivery vào hàng đợi chung. Nếu đang chạy tồn pickup thì job này đợi.",
+            ? "Đã xếp job Pickup Backlog và Delivery Backlog. Hai job có thể chạy song song khi worker còn slot."
+            : "Đã xếp job Delivery Backlog. Pickup và Delivery có thể chạy song song khi worker còn slot.",
     });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Không đẩy được hàng đợi LMHub" }, { status: 400 });

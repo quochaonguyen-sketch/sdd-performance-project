@@ -41,6 +41,10 @@
 @media(max-width:360px) { .page :global(.perf-kpi-grid) { grid-template-columns:1fr; } }
 @media(prefers-reduced-motion:reduce) { .page *,.page *::before,.page *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
 .dashboard { display: grid; gap: 20px; min-width: 0; }
+.periodTotals { display:flex; flex-wrap:wrap; gap:20px 40px; padding:20px 0; margin-bottom:16px; border-bottom:1px solid var(--color-rule); }
+.periodTotals>div { display:grid; gap:6px; min-width:0; }
+.periodTotals span,.periodTotals small { font-size:12px; color:var(--rp-muted); }
+.periodTotals strong { font-size:26px; font-variant-numeric:tabular-nums; }
 .twoColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-width: 0; }
 .panel { padding:24px; border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); min-width:0; box-shadow:0 2px 8px color-mix(in srgb, var(--color-ink) 1.6%, transparent); }
 .heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; }

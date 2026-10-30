@@ -18,6 +18,11 @@ export function PerformanceAnalysis({ analysis, isLoading, onArea }: { analysis?
   return <div className={styles.dashboard} aria-busy={isLoading}>
     <section className={styles.panel}>
       <div className={styles.panelTop}><ChartHeading icon={<ChartNoAxesCombined size={19} />} title="Xu hướng tỷ lệ hoàn thành" description={`${dateLabel(analysis.start)}–${dateLabel(analysis.end)} · cùng bộ lọc khu vực, địa bàn, COT rider và tìm kiếm`} /><div className={styles.legend}><span><i className={styles.deliDot} />Deli</span><span><i className={styles.pickDot} />Pick</span></div></div>
+      <div className={styles.periodTotals} aria-label="Tổng hợp hiệu suất trong kỳ">
+        <div><span>Delivery</span><strong>{percent(performanceRate(analysis.totals.delivery_delivered, analysis.totals.delivery_assigned))}</strong><small>{number(analysis.totals.delivery_delivered)} / {number(analysis.totals.delivery_assigned)} đơn</small></div>
+        <div><span>Pickup</span><strong>{percent(performanceRate(analysis.totals.pickup_picked, analysis.totals.pickup_assigned))}</strong><small>{number(analysis.totals.pickup_picked)} / {number(analysis.totals.pickup_assigned)} đơn</small></div>
+        <div><span>Rider phát sinh</span><strong>{number(analysis.riderCount)}</strong><small>Trong kỳ đang chọn</small></div>
+      </div>
       <TrendChart key={`${analysis.start}:${analysis.end}`} daily={analysis.daily} />
       <p className={styles.method}>Mỗi ngày dùng dữ liệu đồng bộ gần nhất; ngày đang diễn ra có thể chưa đủ. Đường ngắt tại ngày thiếu dữ liệu. Deli = Total Delivered / Total Assigned Deli; Pick = Total Picked / Total Assigned Pick.</p>
     </section>

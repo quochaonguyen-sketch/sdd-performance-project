@@ -35,6 +35,7 @@ import {
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { OHOrderDialog } from "./oh-order-dialog";
 import { OHFullRankingsDialog } from "./oh-full-rankings-dialog";
+import { OHAnalysis } from "./oh-analysis";
 import s from "./oh-workspace.module.css";
 
 const nf = new Intl.NumberFormat("vi-VN");
@@ -616,6 +617,8 @@ export function OHWorkspace({
         </Link>
       </header>
 
+      <OHAnalysis end={today} />
+
       {/* Info notice */}
       <div className={s.notice}>
         <Database size={18} />
@@ -628,6 +631,7 @@ export function OHWorkspace({
 
       {/* Date Range Toolbar */}
       <form
+        id="onhold-details"
         className={s.toolbar}
         onSubmit={(e) => {
           e.preventDefault();

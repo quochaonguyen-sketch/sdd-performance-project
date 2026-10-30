@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Activity, ArrowUpRight, BarChart3, Clock3, Layers3, PackageCheck, RefreshCcw, Truck } from "lucide-react";
-import type { PerformanceResult } from "@/lib/performance/driver-performance";
+import { Activity, ArrowUpRight, Clock3, Layers3, PackageCheck, RefreshCcw, Truck } from "lucide-react";
 import type { PickupRider } from "@/lib/pickup/realtime";
 import { OPERATING_AREAS, normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { completionRate, type OperationsOverview } from "@/lib/dashboard/operations-overview";
@@ -17,18 +16,15 @@ import { DashboardHubSheet, useHubSheet } from "./dashboard-hub-sheet";
 import { DashboardFc } from "./dashboard-fc";
 import { DashboardReportButton } from "./dashboard-report-button";
 import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
-import { DashboardOnhold } from "./dashboard-onhold";
-import { shiftOHDay } from "@/lib/dashboard/onhold-overview";
-import type { OHData } from "@/lib/onhold/model";
 
 type PickupLive = { riders: PickupRider[]; riderSnapshotAt: string | null; snapshotAt: string | null; riderStale?: boolean };
 type PickupBacklog = { rows: { area: string; zone: string; cot: string; orders: number }[]; snapshotAt: string | null };
 type Source<T> = { data: T | null; error: string | null; loading?: boolean };
 export type DashboardOverviewData = {
-  operations: Source<OperationsOverview>; performance: Source<PerformanceResult>;
-  pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>; onhold: Source<OHData>;
+  operations: Source<OperationsOverview>;
+  pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>;
 };
-const empty: DashboardOverviewData = { operations: { data: null, error: null }, performance: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null }, onhold: { data: null, error: null } };
+const empty: DashboardOverviewData = { operations: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null } };
 const fmt = (n: number | null | undefined) => n == null ? "—" : n.toLocaleString("vi-VN");
 const pct = (n: number | null | undefined) => n == null ? "—" : `${n.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
 const dayLabel = (date: string) => `${date.slice(8,10)}/${date.slice(5,7)}`;
@@ -86,11 +82,9 @@ export function OperationsDashboard() {
     }
     await Promise.all([
       source("operations", "/api/dashboard/operations", 30_000),
-      source("performance", `/api/driver-performance?date=${today}&period=week&pageSize=25&dashboard=1`, 300_000),
       source("pickup", "/api/pickup-realtime", 30_000),
       source("pickupBacklog", "/api/pickup-inventory?view=zone-board&p_status=Assigned", 30_000),
       source("volume", "/api/dashboard/volume", 300_000),
-      source("onhold", `/api/onhold?from=${shiftOHDay(today, -26)}&to=${today}`, 120_000),
     ]);
     if (id !== request.current || abort.signal.aborted) return;
     inFlight.current = false;
@@ -109,7 +103,6 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
   const hub = useHubSheet(refreshKey);
   const live = data.operations.data?.live.data;
   const delivery = data.operations.data?.backlog.data;
-  const performance = data.performance.data;
   const pickupSource = data.pickup.data;
   const pickup = useMemo(() => {
     if (!pickupSource?.riderSnapshotAt) return null;
@@ -130,19 +123,18 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
     });
     return { total: cot1 + cot2, cot1, cot2, rows, top: [...zones.values()].sort((a,b) => b.orders - a.orders).slice(0,5) };
   }, [data.pickupBacklog.data]);
-  const performanceTotals = performance?.analysis.totals;
   const liveRate = live ? completionRate(live.delivered, live.assigned) : null;
   const pickupRate = pickup ? completionRate(pickup.picked, pickup.assigned) : null;
   const liveError = data.operations.error ?? data.operations.data?.live.error;
   const deliveryError = data.operations.error ?? data.operations.data?.backlog.error;
-  const issues = [liveError && "Live Dashboard", data.performance.error && "Rider Performance", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume", data.onhold.error && "Onhold"].filter(Boolean);
+  const issues = [liveError && "Live Dashboard", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume"].filter(Boolean);
   return <div className={s.dashboard}>
     <header className={s.header}>
       <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
       <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
-    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold","#onhold-overview"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
-    <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn · Hiệu suất 7 ngày gần nhất</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
+    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold Analytics","/onhold"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
+    <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
     {!!issues.length && <div className={s.notice} role="status">Chưa tải được: {issues.join(", ")}. Các phần còn lại vẫn hiển thị dữ liệu đã tải.<button type="button" disabled={loading} onClick={onRefresh}>Thử lại</button></div>}
 
     <DashboardReportButton />
@@ -157,10 +149,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
     <SectionTitle number="01" title="Volume Overview" sub="Sản lượng giao nhận · ngày gần nhất và xu hướng 7/14 ngày" />
     <section id="volume-overview" aria-label="Tổng hợp Volume"><DashboardVolume source={data.volume} loading={data.volume.loading ?? loading}/></section>
 
-    <SectionTitle number="02" title="Onhold Analytics" sub="Biến động theo ngày · Rider, phường và lý do OH nổi bật" />
-    <DashboardOnhold source={data.onhold} end={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(updated ? new Date(updated) : new Date())} loading={data.onhold.loading ?? loading}/>
-
-    <SectionTitle number="03" title="Live Operations" sub="Tiến độ hiện tại" />
+    <SectionTitle number="02" title="Live Operations" sub="Tiến độ hiện tại" />
     <div className={s.twoColumns}>
       <Panel title="Delivery progress" eyebrow="LIVE DASHBOARD" href="/realtime-dashboard" icon={<Activity size={17}/>}>
         <SourceStatus error={liveError} at={data.operations.data?.live.snapshotAt} loading={data.operations.loading ?? loading} />
@@ -178,30 +167,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       </Panel>
     </div>
 
-    <SectionTitle number="04" title="Rider Performance" sub={performance ? `${dayLabel(performance.analysis.start)}–${dayLabel(performance.analysis.end)} · 7 ngày` : "Hiệu suất 7 ngày gần nhất"}/>
-    <div className={s.performanceGrid}>
-      <Panel title="Xu hướng hoàn thành" eyebrow="7-DAY TREND" href="/performance" icon={<BarChart3 size={17}/>}>
-        {data.performance.error ? <p className={s.error}>Không tải được hiệu suất. Thử làm mới.</p> : null}
-        <div className={s.performanceTotals}><div><span>Delivery</span><strong>{pct(performanceTotals ? completionRate(performanceTotals.delivery_delivered,performanceTotals.delivery_assigned) : null)}</strong><small>{fmt(performanceTotals?.delivery_delivered)} / {fmt(performanceTotals?.delivery_assigned)} đơn</small></div><div><span>Pickup</span><strong>{pct(performanceTotals ? completionRate(performanceTotals.pickup_picked,performanceTotals.pickup_assigned) : null)}</strong><small>{fmt(performanceTotals?.pickup_picked)} / {fmt(performanceTotals?.pickup_assigned)} đơn</small></div><div><span>Rider phát sinh</span><strong>{fmt(performance?.analysis.riderCount)}</strong><small>Trong cả kỳ 7 ngày</small></div></div>
-        <div className={s.trendLegend}><span><i data-tone="blue"/>Delivery</span><span><i data-tone="teal"/>Pickup</span><span>Trục tỷ lệ: 0–100%</span></div>
-        <div className={s.trend} role="group" aria-label="Tỷ lệ hoàn thành delivery và pickup theo ngày">
-          {(performance?.analysis.daily ?? []).map(row => {
-            const deliveryRate = "missing" in row ? null : completionRate(row.delivery_delivered,row.delivery_assigned);
-            const pickupRate = "missing" in row ? null : completionRate(row.pickup_picked,row.pickup_assigned);
-            return <div key={row.date} className={s.trendDay}><div className={s.trendValues}><span>{pct(deliveryRate)}</span><span>{pct(pickupRate)}</span></div><div className={s.barPair} aria-hidden="true"><i data-tone="blue" style={{height:`${Math.min(100,Math.max(0,deliveryRate ?? 0))}%`}}/><i data-tone="teal" style={{height:`${Math.min(100,Math.max(0,pickupRate ?? 0))}%`}}/></div><span>{dayLabel(row.date)}</span></div>;
-          })}
-          {!performance && <p className={s.empty}>{(data.performance.loading ?? loading) ? "Đang tải xu hướng…" : "Chưa có dữ liệu hiệu suất"}</p>}
-        </div>
-        <p className={s.caption}>Tỷ lệ = số hoàn thành / số được gán. Ngày thiếu dữ liệu hiển thị “—”; tỷ lệ trên 100% giữ số thực và giới hạn chiều cao cột.</p>
-      </Panel>
-      <Panel title="Phân bố hiệu suất rider" eyebrow="DELIVERY SUCCESS RATE" href="/performance">
-        <p className={s.caption}>Phân nhóm theo tỷ lệ delivery trong cả kỳ.</p>
-        <div className={s.distribution}>{performance?.analysis.distribution.map(bin => <div key={bin.label}><span>{bin.label}</span><div><i style={{width:`${performance.analysis.riderCount ? bin.count/performance.analysis.riderCount*100 : 0}%`}}/></div><strong>{fmt(bin.count)}</strong></div>)}</div>
-        <div className={s.panelFooter}><span>{fmt(performance?.analysis.withoutDelivery)} rider không có đơn delivery gán</span></div>
-      </Panel>
-    </div>
-
-    <SectionTitle number="05" title="Backlog Control" sub="Hai nguồn tồn độc lập · không cộng với đơn đang giao/đang lấy"/>
+    <SectionTitle number="03" title="Backlog Control" sub="Hai nguồn tồn độc lập · không cộng với đơn đang giao/đang lấy"/>
     <div className={s.twoColumns}>
       <Panel title="Pickup Backlog" eyebrow="ASSIGNED · CHỜ LẤY" href="/lmhub-inventory" icon={<Layers3 size={17}/>}>
         <SourceStatus error={data.pickupBacklog.error} at={data.pickupBacklog.data?.snapshotAt} loading={data.pickupBacklog.loading ?? loading}/>
@@ -218,7 +184,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       </Panel>
     </div>
 
-    <SectionTitle number="06" title="Area Overview" sub="So sánh 5 khu vực · tỷ lệ live và backlog từ các snapshot riêng"/>
+    <SectionTitle number="04" title="Area Overview" sub="So sánh 5 khu vực · tỷ lệ live và backlog từ các snapshot riêng"/>
     <section className={s.panel} aria-label="Tổng hợp theo khu vực"><div className={s.tableWrap}><table className={s.areaTable}><thead><tr><th>Khu vực</th><th>Delivery live<small>Đã giao / gán</small></th><th>Pickup live<small>Đã lấy / gán theo rider</small></th><th>Delivery rate<small>Snapshot giao</small></th><th>Pickup rate<small>Snapshot lấy</small></th><th>Pickup backlog</th><th>Delivery backlog</th></tr></thead><tbody>{OPERATING_AREAS.map(area => {
       const d = live?.areas.find(r=>r.area===area);
       const pickupRiders = pickup?.riders.filter(r=>r.area===area && r.metrics) ?? [];
