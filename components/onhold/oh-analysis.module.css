@@ -102,6 +102,19 @@
 .empty { padding: 32px 20px; text-align: center; color: var(--color-muted); font-size: 13px; }
 .root :is(button, a, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.root :is(label,select),.identity>div,.controls { min-width:0; }
+.toolbar .controls { gap:10px; }
+.toolbar .area { display:grid; gap:6px; }
+.toolbar .area select { width:145px; }
+.detail { padding:8px 10px; border:1px solid var(--color-rule); border-radius:8px; background:var(--color-paper); }
+.partialNote { margin-bottom:16px; }
+.tableWrap { border:1px solid var(--color-rule); border-radius:8px; }
+.table { min-width:640px; }
+.table tbody tr:hover { background:var(--color-paper-2); }
+.table tbody th { text-align:left; }
+.reason>div:first-child { flex-wrap:wrap; gap:6px 12px; }
+.reason>div:first-child>span { flex:1 1 160px; }
+.reason strong { margin-left:auto; }
 @container onhold (max-width: 950px) {
   .analysis { grid-template-columns: 1fr; }
   .reasons { border-left: 0; border-top: 1px solid var(--color-rule); }
@@ -117,12 +130,14 @@
   .icon { width: 36px; height: 36px; }
   .controls { width: 100%; gap: 8px; }
   .controls .area { width: 100%; justify-content: space-between; }
+  .toolbar .area { grid-template-columns:1fr; }
+  .toolbar .area select { width:100%; }
   .root select { min-height: 44px; font-size: 16px; }
   .segment button { min-height: 38px; padding-inline: 10px; }
   .detail { margin-left: auto; }
   .context { padding: 14px 16px 0; gap: 8px 12px; }
-  .context label { width: 100%; justify-content: space-between; }
-  .context select { font-size: 14px; max-width: 190px; }
+  .context label { width: 100%; display:grid; gap:8px; }
+  .context select { font-size: 16px; width:100%; max-width:none; }
   .stamp { font-size: 11px; }
   .metrics { margin: 16px 16px 0; grid-template-columns: 1fr 1fr; }
   .metrics article:first-child { grid-column: 1/-1; }

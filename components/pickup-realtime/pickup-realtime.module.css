@@ -61,6 +61,11 @@
 .quickFilters small { font-variant-numeric:tabular-nums; font-size:10px; }
 .sort { display:flex; align-items:center; gap:9px; color:var(--color-muted); font-size:11px; }
 .sort select { width:180px; font-size:12px; min-height:36px; }
+.sortDirection { display:inline-flex; align-items:center; gap:5px; min-height:40px; padding:7px 9px; border:1px solid var(--color-rule); border-radius:7px; background:var(--color-paper); color:var(--color-ink-2); white-space:nowrap; }
+.columnSort { display:inline-flex; align-items:center; gap:6px; min-height:32px; color:inherit; background:transparent; white-space:nowrap; }
+.columnSort[data-active=true],.columnSort:hover { color:var(--color-accent); }
+.columnSort svg { flex-shrink:0; }
+@container pickup-live (max-width:560px) { .sort { flex-wrap:wrap; } .sortDirection,.columnSort { min-height:44px; } }
 .workspace table { font-variant-numeric:tabular-nums; }
 .workspace th { font-size:11px; text-transform:none; letter-spacing:0; font-weight:600; }
 .workspace td strong { font-family:inherit; font-size:12px; }

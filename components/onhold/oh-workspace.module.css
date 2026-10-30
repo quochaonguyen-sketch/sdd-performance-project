@@ -235,3 +235,24 @@
 
 /* Page gutters belong to the shared workspace shell. */
 .workspace { max-width:none; margin:0; padding:0; background:transparent; border-radius:0; gap:24px; }
+.page { container:oh-page / inline-size; display:grid; gap:24px; min-width:0; color:var(--color-ink); }
+.header { flex-wrap:wrap; }
+.workspace h1 { font-size:28px; }
+.workspace h1 span { color:var(--color-warning); }
+.toolbar { scroll-margin-top:85px; }
+.filterGrid>*,.analysis>* { min-width:0; }
+.filterActions :is(.primaryAction,.exportAction),.toolbar button { color:var(--color-accent-ink); }
+.toolbar .secondary { color:var(--color-ink); }
+.rankSection .analysis { grid-template-columns:minmax(0,1fr); }
+.entityRow>div:last-child { min-width:0; }
+.entityName,.geoDistrict,.geoWard { white-space:normal; overflow-wrap:anywhere; }
+.panelTitle,.rankHeaderActions,.footnote { flex-wrap:wrap; }
+.rankToolbar { gap:12px; }
+.rankSearchBox { min-width:0; flex-basis:200px; }
+.hour[data-level="2"] { background:var(--color-cyan-soft); color:var(--color-cyan); border-color:var(--color-cyan); }
+.hour[data-level="3"],.hour[data-level="4"] { background:var(--color-accent); color:var(--color-accent-ink); border-color:var(--color-accent); }
+.track i { background:var(--color-warning); }
+:global(.dark) .filterBadge,:global(.dark) .avatarWrap,:global(.dark) .areaBadgeKV1 { background:var(--color-accent-soft); color:var(--color-accent); }
+:global(.dark) .viewAllBtn:hover { background:var(--color-accent-soft); color:var(--color-accent); }
+@container oh-page (max-width:1000px) { .filterGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } .analysis { grid-template-columns:minmax(0,1fr); } .areaGrid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@container oh-page (max-width:560px) { .header { flex-direction:column; align-items:flex-start; } .workspace h1 { font-size:24px; } .filterGrid { grid-template-columns:minmax(0,1fr); } .workspace :is(input,select) { font-size:16px; } .workspace :is(button,select,input) { min-height:44px; } .areaGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } .rankHeaderActions { width:100%; justify-content:space-between; } .workspace th,.workspace td { padding:10px; } .workspace .tableScroll { max-height:520px; } .panel { padding:16px; } }

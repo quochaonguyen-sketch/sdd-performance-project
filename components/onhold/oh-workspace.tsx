@@ -600,7 +600,8 @@ export function OHWorkspace({
   }
 
   return (
-    <div className={s.workspace}>
+    <div className={s.page}>
+      <div className={s.workspace}>
       {/* Header */}
       <header className={s.header}>
         <div>
@@ -617,7 +618,9 @@ export function OHWorkspace({
         </Link>
       </header>
 
+      </div>
       <OHAnalysis end={today} />
+      <div className={s.workspace}>
 
       {/* Info notice */}
       <div className={s.notice}>
@@ -1586,6 +1589,7 @@ export function OHWorkspace({
           setWard(wName);
         }}
       />
+      </div>
     </div>
   );
 }
