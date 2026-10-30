@@ -2,6 +2,8 @@
 import { useRememberedState } from "@/components/layout/filter-memory";
 import { RiderSheetStatus } from "./rider-sheet-status";
 import { RiderHiringSection } from "./rider-hiring";
+import { DirectoryOverview } from "./directory-overview";
+import directoryStyles from "./rider-directory.module.css";
 
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -597,8 +599,7 @@ export function RidersView({
   }
 
   return (
-    <div className="riders-workbench mx-auto max-w-[1600px]">
-      <RiderSheetStatus />
+    <div className={cn("riders-workbench mx-auto max-w-[1600px]", directoryStyles.page)}>
       <header className="riders-command-header">
         <div className="riders-command-title">
           <div className="flex min-w-0 items-center gap-3">
@@ -606,8 +607,9 @@ export function RidersView({
               <Bike size={21} />
             </span>
             <div className="min-w-0">
-              <h1>Riders</h1>
-              <p>Tìm, lọc và xử lý đội ngũ giao nhận trên một bề mặt vận hành.</p>
+              <span className={directoryStyles.eyebrow}>SDD OPERATIONS / PEOPLE</span>
+              <h1>Rider Directory</h1>
+              <p>Hiểu đội ngũ theo địa bàn. Tìm đúng rider, quản lý đúng khu vực.</p>
             </div>
           </div>
           <div className="riders-live-readout" aria-live="polite">
@@ -664,8 +666,11 @@ export function RidersView({
         <StatCard icon={<UserRound size={17} />} label="Tổng rider" value={stats.total} helper={`${registry.total} đang hiển thị`} tone="slate" active={activeFilterCount === 0} onClick={resetFilters} />
         <StatCard icon={<CheckCircle2 size={17} />} label="Đang hoạt động" value={stats.active} helper={`${stats.inactive} ngừng hoạt động`} tone="emerald" active={status === "active"} onClick={() => { setStatus("active"); setPage(1); }} />
         <StatCard icon={<Clock3 size={17} />} label="Có ca hiện tại" value={stats.on_shift} helper={`${stats.total - stats.on_shift} chưa có ca`} tone="blue" active={shift === "__has__"} onClick={() => { setShift("__has__"); setPage(1); }} />
-        <StatCard icon={<MapPin size={17} />} label="Chưa gán khu vực" value={stats.unassigned} helper="Không có zone hoặc quận giao" tone="amber" active={deliveryDistrict === "__unassigned__"} onClick={() => { setDeliveryDistrict("__unassigned__"); setDeliveryWard("all"); setPage(1); }} />
+        <StatCard icon={<MapPin size={17} />} label="Thiếu địa bàn giao" value={stats.unassigned} helper="Chưa có cả zone và quận giao" tone="amber" active={deliveryDistrict === "__unassigned__"} onClick={() => { setDeliveryDistrict("__unassigned__"); setDeliveryWard("all"); setPage(1); }} />
       </div>
+
+      {registry.analysis ? <DirectoryOverview analysis={registry.analysis} selected={kv} onArea={area => { resetFilters(); setKv(area); }} onDistrict={(area, district) => { resetFilters(); setKv(area); setDeliveryDistrict(district); }} /> : null}
+      <RiderSheetStatus />
 
       {canManageRiders && showAddForm ? createPortal(
         <div role="dialog" aria-modal="true" aria-labelledby="rider-form-title" className="rider-modal-root fixed inset-0 flex items-end bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-4">
@@ -753,10 +758,10 @@ export function RidersView({
         document.body,
       ) : null}
 
-      <section aria-label="Tìm kiếm và lọc rider" className="riders-filter-deck">
+      <section id="rider-directory-list" aria-label="Tìm kiếm và lọc rider" className="riders-filter-deck">
         <div className="riders-filter-heading">
           <div>
-            <h2>Control deck</h2>
+            <h2>Tìm kiếm đội ngũ</h2>
             <p>Tìm theo dữ liệu rider, sau đó thu hẹp theo trạng thái và khu vực.</p>
           </div>
           <span>{activeFilterCount === 0 ? "Không có bộ lọc" : `${activeFilterCount} bộ lọc đang bật`}</span>
@@ -807,7 +812,7 @@ export function RidersView({
       <div>
         <section className="riders-registry">
           <div className="riders-registry-header">
-            <div><h2>Rider registry</h2><p aria-live="polite">{registry.total} kết quả · Chọn rider để mở hồ sơ</p></div>
+            <div><h2>Danh sách rider</h2><p aria-live="polite">{registry.total} kết quả · Chọn rider để mở hồ sơ</p></div>
             {canManageRiders && checkedIds.size > 0 ? <div className="flex items-center gap-2"><span className="text-sm font-semibold text-blue-700">Đã chọn {checkedIds.size}</span>{checkedIds.size === 1 ? <Button type="button" variant="secondary" className="h-9" onClick={() => { const rider = riders.find((item) => checkedIds.has(item.id)); if (rider) beginEdit(rider); }}><Pencil size={15} />Sửa</Button> : null}<Button type="button" variant="ghost" className="h-9" onClick={() => setCheckedIds(new Set())}>Bỏ chọn</Button></div> : null}
           </div>
           {!isDesktopLayout ? <div className="riders-mobile-list lg:hidden">

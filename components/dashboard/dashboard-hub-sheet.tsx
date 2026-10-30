@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readJsonResponse } from "@/lib/http/json-response";
 import { ArrowDownToLine, ArrowUpRight, CheckCheck, ChevronDown, Clock3, PackageCheck, Users } from "lucide-react";
 import { HUB_METRICS, HUB_SHEET_ID, type HubSheetData } from "@/lib/dashboard/hub-sheet";
 import type { HubRoster } from "@/lib/dashboard/hub-roster";
@@ -30,7 +31,7 @@ export function useHubSheet(refreshKey: number) {
       inFlight = true;
       try {
         const response = await fetch("/api/dashboard/hub-sheet", { cache: "no-store", headers: force ? { "x-dashboard-refresh": "1" } : undefined, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]) });
-        const payload = await response.json();
+        const payload = await readJsonResponse(response, "Tổng quan Hub");
         if (controller.signal.aborted) return;
         if (!response.ok) throw Error(payload.error || "Không tải được dữ liệu hub");
         setData(payload); setError(null);

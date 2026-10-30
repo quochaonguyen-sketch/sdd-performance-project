@@ -1,4 +1,5 @@
 "use client";
+import { readJsonResponse } from "@/lib/http/json-response";
 import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS, isOperatingArea } from "@/lib/locations/operating-areas";
@@ -73,7 +74,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
     const requestId = ++loadId.current;
     const params = new URLSearchParams({ view: "geography-dashboard", p_status: PICKUP_STATUS_LABEL[nextStatus] });
     const res = await fetch(`/api/pickup-inventory?${params}`, { cache: "no-store" });
-    const payload = await res.json();
+    const payload = await readJsonResponse(res, "Pickup Backlog");
     if (!res.ok || !payload.success) throw new Error(payload.error ?? `API ${res.status}`);
     const collected: PickupStatusRow[] = [];
     for (const row of payload.rows ?? []) {

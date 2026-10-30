@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { readJsonResponse } from "@/lib/http/json-response";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ArrowUpRight, Clock3, Layers3, PackageCheck, RefreshCcw, Truck } from "lucide-react";
 import type { PickupRider } from "@/lib/pickup/realtime";
@@ -63,7 +64,7 @@ export function OperationsDashboard() {
       setData(previous => ({ ...previous, [key]: { ...previous[key], loading: true } }));
       try {
         const res = await fetch(url, { cache: "no-store", headers: force ? { "x-dashboard-refresh": "1" } : undefined, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(45_000)]) });
-        const payload = await res.json();
+        const payload = await readJsonResponse(res, "Dữ liệu Dashboard");
         if (!res.ok || payload.success === false) throw new Error(payload.error || "Không tải được dữ liệu");
         if (id !== request.current || abort.signal.aborted) return;
         // Keep only this mounted dashboard's sources; never persist user data.

@@ -3,6 +3,7 @@ import "server-only";
 
 import type { RiderRegistryData, RiderRegistryItem } from "@/types";
 import { getCachedRiderRegistry } from "@/lib/cache/operations-cache";
+import { buildDirectoryAnalysis } from "./directory-analysis";
 import {
   districtDefinitionFor,
   districtMatches,
@@ -84,6 +85,7 @@ export async function getRiderRegistryData(query: RiderRegistryQuery): Promise<R
     page_size: query.pageSize,
     page_count: pageCount,
     stats: registryStats(riders),
+    analysis: buildDirectoryAnalysis(riders),
     options: {
       cots: uniqueOptions(riders.map((rider) => rider.cot)),
       shifts: uniqueOptions(riders.map((rider) => rider.current_shift)),
@@ -103,6 +105,7 @@ export function emptyRiderRegistryData(): RiderRegistryData {
     page_size: DEFAULT_RIDER_REGISTRY_QUERY.pageSize,
     page_count: 1,
     stats: { total: 0, active: 0, inactive: 0, on_shift: 0, unassigned: 0 },
+    analysis: buildDirectoryAnalysis([]),
     options: { cots: [], shifts: [], delivery_districts: [] },
     cache: { hit: false, expires_at: null },
   };

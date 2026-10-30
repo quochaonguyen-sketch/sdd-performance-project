@@ -40,6 +40,7 @@ export type RiderRegistryItem = Omit<Rider, "raw_data"> & {
 };
 
 export type RiderRegistryData = {
+  analysis?: import("./lib/riders/directory-analysis").DirectoryAnalysis;
   riders: RiderRegistryItem[];
   total: number;
   page: number;

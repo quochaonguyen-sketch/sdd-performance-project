@@ -13,6 +13,7 @@ export function RiderHiringSection({refreshKey}:{refreshKey:number}) {
       inFlight=true;
       try {
         const response=await fetch("/api/riders/hiring",{cache:"no-store",headers:force?{"x-dashboard-refresh":"1"}:undefined,signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
+        if(!response.headers.get("content-type")?.includes("application/json"))throw Error(`Chưa tải được dữ liệu nhận việc (HTTP ${response.status}). Bấm Tải lại để thử lại.`);
         const payload=await response.json();
         if(controller.signal.aborted)return;
         if(!response.ok)throw Error(payload.error||"Không tải được ngày nhận việc");

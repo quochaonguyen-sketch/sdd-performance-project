@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
-const nextConfig: NextConfig = {
+const nextConfig = (phase: string): NextConfig => ({
+  // Keep local route manifests separate from production builds and rebuild them on startup.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-local" : ".next",
+  experimental: { turbopackFileSystemCacheForDev: false },
   allowedDevOrigins: ["172.17.32.44"],
   async headers() {
     return [
@@ -13,6 +17,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-};
+});
 
 export default nextConfig;
