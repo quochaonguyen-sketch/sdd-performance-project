@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, Bike, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
+import headerStyles from "./workspace-header.module.css";
+import { Activity, BarChart3, Bike, ChevronDown, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
 import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/app-brand";
@@ -209,18 +211,19 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
       </div>
 
       <div className="app-shell-content">
-        <header className="app-header">
+        <header className={cn("app-header", headerStyles.header)}>
           <div className="app-header-mobile-brand"><AppBrand compact /></div>
           <div className="app-header-leading">
             <button type="button" className="app-sidebar-toggle" aria-controls="operations-sidebar" aria-expanded={sidebarOpen} aria-label={sidebarOpen ? "Ẩn thanh điều hướng" : "Hiện thanh điều hướng"} title={sidebarOpen ? "Ẩn thanh điều hướng" : "Hiện thanh điều hướng"} onClick={() => setSidebarOpen((current) => !current)}>
               {sidebarOpen ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
             </button>
             <div className="app-header-context">
-              <p className="app-header-kicker">Không gian làm việc <span aria-hidden="true">/</span></p>
+              <p className="app-header-kicker">SDD <span aria-hidden="true">/</span></p>
               <div className="app-header-title-row"><span>{currentPage?.label ?? "Operations"}</span></div>
             </div>
           </div>
-          <div className="app-header-account">
+          <div className={cn("app-header-account", headerStyles.actions)}>
+            <div className={headerStyles.tools} role="group" aria-label="Công cụ không gian làm việc">
             <AiLauncher />
             <FeedbackPopup />
             <ProductUpdateNotifications />
@@ -230,9 +233,23 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             <button type="button" className="app-theme-toggle" aria-label={theme === "dark" ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"} title={theme === "dark" ? "Giao diện sáng" : "Giao diện tối"} onClick={toggleTheme}>
               {theme === "dark" ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
             </button>
-            <div className="app-account-copy"><strong>{user.fullName ?? user.email}</strong><span>{user.role === "admin" ? "Quản trị viên" : user.role}</span></div>
-
-            <button type="button" className="app-signout" onClick={() => void signOut()}><LogOut size={15} aria-hidden="true" /><span>Đăng xuất</span></button>
+            </div>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button type="button" className={headerStyles.profile} aria-label={`Tài khoản ${user.fullName ?? user.email}`}>
+                  <span className={headerStyles.avatar} aria-hidden="true">{user.fullName?.trim().split(/\s+/).slice(-2).map(word=>word[0]).join("").toUpperCase() || user.email.slice(0,2).toUpperCase()}</span>
+                  <span className={headerStyles.profileName}>{user.fullName ?? user.email}</span><ChevronDown size={14} aria-hidden="true"/>
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content className={headerStyles.menu} align="end" sideOffset={8} collisionPadding={12}>
+                  <DropdownMenu.Label className={headerStyles.identity}><strong>{user.fullName ?? user.email}</strong><span>{user.email}</span><small>{user.role === "admin" ? "Quản trị viên" : user.role}</small></DropdownMenu.Label>
+                  <DropdownMenu.Separator className={headerStyles.separator}/>
+                  <DropdownMenu.Item asChild><Link href="/feedback" className={headerStyles.menuItem}><MessageSquarePlus size={16} aria-hidden="true"/>Báo lỗi &amp; góp ý</Link></DropdownMenu.Item>
+                  <DropdownMenu.Item className={cn(headerStyles.menuItem,headerStyles.signout)} onSelect={()=>void signOut()}><LogOut size={16} aria-hidden="true"/>Đăng xuất</DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </div>
         </header>
         <main className={cn("app-main workspace-content", splitOpen && "is-quick-split")}>

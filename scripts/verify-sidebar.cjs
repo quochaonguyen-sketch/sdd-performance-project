@@ -13,10 +13,15 @@
   return originalLoad.call(this,name,...args);
  };
  for(const extension of ['.ts','.tsx'])Module._extensions[extension]=function(mod,file){mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);};
+ Module._extensions['.css']=mod=>{mod.exports={__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};};
  const load=Module.createRequire(__filename),React=await import('react'),{renderToStaticMarkup}=await import('react-dom/server'),{AppShell}=load('../components/layout/app-shell.tsx');
  for(const role of ['admin','leader','member'])for(const route of ['/volume/delivery','/volume/pickup','/onhold','/pickup-management','/pickup-management?view=replacement','/return-orders']){
   pathname=route;
   const html=renderToStaticMarkup(React.createElement(AppShell,{user:{email:'preview@example.com',fullName:'Preview',role}},React.createElement('p',null,'Preview')));
+  assert.ok(html.includes('app-header'),'Workspace header must remain visible');
+  assert.ok(html.includes('aria-label="Công cụ không gian làm việc"'));
+  assert.ok(html.includes('aria-label="Tài khoản Preview"'));
+  assert.ok(html.includes('aria-haspopup="menu"'),'Account actions use a keyboard-accessible menu');
   const sidebar=html.split('aria-label="Main navigation"')[1].split('</nav>')[0];
   for(const removed of ['/off-schedule','/tasks','/violations'])assert.ok(!html.includes(`href="${removed}`),`Removed feature visible for ${role}: ${removed}`);
   const groups=[...sidebar.matchAll(/<details[^>]*>[\s\S]*?<\/details>/g)].map(match=>match[0]);

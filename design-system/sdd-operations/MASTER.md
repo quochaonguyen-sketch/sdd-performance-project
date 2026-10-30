@@ -32,6 +32,7 @@ Area/chart colors consistently follow blue, green, purple, amber, rose. Labels/i
 - Inputs: 40px minimum height, 16px font on mobile. Primary/normal buttons: 40px, 44px mobile; compact table actions remain compact.
 - Wide tables scroll in their own container. Grid children use `min-width:0`. Headers and filter actions wrap on narrow screens.
 - Sidebar stays mounted during navigation. Page loading remains inside the workspace.
+- Workspace header keeps a short SDD/page breadcrumb, consistent tool icons and an avatar account menu. Use 44px touch targets on mobile; account actions support keyboard navigation and Escape. On very narrow screens, feedback remains accessible from the account menu.
 - Pickup and Delivery Backlog share the area → district → ward board, an eight-row ward viewport, and modal order drill-down. Pickup's geographic dashboard and rider totals share one database snapshot; district modals retain the visible ward/COT filters. Apply `prisma/pickup-inventory-geography.sql` for the server-only geographic functions.
 - Text pairs target 4.5:1; control borders/focus target 3:1. Preserve keyboard focus, native disabled semantics, reduced motion and dialog behavior.
 
