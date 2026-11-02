@@ -7,7 +7,7 @@ test("rider plan locates headers below summary, normalizes COT, preserves blank 
   const result = parseRiderPlan([["Summary"], header, row()]);
   assert.equal(result.rows[0].cot, "COT1");
   assert.equal(result.rows[0].pickup_district, null);
-  assert.equal(result.rows[0].status, undefined);
+  assert.equal("status" in result.rows[0], false);
   assert.deepEqual(result.rows[0].metadata && (result.rows[0].metadata as Record<string, unknown>)["Trạng thái tuyến"], "Backup");
 });
 test("all duplicate IDs and invalid areas are skipped, with source row numbers", () => {

@@ -20,6 +20,8 @@ test("leaders can edit staff by default; role revocation blocks both viewing and
  const member=normalizePageAccess("member",{team:true});assert.equal(member.team,true);assert.equal(canEditStaff("member",member),false);
 });
 test("nested pages, query strings, APIs and prefix lookalikes map correctly",()=>{
+ assert.deepEqual(pagesForApi("/api/zones/plan"),["zones"]);
+ assert.equal(pagesForApi("/api/zones-other/plan"),null);
  assert.equal(pageForPath("/pickup-management?view=replacement"),"pickup_management");
  assert.equal(pageForPath("/pickup-management/foo"),"pickup_management");assert.equal(pageForPath("/pickup-management-evil"),null);
  assert.equal(pageForPath("/role-permissions"),"admin");

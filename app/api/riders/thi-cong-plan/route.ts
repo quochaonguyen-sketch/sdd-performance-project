@@ -2,7 +2,9 @@ import { normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { canManageRiders } from "@/lib/auth/permissions";
 import { canEditRiderArea } from "@/lib/auth/rider-scope";
-import { readRidersFromThiCongPlan, thiCongPlanConfig } from "@/lib/google/thi-cong-plan";
+import { thiCongPlanConfig } from "@/lib/google/thi-cong-plan";
+import { readRiderPlan } from "@/lib/google/rider-plan-source";
+import { RIDER_PLAN_ID, RIDER_PLAN_TAB } from "@/lib/google/rider-plan";
 import { canonicalDistrictName } from "@/lib/locations/hcm";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
@@ -25,7 +27,7 @@ export async function GET() {
   if (!canManageRiders(session.role, session.permissions)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ rider" }, { status: 403 });
   }
-  return NextResponse.json({ success: true, ...thiCongPlanConfig() });
+  return NextResponse.json({ success: true, ...thiCongPlanConfig(), spreadsheet_id: RIDER_PLAN_ID, sheet_name: RIDER_PLAN_TAB });
 }
 
 export async function POST(request: Request) {
@@ -36,15 +38,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const source = await readRidersFromThiCongPlan(request.signal);
+    const source = await readRiderPlan(request.signal);
     const previousCount = source.riders.length;
-    source.riders = source.riders.filter((rider) => normalizeOperatingArea(rider.kv)).map((rider) => ({ ...rider, kv: normalizeOperatingArea(rider.kv) }));
+    source.riders = source.riders.filter((rider) => normalizeOperatingArea(rider.kv));
     source.skipped_rows += previousCount - source.riders.length;
     const beforeScope = source.riders.length;
     source.riders = source.riders.filter((rider) => canEditRiderArea(session.role, session.permissions.manage_riders, session.areas, rider.kv));
     source.skipped_rows += beforeScope - source.riders.length;
     if (source.riders.length === 0) {
-      return NextResponse.json({ success: false, error: "Tab Thi Công Plan không có rider hợp lệ để đồng bộ" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Sheet1 không có rider hợp lệ trong phạm vi quyền để đồng bộ" }, { status: 400 });
     }
 
     const existingCodes = new Set<string>();
@@ -79,18 +81,21 @@ export async function POST(request: Request) {
       updated_riders: updatedRiders,
       sheet_rows: source.sheet_rows,
       skipped_rows: source.skipped_rows,
+      spreadsheet_id: RIDER_PLAN_ID,
+      sheet_name: RIDER_PLAN_TAB,
+      issues: source.issues,
     };
     await session.admin.from("activity_logs").insert({
       entity_type: "rider",
       action: "synced_from_thi_cong_plan",
-      message: `Synced ${result.synced_riders} riders from Thi Công Plan to web`,
+      message: `Synced ${result.synced_riders} riders from Data Web dashboard SDD / Sheet1 to web`,
       raw_data: result,
     });
     invalidateRidersCache();
     return NextResponse.json(result);
   } catch (syncError) {
     return NextResponse.json(
-      { success: false, error: syncError instanceof Error ? syncError.message : "Không thể đồng bộ dữ liệu từ Thi Công Plan" },
+      { success: false, error: syncError instanceof Error ? syncError.message : "Không thể đồng bộ dữ liệu từ Sheet1" },
       { status: 400 },
     );
   }

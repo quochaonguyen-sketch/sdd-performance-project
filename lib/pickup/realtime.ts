@@ -96,13 +96,23 @@ export function filterRiders(riders: PickupRider[], filters: { area: string; rou
 }
 
 /** PostgREST enforces a server row cap even if .limit(8000) is requested. */
-export async function readAllPages<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, pageSize = 500): Promise<T[]> {
+export async function readAllPages<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, pageSize = 500, concurrency = 1): Promise<T[]> {
+  if (!Number.isInteger(pageSize) || pageSize < 1 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error("Invalid pagination limits");
   const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const result = await page(from, from + pageSize - 1);
-    if (result.error) throw new Error(result.error.message);
-    const chunk = result.data ?? [];
-    rows.push(...chunk);
-    if (chunk.length < pageSize) return rows;
+  // Read the first page alone so small sources never trigger speculative requests.
+  for (let from = 0; ; ) {
+    const width = from === 0 ? 1 : concurrency;
+    const batch = await Promise.allSettled(Array.from({ length: width }, (_, i) => {
+      const offset = from + i * pageSize;
+      return Promise.resolve().then(() => page(offset, offset + pageSize - 1));
+    }));
+    for (const result of batch) {
+      if (result.status === "rejected") throw result.reason;
+      if (result.value.error) throw new Error(result.value.error.message);
+      const chunk = result.value.data ?? [];
+      rows.push(...chunk);
+      if (chunk.length < pageSize) return rows;
+    }
+    from += width * pageSize;
   }
 }

@@ -15,31 +15,43 @@ export async function GET() {
       if (error) throw error;
       return data?.[0] ?? null;
     }
-    const [summaryHead, riderHead, groupHead, fullFleet] = await Promise.all([
-      latest("pickup_48h_summary_groups"), latest("pickup_48h_realtime_riders"), latest("pickup_48h_rider_groups"),
-      db.from("pickup_realtime_current").select("snapshot_id,snapshot_at,source_date,inventory_snapshot_at,task_count,riders,groups").eq("id", 1).maybeSingle(),
-    ]);
-    if (fullFleet.error) throw fullFleet.error;
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
-    // Preserve full-fleet coverage if a later refresh fails or crosses midnight.
-    const current = fullFleet.data;
-    const riderStale = !!current && (current.source_date !== today || Date.now() - Date.parse(current.snapshot_at) > 20 * 60_000);
     async function snapshot(table: string, columns: string, id: string | undefined, order: string[]) {
       if (!id) return [];
       return readAllPages<SourceRow>((from, to) => {
         let query = db.from(table).select(columns).eq("snapshot_id", id);
         for (const column of order) query = query.order(column, { ascending: true });
         return query.range(from, to).returns<SourceRow[]>();
-      });
+      }, 1000);
     }
-    const [profiles, realtime, summary, groups, assigned, onhold] = await Promise.all([
-      readAllPages<SourceRow>((from, to) => db.from("riders").select("rider_code,full_name,name,kv,cot,status").order("id").range(from, to)),
-      current ? Promise.resolve(current.riders as SourceRow[]) : snapshot("pickup_48h_realtime_riders", "driver_id,driver_name,area,zones,assigned_orders,total_pickup_quantity,onhold_orders", riderHead?.snapshot_id, ["driver_id"]),
-      snapshot("pickup_48h_summary_groups", "khu_vuc,ward,area,route_area,assign_orders,picked_orders,onhold_orders", summaryHead?.snapshot_id, ["khu_vuc", "quan", "phuong", "cot"]),
-      current ? Promise.resolve(current.groups as SourceRow[]) : snapshot("pickup_48h_rider_groups", "driver_id,khu_vuc,ward,ward_area,assigned_orders,picked_orders,onhold_orders", groupHead?.snapshot_id === riderHead?.snapshot_id ? groupHead?.snapshot_id : undefined, ["driver_id", "khu_vuc", "quan", "phuong"]),
+    async function loadSummary() {
+      const head = await latest("pickup_48h_summary_groups");
+      const rows = await snapshot("pickup_48h_summary_groups", "khu_vuc,ward,area,route_area,assign_orders,picked_orders,onhold_orders", head?.snapshot_id, ["khu_vuc", "quan", "phuong", "cot"]);
+      return { head, rows };
+    }
+    async function loadRealtime() {
+      const fullFleet = await db.from("pickup_realtime_current").select("snapshot_id,snapshot_at,source_date,inventory_snapshot_at,task_count,riders,groups").eq("id", 1).maybeSingle();
+      if (fullFleet.error) throw fullFleet.error;
+      const current = fullFleet.data;
+      // Preserve full-fleet coverage if a later refresh fails or crosses midnight.
+      if (current) return { current, riderHead: null, groupHead: null, realtime: current.riders as SourceRow[], groups: current.groups as SourceRow[] };
+      const [riderHead, groupHead] = await Promise.all([latest("pickup_48h_realtime_riders"), latest("pickup_48h_rider_groups")]);
+      const [realtime, groups] = await Promise.all([
+        snapshot("pickup_48h_realtime_riders", "driver_id,driver_name,area,zones,assigned_orders,total_pickup_quantity,onhold_orders", riderHead?.snapshot_id, ["driver_id"]),
+        snapshot("pickup_48h_rider_groups", "driver_id,khu_vuc,ward,ward_area,assigned_orders,picked_orders,onhold_orders", groupHead?.snapshot_id === riderHead?.snapshot_id ? groupHead?.snapshot_id : undefined, ["driver_id", "khu_vuc", "quan", "phuong"]),
+      ]);
+      return { current, riderHead, groupHead, realtime, groups };
+    }
+    // Inventory RPCs are the slowest reads; start them before snapshot metadata resolves.
+    const [profiles, summaryData, realtimeData, assigned, onhold] = await Promise.all([
+      readAllPages<SourceRow>((from, to) => db.from("riders").select("rider_code,full_name,name,kv,cot,status").order("id").range(from, to), 1000),
+      loadSummary(), loadRealtime(),
       db.rpc("pickup_inventory_riders", { p_status: "Assigned" }),
       db.rpc("pickup_inventory_riders", { p_status: "Pickup Onhold" }),
     ]);
+    const { head: summaryHead, rows: summary } = summaryData;
+    const { current, riderHead, groupHead, realtime, groups } = realtimeData;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+    const riderStale = !!current && (current.source_date !== today || Date.now() - Date.parse(current.snapshot_at) > 20 * 60_000);
     if (assigned.error || onhold.error) throw assigned.error ?? onhold.error;
     const inventory = [...(assigned.data?.rows ?? []), ...(onhold.data?.rows ?? [])] as SourceRow[];
     const routeSnapshotAt = [assigned.data?.snapshotAt, onhold.data?.snapshotAt].filter(Boolean).sort().at(-1) ?? null;

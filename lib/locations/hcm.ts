@@ -1,4 +1,4 @@
-import { OPERATING_AREAS } from "./operating-areas";
+import { OPERATING_AREAS } from "./operating-areas.ts";
 export type WardDefinition = {
   name: string;
   aliases?: string[];

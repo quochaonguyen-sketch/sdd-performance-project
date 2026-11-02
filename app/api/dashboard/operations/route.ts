@@ -21,14 +21,14 @@ export async function GET(request: Request) {
     (async () => {
       const [head, profiles] = await Promise.all([
         db.from("realtime_delivery_riders").select("snapshot_id,snapshot_at,work_date").order("snapshot_at", { ascending: false }).limit(1).maybeSingle(),
-        profileCache.load(profileKey, () => readAllPages<RiderProfile>((from,to) => db.from("riders").select("rider_code,kv,cot").in("kv", OPERATING_AREAS).order("id").range(from,to))).then(result => result.value),
+        profileCache.load(profileKey, () => readAllPages<RiderProfile>((from,to) => db.from("riders").select("rider_code,kv,cot").in("kv", OPERATING_AREAS).order("id").range(from,to), 1000)).then(result => result.value),
       ]);
       if (head.error) throw new Error(head.error.message);
       if (!head.data) return { data: null, snapshotAt: null, workDate: null, error: null };
       const snapshot = head.data;
       const rows = await readAllPages<LiveDeliveryRow>((from,to) => db.from("realtime_delivery_riders")
         .select("driver_id,total_assigned,delivered,delivering,failed,idle_delivery_seconds")
-        .eq("snapshot_id", snapshot.snapshot_id).eq("work_date", snapshot.work_date).order("driver_id").range(from,to));
+        .eq("snapshot_id", snapshot.snapshot_id).eq("work_date", snapshot.work_date).order("driver_id").range(from,to), 1000, 4);
       return { data: summarizeLiveDelivery(rows, profiles), snapshotAt: head.data.snapshot_at, workDate: head.data.work_date, error: null };
     })(),
     (async () => {
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       const snapshot = head.data;
       const rows = await readAllPages<DeliveryBacklogRow>((from,to) => db.from("lmhub_inventory_rows")
         .select("shipment_id,area,district,ward,cot_group,received_time").in("area", OPERATING_AREAS)
-        .eq("snapshot_id", snapshot.snapshot_id).order("shipment_id").range(from,to));
+        .eq("snapshot_id", snapshot.snapshot_id).order("shipment_id").range(from,to), 1000, 4);
       const check = await db.from("lmhub_inventory_rows").select("snapshot_id").in("area", OPERATING_AREAS).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
       if (check.error || check.data?.snapshot_id !== snapshot.snapshot_id) throw new Error("Snapshot tồn delivery thay đổi khi tải; hãy thử lại.");
       return { data: summarizeDeliveryBacklog(rows, Date.now()), snapshotAt: head.data.snapshot_at, error: null };

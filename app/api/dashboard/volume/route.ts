@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       const rows = await readAllPages<DashboardVolumeRow>((from,to)=>db.from(table)
         .select("report_date,area,total_orders").in("area",OPERATING_AREAS)
         .gte("report_date",fromDate).lte("report_date",today)
-        .order("report_date").order("id").range(from,to));
+        .order("report_date").order("id").range(from,to), 1000, 4);
       return {data:summarizeDashboardVolume(rows,today),error:null};
     } catch(error) { return {data:null,error:error instanceof Error ? error.message : "Không tải được sản lượng"}; }
   }

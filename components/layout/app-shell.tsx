@@ -266,7 +266,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
       </div>
 
       {moreOpen ? <button type="button" aria-label="Đóng menu" className="app-mobile-scrim" onClick={() => setMoreOpen(false)} /> : null}
-      <section className={cn("app-more-sheet", moreOpen && "is-open")} aria-label="Menu chức năng khác" aria-hidden={!moreOpen}>
+      {moreOpen ? <section className="app-more-sheet is-open" aria-label="Menu chức năng khác">
         <div className="app-more-heading"><div><span>Rider Operations</span><h2>Chức năng vận hành</h2></div><button type="button" aria-label="Đóng menu" onClick={() => setMoreOpen(false)}><X size={18} /></button></div>
         <div className="app-more-grid">
           {moreNavItems.map((item) => {
@@ -284,7 +284,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           })}
         </div>
         <button type="button" onClick={() => void signOut()} className="app-more-signout"><LogOut size={17} />Đăng xuất</button>
-      </section>
+      </section> : null}
 
       <nav className="app-taskbar" aria-label="Điều hướng nhanh">
         {mobileNavItems.filter(item=>allowedHref(item.href)).map((item) => {

@@ -1,9 +1,10 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Bike, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Layers3, RefreshCcw, Search, UsersRound } from "lucide-react";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,35 +34,20 @@ export function PickupRealtimeView() {
   const [focus, setFocus] = useState<PickupFocus>("all"), [sort, setSort] = useState<PickupSort>("assigned");
   const [direction,setDirection] = useState<"asc"|"desc">("desc");
   function changeSort(key:PickupSort, toggle=false) { setDirection(toggle&&sort===key ? direction==="asc"?"desc":"asc" : key==="rate"||key==="name"?"asc":"desc");setSort(key);setPage(0); }
-  const request = useRef(0), abort = useRef<AbortController | null>(null);
   useReportInitialDataLoading("pickup-realtime", loading && !data.riderSnapshotAt);
-  const load = useCallback(async () => {
-    const id = ++request.current;
-    abort.current?.abort();
-    const controller = new AbortController(); abort.current = controller;
+  const load = useCallback(async (signal: AbortSignal) => {
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/pickup-realtime", { cache: "no-store", signal: controller.signal });
+      const res = await fetch("/api/pickup-realtime", { cache: "no-store", signal });
       if(!res.headers.get("content-type")?.includes("application/json"))throw new Error(`Chưa tải được Pickup Realtime (HTTP ${res.status}). Bấm Làm mới để thử lại.`);
       const payload = await res.json();
       if (!res.ok || !payload.success) throw new Error(payload.error ?? "Không tải được pickup realtime");
-      if (id === request.current) setData(payload);
-    } catch (e) { if (!controller.signal.aborted && id === request.current) setError(e instanceof Error ? e.message : "Không tải được dữ liệu"); }
-    finally { if (id === request.current && !controller.signal.aborted) setLoading(false); }
+      if (!signal.aborted) setData(payload);
+    } catch (e) { if (!signal.aborted) setError(e instanceof Error ? e.message : "Không tải được dữ liệu"); }
+    finally { if (!signal.aborted) setLoading(false); }
   }, []);
-  useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => { clearTimeout(timer); abort.current?.abort(); }; }, [load]);
-  useEffect(() => {
-    // Full-fleet snapshots are private; refresh through the authenticated API.
-    const refresh = () => { if (document.visibilityState === "visible") void load(); };
-    const timer = setInterval(refresh, 60_000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, [load]);
-  useSupabaseRealtime({ table: "pickup_48h_summary_groups", onChange: load, debounceMs: 1500 });
-  useSupabaseRealtime({ table: "pickup_48h_realtime_riders", onChange: load, debounceMs: 1500 });
-  useSupabaseRealtime({ table: "pickup_48h_rider_groups", onChange: load, debounceMs: 1500 });
-  useSupabaseRealtime({ table: "pickup_48h_no_api2", onChange: load, debounceMs: 1500 });
-  useSupabaseRealtime({ table: "riders", onChange: load, debounceMs: 1500 });
+  const refresh = useVisiblePolling(load);
+  useSupabaseRealtime({ table: ["pickup_48h_summary_groups", "pickup_48h_realtime_riders", "pickup_48h_rider_groups", "pickup_48h_no_api2", "riders"], onChange: refresh, debounceMs: 1500 });
   function change(patch: Partial<typeof INITIAL>) { setFilters(current => ({ ...current, ...patch })); setPage(0); }
   function selectArea(area: string) { change({ area, ward: "all", route: "all" }); }
   const scopedSummary = useMemo(() => data.summary.filter(r => (filters.area === "all" || r.area === filters.area) && (filters.ward === "all" || r.ward === filters.ward) && (filters.route === "all" || r.route === filters.route)), [data.summary, filters]);
@@ -88,7 +74,7 @@ export function PickupRealtimeView() {
   return <div className={s.page}>
     <header className={s.header}>
       <div><p className={s.eyebrow}>SDD OPERATIONS / LIVE PICKUP</p><h1>Pickup Realtime</h1><p>Theo dõi tiến độ lấy hàng. Ưu tiên rider còn việc và đơn cần xử lý.</p></div>
-      <div className={s.headerActions}><span className={s.liveStatus} data-stale={data.riderStale || undefined}><i/>{loading ? "Đang cập nhật" : data.riderStale ? "Dữ liệu cần cập nhật" : "Tự cập nhật mỗi phút"}</span><Button onClick={() => void load()} disabled={loading} variant="secondary"><RefreshCcw size={15} className={loading ? "animate-spin" : ""}/>{loading ? "Đang tải…" : "Làm mới"}</Button></div>
+      <div className={s.headerActions}><span className={s.liveStatus} data-stale={data.riderStale || undefined}><i/>{loading ? "Đang cập nhật" : data.riderStale ? "Dữ liệu cần cập nhật" : "Tự cập nhật mỗi phút"}</span><Button onClick={() => void refresh()} disabled={loading} variant="secondary"><RefreshCcw size={15} className={loading ? "animate-spin" : ""}/>{loading ? "Đang tải…" : "Làm mới"}</Button></div>
     </header>
     <div className={s.sourceLine}><span><Clock3 size={14} aria-hidden="true"/>Rider: <strong>{formatDateTime(data.riderSnapshotAt)}</strong></span><span>{fmt(data.riders.length)} rider · KV1–KV5</span><details><summary>Nguồn &amp; thời điểm cập nhật</summary><div><p>Địa bàn: {formatDateTime(data.snapshotAt)}</p><p>Tuyến gán: {formatDateTime(data.routeSnapshotAt)}</p><p>{data.riderSource === "sdd-web-data" ? `SPX · SDD Web Data · ${fmt(data.taskCount ?? 0)} task` : "Theo snapshot hiện có"}</p></div></details></div>
     {error && <div role="alert" className={s.error}>{error}</div>}

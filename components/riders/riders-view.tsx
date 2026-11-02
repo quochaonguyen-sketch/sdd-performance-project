@@ -23,6 +23,7 @@ import {
   CloudDownload,
   FileDown,
   MapPin,
+  LoaderCircle,
   Navigation,
   Pencil,
   Plus,
@@ -390,10 +391,10 @@ export function RidersView({
     setPlanSyncing(false);
     if (!response.ok || !result?.success) {
       muteRealtimeUntilRef.current = 0;
-      setError(result?.error ?? "Không thể đồng bộ Thi Công Plan");
+      setError(result?.error ?? "Không thể đồng bộ Data Web dashboard SDD / Sheet1");
       return;
     }
-    setSuccess(`Đã lấy ${result.synced_riders ?? 0} rider từ Thi Công Plan về web: thêm ${result.inserted_riders ?? 0}, cập nhật ${result.updated_riders ?? 0}${result.skipped_rows ? `; bỏ qua ${result.skipped_rows} dòng không có ID` : ""}.`);
+    setSuccess(`Đã lấy ${result.synced_riders ?? 0} rider từ Data Web dashboard SDD / Sheet1 về web: thêm ${result.inserted_riders ?? 0}, cập nhật ${result.updated_riders ?? 0}${result.skipped_rows ? `; bỏ qua ${result.skipped_rows} dòng không hợp lệ hoặc ngoài phạm vi quyền` : ""}.`);
     muteBulkRealtime();
     await load();
   }
@@ -579,24 +580,29 @@ export function RidersView({
     setSuccess("Đã cập nhật avatar rider.");
   }
 
-  async function deleteRider(rider: Rider) {
-    if (!editableRiderAreas.includes(rider.kv ?? "")) { setError("Rider thuộc KV ngoài quyền chỉnh sửa."); return; }
+  const deleteRider = useCallback(async (rider: Rider) => {
+    if (deletingId) return;
+    if (!canManageRiders || !editableRiderAreas.includes(rider.kv ?? "")) { setError("Rider thuộc KV ngoài quyền chỉnh sửa."); return; }
     const name = rider.full_name ?? rider.rider_code;
-    if (!window.confirm(`Xóa vĩnh viễn rider ${name} (${rider.rider_code})? Lịch sử chấm công và vi phạm vẫn được giữ lại.`)) return;
+    if (!window.confirm(`Xóa rider ${name} (${rider.rider_code}) khỏi website? Lịch sử chấm công vẫn được giữ lại. Nếu rider còn trong Sheet Plan, lần đồng bộ sau có thể tạo lại rider.`)) return;
     suppressRealtimeEcho(rider.id, rider.rider_code);
     setDeletingId(rider.id);
     setError(null);
-    const response = await fetch("/api/riders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: rider.id }) });
-    const result = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
-    setDeletingId(null);
-    if (!response.ok || !result?.success) { setError(result?.error ?? "Không thể xóa rider"); return; }
-    suppressRealtimeEcho(rider.id, rider.rider_code);
-    setSelected((current) => current?.id === rider.id ? null : current);
-    setCheckedIds((current) => { const next = new Set(current); next.delete(rider.id); return next; });
-    setShowDetail(false);
-    setSuccess(`Đã xóa rider ${name}.`);
-    await load();
-  }
+    setSuccess(null);
+    try {
+      const response = await fetch("/api/riders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: rider.id }) });
+      const result = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
+      if (!response.ok || !result?.success) { setError(result?.error ?? "Không thể xóa rider"); return; }
+      suppressRealtimeEcho(rider.id, rider.rider_code);
+      setSelected((current) => current?.id === rider.id ? null : current);
+      setCheckedIds((current) => { const next = new Set(current); next.delete(rider.id); return next; });
+      setShowDetail(false);
+      setSuccess(`Đã xóa rider ${name}.`);
+      await load();
+    } catch {
+      setError("Không thể kết nối để xóa rider. Hãy tải lại danh sách để kiểm tra rồi thử lại.");
+    } finally { setDeletingId(null); }
+  }, [canManageRiders, deletingId, editableRiderAreas, load, suppressRealtimeEcho]);
 
   return (
     <div className={cn("riders-workbench mx-auto max-w-[1600px]", directoryStyles.page)}>
@@ -629,7 +635,7 @@ export function RidersView({
                 if (file) void importExcel(file);
               }}
             />
-            <Button type="button" variant="secondary" className="riders-action" disabled={planSyncing} onClick={() => void syncRidersFromPlan()} title="Lấy dữ liệu rider từ tab Thi Công Plan về website">
+            <Button type="button" variant="secondary" className="riders-action" disabled={planSyncing} onClick={() => void syncRidersFromPlan()} title="Lấy rider từ Data Web dashboard SDD / Sheet1 (gid=0) về website">
               <CloudDownload size={16} />
               <span className="hidden sm:inline">{planSyncing ? "Đang đồng bộ..." : "Đồng bộ Plan"}</span>
               <span className="sm:hidden">Plan</span>
@@ -829,14 +835,16 @@ export function RidersView({
                     onCheck={() => toggleChecked(rider.id)}
                     onOpen={() => { setSelected(rider); setShowDetail(true); }}
                     onEdit={() => beginEdit(rider)}
+                    onDelete={deleteRider}
+                    deletingId={deletingId}
                   />
                 ))}
             {!loading && paginated.length === 0 ? <EmptyRiders /> : null}
           </div> : null}
           {isDesktopLayout ? <div className="riders-table-frame hidden lg:block">
             <table className="w-full min-w-[940px] table-fixed text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr>{canManageRiders ? <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Chọn tất cả rider trên trang" checked={editableVisible.length > 0 && visibleChecked === editableVisible.length} onChange={toggleVisible} /></th> : null}<SortableRiderHeader label="Rider" sortKey="name" current={sort} onSort={changeSort} className="w-[30%]" /><SortableRiderHeader label="Trạng thái" sortKey="status" current={sort} onSort={changeSort} className="w-[14%]" /><th scope="col" className="w-20 px-4 py-3">KV</th><SortableRiderHeader label="Quận / phường giao" sortKey="zone" current={sort} onSort={changeSort} /><SortableRiderHeader label="COT" sortKey="cot" current={sort} onSort={changeSort} /><SortableRiderHeader label="Cập nhật" sortKey="updated" current={sort} onSort={changeSort} align="right" />{canManageRiders ? <th className="w-16" /> : null}</tr></thead>
-              <tbody className="divide-y divide-slate-100">{loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-16 animate-pulse"><td colSpan={canManageRiders ? 8 : 6} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : paginated.map((rider) => <RiderDesktopRow key={rider.id} rider={rider} districts={districts} checked={checkedIds.has(rider.id)} canManageRiders={canManageRiders} canEditRider={editableRiderAreas.includes(rider.kv ?? "")} onCheck={() => toggleChecked(rider.id)} onOpen={() => { setSelected(rider); setShowDetail(true); }} onEdit={() => beginEdit(rider)} />)}{!loading && paginated.length === 0 ? <tr><td colSpan={canManageRiders ? 8 : 6} className="h-80 text-center text-sm text-slate-500">Không có rider nào khớp bộ lọc hiện tại.</td></tr> : null}</tbody>
+              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr>{canManageRiders ? <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Chọn tất cả rider trên trang" checked={editableVisible.length > 0 && visibleChecked === editableVisible.length} onChange={toggleVisible} /></th> : null}<SortableRiderHeader label="Rider" sortKey="name" current={sort} onSort={changeSort} className="w-[30%]" /><SortableRiderHeader label="Trạng thái" sortKey="status" current={sort} onSort={changeSort} className="w-[14%]" /><th scope="col" className="w-20 px-4 py-3">KV</th><SortableRiderHeader label="Quận / phường giao" sortKey="zone" current={sort} onSort={changeSort} /><SortableRiderHeader label="COT" sortKey="cot" current={sort} onSort={changeSort} /><SortableRiderHeader label="Cập nhật" sortKey="updated" current={sort} onSort={changeSort} align="right" />{canManageRiders ? <th scope="col" className="w-32 px-3 text-right">Thao tác</th> : null}</tr></thead>
+              <tbody className="divide-y divide-slate-100">{loading ? Array.from({ length: 8 }, (_, index) => <tr key={index} className="h-16 animate-pulse"><td colSpan={canManageRiders ? 8 : 6} className="px-4"><div className="h-4 rounded bg-slate-100" /></td></tr>) : paginated.map((rider) => <RiderDesktopRow key={rider.id} rider={rider} districts={districts} checked={checkedIds.has(rider.id)} canManageRiders={canManageRiders} canEditRider={editableRiderAreas.includes(rider.kv ?? "")} onCheck={() => toggleChecked(rider.id)} onOpen={() => { setSelected(rider); setShowDetail(true); }} onEdit={() => beginEdit(rider)} onDelete={deleteRider} deletingId={deletingId} />)}{!loading && paginated.length === 0 ? <tr><td colSpan={canManageRiders ? 8 : 6} className="h-80 text-center text-sm text-slate-500">Không có rider nào khớp bộ lọc hiện tại.</td></tr> : null}</tbody>
             </table>
           </div> : null}
           <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3"><p className="text-sm text-slate-500">Trang <strong className="text-slate-700">{safePage}/{pageCount}</strong></p><div className="flex gap-2"><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang trước" disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /></Button><Button type="button" variant="secondary" className="size-9 p-0" aria-label="Trang sau" disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}><ChevronRight size={16} /></Button></div></div>
@@ -861,6 +869,8 @@ type RiderListItemProps = {
   onCheck: () => void;
   onOpen: () => void;
   onEdit: () => void;
+  onDelete: (rider: Rider) => void;
+  deletingId: string | null;
 };
 
 const RiderDesktopRow = memo(function RiderDesktopRow({
@@ -872,13 +882,15 @@ const RiderDesktopRow = memo(function RiderDesktopRow({
   onCheck,
   onOpen,
   onEdit,
+  onDelete,
+  deletingId,
 }: RiderListItemProps) {
   return (
     <tr
       className={cn("rider-table-row h-16 cursor-pointer", checked && "is-checked")}
       tabIndex={0}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           onOpen();
         }
@@ -892,12 +904,12 @@ const RiderDesktopRow = memo(function RiderDesktopRow({
       <td className="px-4"><p className="truncate font-medium text-slate-800">{districtDisplayName(rider.delivery_district, districts) || "Chưa gán"}</p><p className="truncate text-xs text-slate-500">{rider.delivery_ward ?? "—"}</p></td>
       <td className="px-4 font-semibold text-slate-700">{rider.cot ?? "—"}</td>
       <td className="px-4 text-right"><p className="text-sm tabular-nums text-slate-700">{formatRelativeTime(rider.updated_at)}</p><p className="text-xs tabular-nums text-slate-400">{formatShortDate(rider.updated_at)}</p></td>
-      {canManageRiders ? <td className="pr-3 text-right"><Button type="button" variant="ghost" disabled={!canEditRider} aria-label={`Sửa ${rider.full_name ?? rider.rider_code}`} className="size-9 p-0" onClick={(event) => { event.stopPropagation(); onEdit(); }}><Pencil size={15} /></Button></td> : null}
+      {canManageRiders ? <td className="pr-3 text-right"><div className="flex items-center justify-end gap-1"><Button type="button" variant="ghost" disabled={!canEditRider || deletingId !== null} aria-label={`Sửa ${rider.full_name ?? rider.rider_code}`} className="size-9 p-0" onClick={(event) => { event.stopPropagation(); onEdit(); }}><Pencil size={15} /></Button><Button type="button" variant="destructive" disabled={!canEditRider || deletingId !== null} aria-busy={deletingId === rider.id} aria-label={`Xóa rider ${rider.full_name ?? rider.rider_code} (${rider.rider_code})`} className="h-10 gap-1 px-2" onClick={(event) => { event.stopPropagation(); onDelete(rider); }}>{deletingId === rider.id ? <LoaderCircle size={15} className="animate-spin" aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}Xóa</Button></div></td> : null}
     </tr>
   );
 }, areRiderListItemPropsEqual);
 
-const RiderMobileCard = memo(function RiderMobileCard({ rider, districts, checked, canManageRiders, canEditRider, onCheck, onOpen, onEdit }: RiderListItemProps) {
+const RiderMobileCard = memo(function RiderMobileCard({ rider, districts, checked, canManageRiders, canEditRider, onCheck, onOpen, onEdit, onDelete, deletingId }: RiderListItemProps) {
   return (
     <article className={cn("rider-mobile-card", checked && "is-checked")}>
       <div
@@ -934,7 +946,8 @@ const RiderMobileCard = memo(function RiderMobileCard({ rider, districts, checke
             <input type="checkbox" aria-label={`Chọn ${rider.full_name ?? rider.rider_code}`} checked={checked} onChange={onCheck} />
             <span>Chọn</span>
           </label>
-          <Button type="button" variant="ghost" className="h-11 px-3" onClick={onEdit}><Pencil size={15} />Sửa</Button>
+          <Button type="button" variant="ghost" className="h-11 px-3" disabled={deletingId !== null} onClick={onEdit}><Pencil size={15} />Sửa</Button>
+          <Button type="button" variant="destructive" className="h-11 px-3" disabled={deletingId !== null} aria-busy={deletingId === rider.id} aria-label={`Xóa rider ${rider.full_name ?? rider.rider_code} (${rider.rider_code})`} onClick={() => onDelete(rider)}>{deletingId === rider.id ? <LoaderCircle size={15} className="animate-spin" aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}{deletingId === rider.id ? "Đang xóa..." : "Xóa"}</Button>
         </div>
       ) : null}
     </article>
@@ -1021,7 +1034,8 @@ function areRiderListItemPropsEqual(previous: RiderListItemProps, next: RiderLis
     previous.rider === next.rider &&
     previous.districts === next.districts &&
     previous.checked === next.checked &&
-    previous.canManageRiders === next.canManageRiders && previous.canEditRider === next.canEditRider
+    previous.canManageRiders === next.canManageRiders && previous.canEditRider === next.canEditRider &&
+    previous.deletingId === next.deletingId && previous.onDelete === next.onDelete
   );
 }
 

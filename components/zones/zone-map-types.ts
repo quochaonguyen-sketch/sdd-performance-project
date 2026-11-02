@@ -1,5 +1,7 @@
-import { hcmDistricts } from "@/lib/locations/hcm";
+import { ZONE_DISTRICTS } from "../../lib/locations/zone-plan.ts";
 import type { Rider } from "@/types";
+import type { OperatingArea } from "../../lib/locations/operating-areas.ts";
+import wardCatalog from "../../lib/locations/hcm-map-wards.json" with { type: "json" };
 
 export type ZoneRider = Pick<
   Rider,
@@ -16,9 +18,10 @@ export type ZoneRider = Pick<
   | "status"
 >;
 
-export type ZoneArea = "KV1" | "KV2" | "KV3" | "KV4" | "KV5";
+export type ZoneArea = OperatingArea;
 export type ZoneStatus = "active" | "inactive" | "full";
 export type LocationMode = "pickup" | "delivery" | "home";
+export type ZoneMapLevel = "area" | "district" | "ward";
 
 export type AddressPin = {
   lat: number;
@@ -79,14 +82,16 @@ export const MAP_DEFAULT_ZOOM = 11;
 export const MAP_MIN_ZOOM = 10;
 export const MAP_MAX_ZOOM = 17;
 export const MAP_FOCUS_PADDING: [number, number] = [36, 36];
-export const ZONE_OPACITY_MIN = 12;
-export const ZONE_OPACITY_MAX = 78;
-export const ZONE_OPACITY_DEFAULT = 46;
+export const ZONE_OPACITY_MIN = 8;
+export const ZONE_OPACITY_MAX = 54;
+export const ZONE_OPACITY_DEFAULT = 22;
 
-export const MAP_DISTRICTS: MapDistrict[] = hcmDistricts.map((district) => ({ ...district, code: district.id.toUpperCase(), wards: district.wards.map((ward) => ward.name) }));
+export const MAP_DISTRICTS: MapDistrict[] = ZONE_DISTRICTS.map((district) => ({ ...district, code: district.id.toUpperCase(), wards: [...new Set([...district.wards.map((ward) => ward.name), ...(wardCatalog as Record<string, string[]>)[district.id] ?? []])] }));
+
+export const AREA_COLORS: Record<OperatingArea, string> = { KV1: "#2459d3", KV2: "#087b61", KV3: "#7c4dce", KV4: "#a15c00", KV5: "#c22c78" };
 
 export function compactZoneName(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/phuong/gi, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/phuong/gi, "").replace(/^(?:xa|ward|thi\s+tran)\s+|^p[.\s]+/gi, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
 export function zoneId(districtId: string, ward: string) {

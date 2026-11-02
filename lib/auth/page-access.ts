@@ -50,6 +50,7 @@ export function pageForPath(path:string):PageAccessKey|"admin"|null{
  return PAGE_ACCESS_OPTIONS.find(item=>clean===item.path||clean.startsWith(item.path+"/"))?.key??null;
 }
 const API_PAGES:Array<[string,PageAccessKey[]]>=[
+ ["zones",["zones"]],
  ["team",["team"]],["pickup-points",["pickup_management"]],["pickup-replacements",["pickup_management"]],
  ["linehaul",["linehaul"]],["pickup-realtime",["pickup_realtime"]],["pickup-inventory",["pickup_backlog"]],
  ["lmhub-inventory",["pickup_backlog","delivery_backlog"]],["backlog-history",["backlog_history"]],

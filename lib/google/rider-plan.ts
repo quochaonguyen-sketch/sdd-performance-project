@@ -1,6 +1,19 @@
 export const RIDER_PLAN_ID = "1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU";
 export const RIDER_PLAN_TAB = "Sheet1";
 
+type RiderPlanRow = {
+  rider_code: string;
+  full_name: string;
+  kv: string;
+  cot: string;
+  home_district: string | null;
+  pickup_district: string | null;
+  pickup_ward: string | null;
+  delivery_district: string | null;
+  delivery_ward: string | null;
+  metadata: Record<string, string | null>;
+};
+
 export function parseRiderPlan(grid: unknown[][]) {
   if (grid.length > 5000) throw Error("Sheet vượt 5.000 dòng; chưa đồng bộ.");
   const text = (v: unknown) => String(v ?? "").normalize("NFC").trim();
@@ -11,7 +24,7 @@ export function parseRiderPlan(grid: unknown[][]) {
   const at = (row: unknown[], h: string) => text(row[headers.indexOf(h)]);
   const counts = new Map<string, number>();
   for (const row of grid.slice(index + 1)) { const id = at(row, "Driver ID"); if (id) counts.set(id, (counts.get(id) ?? 0) + 1); }
-  const rows: Array<Record<string, unknown>> = [];
+  const rows: RiderPlanRow[] = [];
   const issues: Array<{ row: number; rider_code: string; error: string }> = [];
   grid.slice(index + 1).forEach((row, i) => {
     if (!row.some(v => text(v))) return;

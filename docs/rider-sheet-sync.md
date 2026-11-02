@@ -2,6 +2,8 @@
 
 Source: `1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU`, tab `Sheet1` (gid 0). The existing service account has Viewer access. The synchronizer only reads Sheets; no Sheet content is modified.
 
+Rider Directory's **Đồng bộ Plan** button reads this same source and uses `parseRiderPlan`, including header detection and invalid/duplicate-row checks. It respects the current user's rider-management area permissions. **Đẩy lên Plan** remains a separate legacy export to Thi Công Plan; it does not write to this source sheet.
+
 The background process checks once per minute, matches `Driver ID`, and atomically inserts/updates only changed valid riders. Rider Directory shows the source, last check and skipped-row details, and refreshes visible data every minute. Its existing server cache can add up to one minute of display delay.
 
 Mapped rider fields: name, KV, COT, home district, pickup district/ward, delivery district/ward. Optional mapped cells cleared on the Sheet become null on the web. Duplicate Driver IDs (all occurrences), invalid/missing KV/COT/ID/name are skipped. Missing rows never delete riders. Employment status, phone, avatar, zone assignment and pickup point names are not inferred from route labels or replaced.
