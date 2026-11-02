@@ -44,6 +44,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+supabase/.temp/
 
 # Local design references and screenshots
 .taste-skill/

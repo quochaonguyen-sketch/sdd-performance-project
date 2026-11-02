@@ -1,7 +1,9 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
+import { useSearchParams } from "next/navigation";
+import { assistantScope } from "@/lib/filters/assistant-scope";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Bike, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Layers3, RefreshCcw, Search, UsersRound } from "lucide-react";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
@@ -33,6 +35,14 @@ export function PickupRealtimeView() {
   const [filters, setFilters] = useRememberedState("pickup-realtime-view:filters", INITIAL), [tab, setTab] = useState<"riders" | "zones">("riders"), [page, setPage] = useState(0);
   const [focus, setFocus] = useState<PickupFocus>("all"), [sort, setSort] = useState<PickupSort>("assigned");
   const [direction,setDirection] = useState<"asc"|"desc">("desc");
+  const { area: assistantArea } = assistantScope(useSearchParams());
+  useEffect(() => {
+    if (!assistantArea) return;
+    setFilters({ ...INITIAL, area: assistantArea });
+    // Reset transient controls when opening a scoped task link.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(0); setFocus("all");
+  }, [assistantArea, setFilters]);
   function changeSort(key:PickupSort, toggle=false) { setDirection(toggle&&sort===key ? direction==="asc"?"desc":"asc" : key==="rate"||key==="name"?"asc":"desc");setSort(key);setPage(0); }
   useReportInitialDataLoading("pickup-realtime", loading && !data.riderSnapshotAt);
   const load = useCallback(async (signal: AbortSignal) => {

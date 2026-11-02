@@ -55,6 +55,7 @@ begin
     delivering_time=excluded.delivering_time,
     current_station_received_time=excluded.current_station_received_time;
   delete from public.return_order_snapshots where shipment_id not in (select r->>'shipment_id' from jsonb_array_elements(p_rows) r);
+  perform public.capture_return_daily_history(p_job::text,now(),p_station,n);
   return n;
 end $$;
 revoke all on function public.publish_central_returns(uuid,text,jsonb,boolean,integer) from public,anon,authenticated;

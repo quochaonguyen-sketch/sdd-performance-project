@@ -16,7 +16,10 @@ export async function getReturnWorkspace(): Promise<ReturnWorkspaceData> {
   }
   for(let attempt=0;attempt<2;attempt++) {
     const first=await head();
-    if(!first) return {rows:[],snapshotAt:null,readAt:Date.now()};
+    if(!first) {
+      const { data: empty } = await db.from("return_daily_history").select("captured_at,total_orders").order("captured_at",{ascending:false}).limit(1).maybeSingle();
+      return {rows:[],snapshotAt:empty?.total_orders===0?empty.captured_at:null,readAt:Date.now()};
+    }
     const {value:rows}=await snapshots.load(first.snapshot_id,async()=>{
      const rows:ReturnWorkspaceRow[]=[];
      for(let offset=0;;offset+=1000) {

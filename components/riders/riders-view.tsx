@@ -1,5 +1,7 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
+import { useSearchParams } from "next/navigation";
+import { assistantScope } from "@/lib/filters/assistant-scope";
 import { RiderSheetStatus } from "./rider-sheet-status";
 import { RiderHiringSection } from "./rider-hiring";
 import { DirectoryOverview } from "./directory-overview";
@@ -148,6 +150,15 @@ export function RidersView({
   const [shift, setShift] = useRememberedState("riders-view:shift", "all");
   const [sort, setSort] = useState<{ key: RiderSortKey; direction: "asc" | "desc" }>({ key: "updated", direction: "desc" });
   const [page, setPage] = useState(1);
+  const { area: assistantArea } = assistantScope(useSearchParams());
+  useEffect(() => {
+    if (!assistantArea) return;
+    setKv(assistantArea); setQuery(""); setCot("all"); setPickupDistrict("all"); setPickupWard("all");
+    setDeliveryDistrict("all"); setDeliveryWard("all"); setStatus("active"); setShift("all");
+    // A task link must not inherit an unrelated search or page from the directory.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [assistantArea, setKv, setQuery, setCot, setPickupDistrict, setPickupWard, setDeliveryDistrict, setDeliveryWard, setStatus, setShift]);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<Rider | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);

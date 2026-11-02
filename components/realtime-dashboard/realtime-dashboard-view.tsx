@@ -1,5 +1,7 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
+import { useSearchParams } from "next/navigation";
+import { assistantScope } from "@/lib/filters/assistant-scope";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -54,6 +56,14 @@ export function RealtimeDashboardView() {
   const loading = realtimeLoading || profilesLoading;
   useReportInitialDataLoading("realtime-dashboard", loading);
   const [error, setError] = useState<string | null>(null);
+  const { area: assistantArea } = assistantScope(useSearchParams());
+  useEffect(() => {
+    if (!assistantArea) return;
+    setKvFilter(assistantArea); setQuery(""); setStatus("all"); setCot("all");
+    // A task link overrides remembered filters and returns to the first page.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZone("all"); setPage(1);
+  }, [assistantArea, setKvFilter, setQuery, setStatus, setCot]);
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);

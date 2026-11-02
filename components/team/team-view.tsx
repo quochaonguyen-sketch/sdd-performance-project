@@ -1,5 +1,7 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
+import { useSearchParams } from "next/navigation";
+import { assistantScope } from "@/lib/filters/assistant-scope";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Plus, Search, Upload, UsersRound, X } from "lucide-react";
@@ -22,6 +24,15 @@ export function TeamView({ canEdit }: { canEdit: boolean }) {
   const [date, setDate] = useRememberedState("team-view:date", vietnamToday());
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [area, setArea] = useRememberedState("team-view:area", "all"), [role, setRole] = useRememberedState("team-view:role", "all"), [status, setStatus] = useRememberedState("team-view:status", "current"), [query, setQuery] = useState("");
+  const { area: assistantArea, date: assistantDate } = assistantScope(useSearchParams());
+  useEffect(() => {
+    if (!assistantArea) return;
+    setArea(assistantArea); setRole("FTE"); setStatus("current");
+    if (assistantDate) setDate(assistantDate);
+    // Task links select the requested day and FTE directory, not an old saved view.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQuery(""); setTab("directory");
+  }, [assistantArea, assistantDate, setArea, setRole, setStatus, setDate]);
   const [data, setData] = useState<TeamData>({ staff: [], shifts: [], bounds: { from: null, to: null } });
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [error, setError] = useState("");
   const [staffEdit, setStaffEdit] = useState<Staff | null>(null);

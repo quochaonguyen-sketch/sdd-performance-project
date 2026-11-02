@@ -12,7 +12,7 @@ function fixture() {
     subscribe() { subscriptions++; return channel; },
   };
   const client = { channel() { channels++; return channel; }, removeChannel() { removals++; } } as unknown as SupabaseClient;
-  const emit = (table: string, id: number) => listeners.get(table)!({ eventType: "UPDATE", schema: "public", table, commit_timestamp: "2026-11-02T00:00:00Z", errors: null, old: {}, new: { id } });
+  const emit = (table: string, id: number) => listeners.get(table)!({ eventType: "UPDATE", schema: "public", table, commit_timestamp: "2026-11-02T00:00:00Z", errors: [], old: {}, new: { id } });
   return { client, emit, counts: () => ({ channels, subscriptions, removals }) };
 }
 

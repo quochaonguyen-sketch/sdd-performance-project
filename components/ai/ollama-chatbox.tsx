@@ -1,9 +1,13 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { Bot, Brain, Database, LoaderCircle, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
-import { cn } from "@/utils/cn";
+import { ArrowUpRight, Brain, Database, FileText, ListChecks, LoaderCircle, MessageSquare, MoreHorizontal, RotateCcw, Send, ShieldCheck, TrendingUp, Sparkles, Trash2, X } from "lucide-react";
 import { useBrowserAiConfig } from "@/lib/ai/browser-config";
+import { OperationsAssistant } from "./operations-assistant";
+import s from "./ai-workspace.module.css";
+
+const OperationsAnalysisPanel = dynamic(() => import("./operations-analysis").then(module => module.OperationsAnalysisPanel));
 
 type ChatRole = "user" | "assistant";
 type ChatMessage = {
@@ -34,12 +38,12 @@ type MemoryResponse = {
   }>;
 };
 
-const QUICK_SUGGESTIONS = ["Tổng quan giao hôm nay", "Phân tích sản lượng pickup hôm nay"] as const;
+const QUICK_SUGGESTIONS = ["KV3 rider nào còn nhiều đơn giao nhất?", "Ngày mai KV1 có bao nhiêu FTE đi làm?", "Ưu tiên cần xử lý hôm nay?"] as const;
 
 const greeting: ChatMessage = {
   id: "welcome",
   role: "assistant",
-  content: "Chào bạn. Tôi là AI nội bộ chạy trên máy này. Bật “Dữ liệu trang này” để tôi đọc số liệu Supabase đã được giới hạn và phân tích theo ngày/snapshot.",
+  content: "Tôi có thể tổng hợp giao ca, gợi ý việc cần kiểm tra và trả lời theo dữ liệu được cấp quyền. Chọn phạm vi Dữ liệu vận hành hoặc Trang & lịch rider. Khi gửi câu hỏi, phần dữ liệu tương ứng được chuyển tới dịch vụ AI đã cấu hình; câu trả lời sẽ kèm nguồn và thời điểm.",
 };
 
 export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean } = {}) {
@@ -48,6 +52,8 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [open, setOpen] = useState(initialOpen);
+  const [tab, setTab] = useState<"chat" | "report" | "tasks" | "analysis">("report");
+  const [contextMode, setContextMode] = useState<"operations" | "page">("operations");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([greeting]);
   const [loading, setLoading] = useState(false);
@@ -91,7 +97,7 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
 
   useEffect(() => {
     if (!open) return;
-    const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => { if (tab === "chat") inputRef.current?.focus(); }, 0);
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -110,11 +116,13 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open]);
+  }, [open, tab]);
 
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages, open]);
+    if (!open || tab !== "chat") return;
+    if (messages.every(message => message.id === "welcome")) endRef.current?.parentElement?.scrollTo({ top: 0 });
+    else endRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+  }, [messages, open, tab]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -141,6 +149,7 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
         body: JSON.stringify({
           messages: conversation.map(({ role, content: value }) => ({ role, content: value })),
           includeData,
+          contextMode,
           pagePath: `${window.location.pathname}${window.location.search}`,
           conversationId,
           aiConfig,
@@ -247,151 +256,54 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
     }
   }
 
-  return (
-    <div ref={panelRef} className="relative z-[400]">
-      {open ? (
-        <section
-          id="ollama-chat-panel"
-          role="dialog"
-          aria-modal="false"
-          aria-labelledby="ollama-chat-title"
-          className="fixed right-3 top-[4.5rem] flex h-[min(37rem,calc(100dvh-6rem))] w-[min(calc(100vw-1.5rem),27rem)] flex-col overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white/97 text-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.24)] backdrop-blur sm:right-6 sm:top-20 dark:border-slate-700/70 dark:bg-slate-950/97 dark:text-slate-50"
-        >
-          <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-                <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" /> ShopAIKey API
-              </p>
-              <h2 id="ollama-chat-title" className="mt-1 flex items-center gap-2 text-base font-semibold leading-6">
-                <Bot size={18} aria-hidden="true" /> Rider Ops AI
-              </h2>
-              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{aiConfig.model} · {aiConfig.baseUrl ? "máy chủ tùy chỉnh" : "máy chủ mặc định"}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => void toggleMemory()}
-                disabled={memoryBusy}
-                aria-pressed={memoryEnabled}
-                className={cn(
-                  "grid size-9 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-wait disabled:opacity-50",
-                  memoryEnabled
-                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                    : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800",
-                )}
-                aria-label={memoryEnabled ? "Tắt ghi nhớ theo account" : "Bật ghi nhớ theo account"}
-                title={memoryEnabled ? "AI Memory đang bật" : "AI Memory đang tắt"}
-              >
-                <Brain size={16} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => void clearMemory()}
-                disabled={memoryBusy}
-                className="grid size-9 place-items-center rounded-full text-slate-500 outline-none transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-wait disabled:opacity-50 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
-                aria-label="Xóa lịch sử AI của account"
-                title="Xóa AI Memory"
-              >
-                <Trash2 size={15} aria-hidden="true" />
-              </button>
-              <button type="button" onClick={resetChat} className="grid size-9 place-items-center rounded-full text-slate-500 outline-none transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Tạo cuộc trò chuyện mới" title="Tạo cuộc trò chuyện mới">
-                <RotateCcw size={16} aria-hidden="true" />
-              </button>
-              <button type="button" onClick={() => setOpen(false)} className="grid size-9 place-items-center rounded-full text-slate-500 outline-none transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Đóng AI chat">
-                <X size={17} aria-hidden="true" />
-              </button>
-            </div>
-          </header>
-
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-busy={loading}>
-            {messages.map((message) => {
-              return (
-              <article key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-6", message.role === "user" ? "rounded-br-md bg-slate-950 text-white dark:bg-white dark:text-slate-950" : "rounded-bl-md border border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100")}>
-                  {message.content ? <p className="whitespace-pre-wrap">{message.content}</p> : <span className="inline-flex items-center gap-2 text-slate-500 dark:text-slate-400"><LoaderCircle size={15} className="animate-spin" aria-hidden="true" />Đang suy nghĩ…</span>}
-                  {message.role === "assistant" && message.dataSources?.length ? (
-                    <p className="mt-2 border-t border-slate-200/80 pt-2 text-[0.65rem] leading-4 text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      Supabase · {message.workDate ?? "—"} · {formatContextTime(message.dataAsOf)}<br />
-                      {message.dataSources.join(" · ")}
-                    </p>
-                  ) : null}
+  return <div ref={panelRef} className="relative z-[400]">
+    {open && <section id="ollama-chat-panel" role="dialog" aria-modal="false" aria-labelledby="ollama-chat-title" className={s.panel}>
+      <header className={s.header}>
+        <div className={s.identity}><span className={s.brandIcon}><Sparkles size={22} aria-hidden="true" /></span><div><p className={s.eyebrow}>SDD · AI WORKSPACE</p><h2 id="ollama-chat-title" className={s.title}>Trợ lý vận hành</h2></div></div>
+        <div className={s.headerActions}>
+          <button type="button" onClick={resetChat} className={s.iconButton} aria-label="Tạo cuộc trò chuyện mới" title="Cuộc trò chuyện mới"><RotateCcw size={17} aria-hidden="true" /></button>
+          <details className={s.menu} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }}>
+            <summary className={s.iconButton} aria-label="Tùy chọn trợ lý"><MoreHorizontal size={19} aria-hidden="true" /></summary>
+            <div className={s.menuContent}><button type="button" onClick={() => void toggleMemory()} disabled={memoryBusy} aria-pressed={memoryEnabled} aria-label={memoryEnabled ? "Tắt ghi nhớ theo account" : "Bật ghi nhớ theo account"}><Brain size={16} aria-hidden="true" />Ghi nhớ: {memoryEnabled ? "Đang bật" : "Đang tắt"}</button><button type="button" onClick={() => void clearMemory()} disabled={memoryBusy} className={s.danger} aria-label="Xóa lịch sử AI của account"><Trash2 size={15} aria-hidden="true" />Xóa lịch sử AI</button></div>
+          </details>
+          <button type="button" onClick={() => setOpen(false)} className={s.iconButton} aria-label="Đóng AI chat"><X size={19} aria-hidden="true" /></button>
+        </div>
+      </header>
+      <div className={s.layout}>
+        <nav aria-label="Chức năng trợ lý" className={s.navigation}><p className={s.navCaption}>Không gian làm việc</p>
+          {([{key:"chat",label:"Hỏi dữ liệu",note:"Cùng AI phân tích",icon:MessageSquare},{key:"analysis",label:"Phân tích",note:"Biến động theo ngày",icon:TrendingUp},{key:"report",label:"Giao ca",note:"Toàn cảnh hôm nay",icon:FileText},{key:"tasks",label:"Cần xử lý",note:"Ưu tiên điều phối",icon:ListChecks}] as const).map(item => <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-pressed={tab === item.key} aria-label={item.label} className={s.navButton}><item.icon size={18} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.note}</small></span></button>)}
+          <div className={s.navFooter}><ShieldCheck size={18} aria-hidden="true" />Dữ liệu theo quyền<br />tài khoản của bạn.<br /><strong>SDD · KV1–KV5</strong></div>
+        </nav>
+        <div className={s.main}>
+          <OperationsAssistant active={tab === "report" || tab === "tasks"} mode={tab === "tasks" ? "tasks" : "report"} onAsk={question => { setContextMode("operations"); setIncludeData(true); setDraft(question); setTab("chat"); }} onNavigate={() => setOpen(false)} />
+          {tab === "analysis" && <OperationsAnalysisPanel onAsk={question => { setContextMode("operations"); setIncludeData(true); setDraft(question); setTab("chat"); }} />}
+          {tab === "chat" && <>
+            <div className={s.chatScroll} aria-live="polite" aria-busy={loading}>
+              {!messages.some(message => message.id !== "welcome") && <div className={s.chatIntro}><h3>Bạn muốn nắm điều gì<br />trong ca hôm nay?</h3><p>Hỏi về rider, tiến độ giao nhận hoặc lịch FTE. Tôi sẽ cùng bạn đọc số liệu và tìm việc cần ưu tiên.</p><div className={s.suggestions} aria-label="Gợi ý câu hỏi">{QUICK_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={loading} onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}>{suggestion}<ArrowUpRight size={16} aria-hidden="true" /></button>)}</div></div>}
+              {messages.filter(message => message.id !== "welcome").map(message => <article key={message.id} className={s.message} data-role={message.role}>
+                {message.role === "assistant" && <span className={s.messageAvatar}><Sparkles size={15} aria-hidden="true" /></span>}
+                <div className={s.messageContent}>{message.role === "assistant" && <span className={s.messageName}>TRỢ LÝ SDD</span>}{message.content ? <p className={s.messageText}>{message.content}</p> : <span className={s.thinking}><LoaderCircle size={15} className="animate-spin" aria-hidden="true" />Đang đọc và phân tích…</span>}
+                  {message.role === "assistant" && message.dataSources?.length ? <div className={s.messageSources}><Database size={12} aria-hidden="true" /><span>{message.workDate ?? "—"} · Đọc lúc {formatContextTime(message.dataAsOf)}<br />{message.dataSources.map(source => ({riders:"Danh bạ rider",delivery:"Delivery",pickup:"Pickup",team:"Lịch FTE",analysis_backlog_delivery:"Backlog Delivery",analysis_backlog_pickup:"Backlog Pickup",analysis_oh:"OH",analysis_volume:"Delivery Volume",analysis_overnight:"Giữ qua đêm",analysis_fc:"Inbound & FC",analysis_return:"Return",analysis_return_history:"Lịch sử Return"} as Record<string,string>)[source] ?? source).join(" · ")}</span></div> : null}
                 </div>
-              </article>
-              );
-            })}
-            <div ref={endRef} />
-          </div>
-
-          <div className="border-t border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-            {error ? <p role="alert" className="mb-2 rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-700 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
-            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1" aria-label="Gợi ý câu hỏi">
-              {QUICK_SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setDraft(suggestion);
-                    inputRef.current?.focus();
-                  }}
-                  className="shrink-0 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-800 outline-none transition-colors hover:bg-emerald-50 hover:text-emerald-900 focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-slate-950 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
-                >
-                  {suggestion}
-                </button>
-              ))}
+              </article>)}
+              <div ref={endRef} />
             </div>
-            <button
-              type="button"
-              aria-pressed={includeData}
-              disabled={loading}
-              onClick={() => setIncludeData((current) => !current)}
-              className={cn("mb-2 inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500", includeData ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200" : "border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400")}
-            >
-              <Database size={13} aria-hidden="true" />
-              Dữ liệu trang này: {includeData ? "Bật" : "Tắt"}
-            </button>
-            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-emerald-500/30 dark:border-slate-700 dark:bg-slate-950">
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendMessage();
-                  }
-                }}
-                disabled={loading}
-                rows={1}
-                maxLength={4000}
-                placeholder="Hỏi AI nội bộ…"
-                aria-label="Nội dung gửi AI"
-                className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:placeholder:text-slate-500"
-              />
-              <button type="button" disabled={loading || !draft.trim()} onClick={() => void sendMessage()} className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white outline-none transition-[background-color,transform] hover:bg-emerald-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950" aria-label="Gửi câu hỏi">
-                {loading ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}
-              </button>
+            <div className={s.composerArea}>
+              {error && <p role="alert" className={s.error}>{error}</p>}
+              {messages.some(message => message.role === "user") && <details className={s.suggestionMenu}><summary>Gợi ý câu hỏi</summary><div className={s.suggestions}>{QUICK_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={loading} onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}>{suggestion}<ArrowUpRight size={15} aria-hidden="true" /></button>)}</div></details>}
+              <div className={s.composer}>
+                <textarea ref={inputRef} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} disabled={loading} rows={2} maxLength={4000} placeholder="Hỏi về ca làm, rider hoặc tiến độ…" aria-label="Nội dung gửi AI" />
+                <div className={s.composerTools}><button type="button" aria-pressed={includeData} disabled={loading} onClick={() => setIncludeData(current => !current)} className={s.dataToggle}><Database size={13} aria-hidden="true" />Dữ liệu: {includeData ? "Bật" : "Tắt"}</button><button type="button" disabled={loading || !draft.trim()} onClick={() => void sendMessage()} className={s.send} aria-label="Gửi câu hỏi">{loading ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}</button></div>
+              </div>
+              <div className={s.scope}><label>Phạm vi <select aria-label="Phạm vi dữ liệu AI" value={contextMode} disabled={loading || !includeData} onChange={event => setContextMode(event.target.value as "operations" | "page")}><option value="operations">Vận hành & FTE ngày mai</option><option value="page">Trang & lịch rider</option></select></label><span>Enter gửi · Shift + Enter xuống dòng</span></div>
+              <p className={s.footnote}>Phân tích qua dịch vụ AI đã cấu hình. Đối chiếu nguồn trước khi điều phối.</p>
             </div>
-            <p className="mt-2 text-center text-[0.68rem] text-slate-400 dark:text-slate-500">Enter để gửi · Shift + Enter xuống dòng · AI có thể trả lời sai</p>
-          </div>
-        </section>
-      ) : null}
-
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="ollama-chat-panel"
-        title="Rider Ops AI"
-        onClick={() => setOpen((current) => !current)}
-        className="group relative inline-grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-400/50 bg-emerald-600 text-sm font-semibold text-white outline-none transition-[background-color,transform] duration-150 hover:bg-emerald-700 active:translate-y-px focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 xl:inline-flex xl:w-auto xl:gap-2 xl:px-3 dark:border-emerald-400/50 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400 dark:focus-visible:ring-offset-slate-950"
-      >
-        {open ? <X size={22} aria-hidden="true" /> : <Sparkles size={22} aria-hidden="true" />}
-        <span className="hidden whitespace-nowrap xl:inline">{open ? "Đóng AI" : "Bật AI"}</span>
-        <span className="absolute -right-1 -top-1 size-3 rounded-full bg-emerald-300 ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
-        <span className="sr-only">{open ? "Đóng Rider Ops AI" : "Mở Rider Ops AI"}</span>
-      </button>
-    </div>
-  );
+          </>}
+        </div>
+      </div>
+    </section>}
+    <button type="button" aria-expanded={open} aria-controls="ollama-chat-panel" aria-label={open ? "Đóng Rider Ops AI" : "Mở Rider Ops AI"} title="Rider Ops AI" onClick={() => setOpen(current => !current)} className="group relative inline-grid size-10 shrink-0 place-items-center rounded-xl border border-blue-400/50 bg-blue-600 text-sm font-semibold text-white outline-none transition-colors hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 xl:inline-flex xl:w-auto xl:gap-2 xl:px-3 dark:focus-visible:ring-offset-slate-950">{open ? <X size={19} aria-hidden="true" /> : <Sparkles size={19} aria-hidden="true" />}<span className="hidden whitespace-nowrap xl:inline">{open ? "Đóng AI" : "Bật AI"}</span><span className="sr-only">{open ? "Đóng Rider Ops AI" : "Mở Rider Ops AI"}</span></button>
+  </div>;
 }
 
 function formatContextTime(value?: string) {
