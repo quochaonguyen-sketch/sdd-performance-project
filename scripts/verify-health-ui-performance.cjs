@@ -5,6 +5,7 @@ const rows=[{id:'1',driver_id:'123',driver_name:'Test Rider',total_assigned:100,
 const profiles=[{rider_code:'123',full_name:'Test Rider',kv:'KV1',delivery_district:'Quận 1',delivery_ward:'Phường Tân Định',cot:'COT1'}];
 Module._resolveFilename=function(name,parent,...args){return resolve.call(this,name.startsWith('@/')?path.join(root,name.slice(2)):name,parent,...args)};
 Module._load=function(name,...args){
+ if(name==='next/navigation')return {useSearchParams:()=>new URLSearchParams()};
  if(name==='@/components/layout/app-loading-store')return {useReportInitialDataLoading:()=>{}};
  if(name==='@/hooks/use-supabase-realtime')return {useSupabaseRealtime:()=>{}};
  if(name==='@/components/layout/filter-memory')return {useRememberedState:(_key,initial)=>Module._load('react',module).useState(initial)};

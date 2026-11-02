@@ -12,6 +12,7 @@
   font-size: 14px; line-height: 1.5; animation: arrive 180ms ease-out;
 }
 .panel * { box-sizing: border-box; }
+.chatPanel { width: min(680px, calc(100vw - 40px)); }
 .analysisFilters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin: 18px 0; }
 .analysisFilters label { display: grid; gap: 5px; min-width: 0; font-size: 12px; color: var(--ai-muted); }
 .analysisFilters :is(input,select) { width: 100%; min-width: 0; min-height: 44px; padding: 8px; color: var(--ai-text); background: var(--ai-bg); border: 1px solid var(--ai-line); border-radius: 8px; font: inherit; }

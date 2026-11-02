@@ -1,14 +1,12 @@
 # Trợ lý vận hành SDD
 
-Mở **Bật AI** trong thanh công cụ. Trợ lý có ba mục:
+Mở **Bật AI** để hỏi bằng tiếng Việt. Khung trợ lý chỉ có hội thoại và gợi ý câu hỏi, không tự mở báo cáo giao ca, phân tích hoặc bảng số lượng. Bấm gợi ý chỉ điền nội dung; dữ liệu vận hành chỉ được tải sau khi gửi câu hỏi.
 
-- **Giao ca**: tổng hợp Delivery, Pickup và lịch FTE hôm nay/ngày mai, kèm nguồn và thời điểm. Bấm **Sao chép báo cáo giao ca** để lấy văn bản. Báo cáo được tạo khi mở hoặc tải lại; không tự gửi đến nhóm hay tạo lịch gửi định kỳ.
-- **Cần xử lý**: gợi ý kiểm tra có mức ưu tiên và liên kết tới trang xử lý. Đây là danh sách suy ra từ dữ liệu, không phải các bản ghi công việc hay thao tác đã thực hiện.
-- **Hỏi dữ liệu**: hỏi bằng tiếng Việt. Phạm vi mặc định là vận hành hôm nay và lịch FTE hôm nay/ngày mai. Phạm vi **Trang & lịch rider** giữ luồng hỏi lịch rider cũ, với kiểm tra đủ quyền các nguồn liên quan.
+Ví dụ: “Backlog 7 ngày qua tăng hay giảm?”, “Khu vực nào có tỷ lệ OH cao nhất?”, “Khu vực nào đang tồn hàng trả nhiều?”, “Ngày mai KV1 có bao nhiêu FTE đi làm?”. Câu trả lời phải đúng phạm vi được hỏi, có nguồn/ngày và chỉ rõ dữ liệu thiếu.
 
-Ví dụ câu hỏi: “KV3 rider nào còn nhiều đơn giao nhất?”, “Ngày mai KV1 có bao nhiêu FTE đi làm?”, “Tôi cần ưu tiên kiểm tra việc gì hôm nay?”. Các câu hỏi vượt phạm vi ngày hoặc yêu cầu tên FTE phải được nêu rõ là chưa có dữ liệu tương ứng.
+Mỗi lần mở phiên trang mới bắt đầu với ô hỏi trống. Chỉ đọc tùy chọn ghi nhớ qua `GET /api/ai/memory?preferencesOnly=1`; không đọc cuộc trò chuyện cũ hoặc snapshot vận hành. Trong menu **Tùy chọn trợ lý**, chọn **Xem cuộc trò chuyện trước** khi muốn mở lại lịch sử. Việc này không xóa dữ liệu lịch sử đã lưu.
 
-Nút **Mở nguồn xử lý** đóng hộp trợ lý và mở đúng KV qua `ai_area`. Liên kết FTE thêm `ai_day` để chọn ngày và chức danh FTE; các trang đặt lại bộ lọc cũ có thể che mất kết quả. KV và ngày trên URL được kiểm tra trước khi áp dụng. Các tham số này chỉ chọn bộ lọc, không thay đổi quyền truy cập.
+Báo cáo/điểm ưu tiên và công thức phân tích phía máy chủ vẫn phục vụ câu hỏi AI. Lịch sử Return tiếp tục tự lưu theo worker, độc lập với hộp trợ lý. Các mô tả bảng báo cáo bên dưới là tài liệu cho mô hình dữ liệu, không phải màn hình tự hiện khi mở AI.
 
 ## Nguồn và tính đúng dữ liệu
 

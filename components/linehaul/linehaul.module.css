@@ -1,4 +1,20 @@
 .page { display:flex; flex-direction:column; gap:16px; padding-bottom:24px; color:var(--color-ink); }
+.trafficEta { margin:16px 20px; padding:16px; border:1px solid var(--color-rule); border-radius:12px; background:var(--color-paper-2); }
+.trafficEta > header { display:flex; justify-content:space-between; gap:12px; color:var(--color-accent); }
+.trafficEta header span { display:flex; align-items:center; gap:6px; font-size:10px; letter-spacing:.08em; }
+.trafficEta h3 { margin:7px 0 0; color:var(--color-ink); font-size:17px; font-weight:650; }
+.trafficEta p { font-size:12px; line-height:1.7; }
+.trafficEta > p { color:var(--color-ink-2); margin:10px 0; }
+.etaButton { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:44px; padding:10px 12px; border:0; border-radius:8px; color:var(--color-accent-ink); background:var(--color-accent); font:inherit; font-size:12px; cursor:pointer; }
+.etaButton:disabled { opacity:.6; cursor:wait; }
+.etaButton:focus-visible { outline:2px solid var(--color-accent); outline-offset:3px; }
+.trafficEta .etaNotice { padding:10px; border:1px solid var(--color-rule); border-radius:8px; color:var(--color-ink-2); background:var(--color-paper); font-size:12px; }
+.etaResult { display:flex; flex-direction:column; gap:11px; padding-top:18px; font-variant-numeric:tabular-nums; }
+.etaResult > span, .etaResult small { color:var(--color-ink-2); font-size:11px; line-height:1.7; }
+.etaResult > strong { font-size:26px; color:var(--color-accent); letter-spacing:-.025em; }
+.etaStats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.etaStats b, .etaStats small { display:block; }
+.etaStats b { font-size:17px; }
 .header { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:26px 28px; border-radius:var(--radius-panel); background:var(--color-graphite); color:var(--color-graphite-ink); }
 .eyebrow { display:flex; align-items:center; gap:7px; font-size:10px; font-weight:650; letter-spacing:.12em; }
 .header .eyebrow { color:var(--color-inverse-muted); }

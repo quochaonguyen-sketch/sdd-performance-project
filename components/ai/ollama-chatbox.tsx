@@ -1,13 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Brain, Database, FileText, ListChecks, LoaderCircle, MessageSquare, MoreHorizontal, RotateCcw, Send, ShieldCheck, TrendingUp, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Brain, Database, History, LoaderCircle, MoreHorizontal, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { useBrowserAiConfig } from "@/lib/ai/browser-config";
-import { OperationsAssistant } from "./operations-assistant";
 import s from "./ai-workspace.module.css";
-
-const OperationsAnalysisPanel = dynamic(() => import("./operations-analysis").then(module => module.OperationsAnalysisPanel));
 
 type ChatRole = "user" | "assistant";
 type ChatMessage = {
@@ -38,7 +34,7 @@ type MemoryResponse = {
   }>;
 };
 
-const QUICK_SUGGESTIONS = ["KV3 rider nào còn nhiều đơn giao nhất?", "Ngày mai KV1 có bao nhiêu FTE đi làm?", "Ưu tiên cần xử lý hôm nay?"] as const;
+const QUICK_SUGGESTIONS = ["Backlog 7 ngày qua tăng hay giảm?", "Khu vực nào có tỷ lệ OH cao nhất?", "Khu vực nào đang tồn hàng trả nhiều?"] as const;
 
 const greeting: ChatMessage = {
   id: "welcome",
@@ -52,7 +48,6 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [open, setOpen] = useState(initialOpen);
-  const [tab, setTab] = useState<"chat" | "report" | "tasks" | "analysis">("report");
   const [contextMode, setContextMode] = useState<"operations" | "page">("operations");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([greeting]);
@@ -66,25 +61,11 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/ai/memory", { cache: "no-store", signal: controller.signal })
+    void fetch("/api/ai/memory?preferencesOnly=1", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const result = await response.json() as MemoryResponse;
         if (!response.ok || !result.success) throw new Error(result.error ?? "Không tải được AI Memory.");
         setMemoryEnabled(result.memoryEnabled ?? true);
-        setConversationId(result.conversation?.id ?? null);
-        if (result.messages?.length) {
-          setMessages([
-            greeting,
-            ...result.messages.map((message) => ({
-              id: message.id,
-              role: message.role,
-              content: message.content,
-              dataSources: message.metadata?.data_sources,
-              dataAsOf: message.metadata?.data_as_of ?? undefined,
-              workDate: message.metadata?.work_date ?? undefined,
-            })),
-          ]);
-        }
       })
       .catch((caught) => {
         if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Không tải được AI Memory.");
@@ -97,7 +78,7 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
 
   useEffect(() => {
     if (!open) return;
-    const focusTimer = window.setTimeout(() => { if (tab === "chat") inputRef.current?.focus(); }, 0);
+    const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 0);
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -116,19 +97,19 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, tab]);
+  }, [open]);
 
   useEffect(() => {
-    if (!open || tab !== "chat") return;
+    if (!open) return;
     if (messages.every(message => message.id === "welcome")) endRef.current?.parentElement?.scrollTo({ top: 0 });
     else endRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
-  }, [messages, open, tab]);
+  }, [messages, open]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   async function sendMessage() {
     const content = draft.trim();
-    if (!content || loading) return;
+    if (!content || loading || memoryBusy) return;
 
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", content };
     const assistantId = crypto.randomUUID();
@@ -219,6 +200,28 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
     inputRef.current?.focus();
   }
 
+  async function restorePreviousChat() {
+    if (memoryBusy || loading) return;
+    setMemoryBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/ai/memory", { cache: "no-store" });
+      const result = await response.json() as MemoryResponse;
+      if (!response.ok || !result.success) throw new Error(result.error ?? "Không tải được cuộc trò chuyện trước.");
+      setConversationId(result.conversation?.id ?? null);
+      setMessages([greeting, ...(result.messages ?? []).map(message => ({
+        id: message.id, role: message.role, content: message.content,
+        dataSources: message.metadata?.data_sources,
+        dataAsOf: message.metadata?.data_as_of ?? undefined,
+        workDate: message.metadata?.work_date ?? undefined,
+      }))]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không tải được cuộc trò chuyện trước.");
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
   async function toggleMemory() {
     if (memoryBusy) return;
     const nextValue = !memoryEnabled;
@@ -257,29 +260,22 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
   }
 
   return <div ref={panelRef} className="relative z-[400]">
-    {open && <section id="ollama-chat-panel" role="dialog" aria-modal="false" aria-labelledby="ollama-chat-title" className={s.panel}>
+    {open && <section id="ollama-chat-panel" role="dialog" aria-modal="false" aria-labelledby="ollama-chat-title" className={`${s.panel} ${s.chatPanel}`}>
       <header className={s.header}>
         <div className={s.identity}><span className={s.brandIcon}><Sparkles size={22} aria-hidden="true" /></span><div><p className={s.eyebrow}>SDD · AI WORKSPACE</p><h2 id="ollama-chat-title" className={s.title}>Trợ lý vận hành</h2></div></div>
         <div className={s.headerActions}>
           <button type="button" onClick={resetChat} className={s.iconButton} aria-label="Tạo cuộc trò chuyện mới" title="Cuộc trò chuyện mới"><RotateCcw size={17} aria-hidden="true" /></button>
           <details className={s.menu} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }}>
             <summary className={s.iconButton} aria-label="Tùy chọn trợ lý"><MoreHorizontal size={19} aria-hidden="true" /></summary>
-            <div className={s.menuContent}><button type="button" onClick={() => void toggleMemory()} disabled={memoryBusy} aria-pressed={memoryEnabled} aria-label={memoryEnabled ? "Tắt ghi nhớ theo account" : "Bật ghi nhớ theo account"}><Brain size={16} aria-hidden="true" />Ghi nhớ: {memoryEnabled ? "Đang bật" : "Đang tắt"}</button><button type="button" onClick={() => void clearMemory()} disabled={memoryBusy} className={s.danger} aria-label="Xóa lịch sử AI của account"><Trash2 size={15} aria-hidden="true" />Xóa lịch sử AI</button></div>
+            <div className={s.menuContent}><button type="button" onClick={() => void restorePreviousChat()} disabled={memoryBusy || loading}><History size={16} aria-hidden="true" />Xem cuộc trò chuyện trước</button><button type="button" onClick={() => void toggleMemory()} disabled={memoryBusy} aria-pressed={memoryEnabled} aria-label={memoryEnabled ? "Tắt ghi nhớ theo account" : "Bật ghi nhớ theo account"}><Brain size={16} aria-hidden="true" />Ghi nhớ: {memoryEnabled ? "Đang bật" : "Đang tắt"}</button><button type="button" onClick={() => void clearMemory()} disabled={memoryBusy} className={s.danger} aria-label="Xóa lịch sử AI của account"><Trash2 size={15} aria-hidden="true" />Xóa lịch sử AI</button></div>
           </details>
           <button type="button" onClick={() => setOpen(false)} className={s.iconButton} aria-label="Đóng AI chat"><X size={19} aria-hidden="true" /></button>
         </div>
       </header>
       <div className={s.layout}>
-        <nav aria-label="Chức năng trợ lý" className={s.navigation}><p className={s.navCaption}>Không gian làm việc</p>
-          {([{key:"chat",label:"Hỏi dữ liệu",note:"Cùng AI phân tích",icon:MessageSquare},{key:"analysis",label:"Phân tích",note:"Biến động theo ngày",icon:TrendingUp},{key:"report",label:"Giao ca",note:"Toàn cảnh hôm nay",icon:FileText},{key:"tasks",label:"Cần xử lý",note:"Ưu tiên điều phối",icon:ListChecks}] as const).map(item => <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-pressed={tab === item.key} aria-label={item.label} className={s.navButton}><item.icon size={18} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.note}</small></span></button>)}
-          <div className={s.navFooter}><ShieldCheck size={18} aria-hidden="true" />Dữ liệu theo quyền<br />tài khoản của bạn.<br /><strong>SDD · KV1–KV5</strong></div>
-        </nav>
         <div className={s.main}>
-          <OperationsAssistant active={tab === "report" || tab === "tasks"} mode={tab === "tasks" ? "tasks" : "report"} onAsk={question => { setContextMode("operations"); setIncludeData(true); setDraft(question); setTab("chat"); }} onNavigate={() => setOpen(false)} />
-          {tab === "analysis" && <OperationsAnalysisPanel onAsk={question => { setContextMode("operations"); setIncludeData(true); setDraft(question); setTab("chat"); }} />}
-          {tab === "chat" && <>
             <div className={s.chatScroll} aria-live="polite" aria-busy={loading}>
-              {!messages.some(message => message.id !== "welcome") && <div className={s.chatIntro}><h3>Bạn muốn nắm điều gì<br />trong ca hôm nay?</h3><p>Hỏi về rider, tiến độ giao nhận hoặc lịch FTE. Tôi sẽ cùng bạn đọc số liệu và tìm việc cần ưu tiên.</p><div className={s.suggestions} aria-label="Gợi ý câu hỏi">{QUICK_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={loading} onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}>{suggestion}<ArrowUpRight size={16} aria-hidden="true" /></button>)}</div></div>}
+              {!messages.some(message => message.id !== "welcome") && <div className={s.chatIntro}><h3>Bạn muốn phân tích điều gì?</h3><p>Hỏi về backlog, OH, hàng qua đêm, Return hoặc lịch FTE. Tôi sẽ đọc dữ liệu phù hợp và trả lời sau khi bạn gửi câu hỏi.</p><div className={s.suggestions} aria-label="Gợi ý câu hỏi">{QUICK_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={loading} onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}>{suggestion}<ArrowUpRight size={16} aria-hidden="true" /></button>)}</div></div>}
               {messages.filter(message => message.id !== "welcome").map(message => <article key={message.id} className={s.message} data-role={message.role}>
                 {message.role === "assistant" && <span className={s.messageAvatar}><Sparkles size={15} aria-hidden="true" /></span>}
                 <div className={s.messageContent}>{message.role === "assistant" && <span className={s.messageName}>TRỢ LÝ SDD</span>}{message.content ? <p className={s.messageText}>{message.content}</p> : <span className={s.thinking}><LoaderCircle size={15} className="animate-spin" aria-hidden="true" />Đang đọc và phân tích…</span>}
@@ -292,13 +288,12 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
               {error && <p role="alert" className={s.error}>{error}</p>}
               {messages.some(message => message.role === "user") && <details className={s.suggestionMenu}><summary>Gợi ý câu hỏi</summary><div className={s.suggestions}>{QUICK_SUGGESTIONS.map(suggestion => <button key={suggestion} type="button" disabled={loading} onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}>{suggestion}<ArrowUpRight size={15} aria-hidden="true" /></button>)}</div></details>}
               <div className={s.composer}>
-                <textarea ref={inputRef} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} disabled={loading} rows={2} maxLength={4000} placeholder="Hỏi về ca làm, rider hoặc tiến độ…" aria-label="Nội dung gửi AI" />
-                <div className={s.composerTools}><button type="button" aria-pressed={includeData} disabled={loading} onClick={() => setIncludeData(current => !current)} className={s.dataToggle}><Database size={13} aria-hidden="true" />Dữ liệu: {includeData ? "Bật" : "Tắt"}</button><button type="button" disabled={loading || !draft.trim()} onClick={() => void sendMessage()} className={s.send} aria-label="Gửi câu hỏi">{loading ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}</button></div>
+                <textarea ref={inputRef} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} disabled={loading} rows={2} maxLength={4000} placeholder="Hỏi về backlog, OH, Return hoặc lịch FTE…" aria-label="Nội dung gửi AI" />
+                <div className={s.composerTools}><button type="button" aria-pressed={includeData} disabled={loading} onClick={() => setIncludeData(current => !current)} className={s.dataToggle}><Database size={13} aria-hidden="true" />Dữ liệu: {includeData ? "Bật" : "Tắt"}</button><button type="button" disabled={loading || memoryBusy || !draft.trim()} onClick={() => void sendMessage()} className={s.send} aria-label="Gửi câu hỏi">{loading ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}</button></div>
               </div>
-              <div className={s.scope}><label>Phạm vi <select aria-label="Phạm vi dữ liệu AI" value={contextMode} disabled={loading || !includeData} onChange={event => setContextMode(event.target.value as "operations" | "page")}><option value="operations">Vận hành & FTE ngày mai</option><option value="page">Trang & lịch rider</option></select></label><span>Enter gửi · Shift + Enter xuống dòng</span></div>
-              <p className={s.footnote}>Phân tích qua dịch vụ AI đã cấu hình. Đối chiếu nguồn trước khi điều phối.</p>
+              <div className={s.scope}><label>Phạm vi <select aria-label="Phạm vi dữ liệu AI" value={contextMode} disabled={loading || !includeData} onChange={event => setContextMode(event.target.value as "operations" | "page")}><option value="operations">Dữ liệu vận hành</option><option value="page">Trang & lịch rider</option></select></label><span>Enter gửi · Shift + Enter xuống dòng</span></div>
+              <p className={s.footnote}>AI đọc dữ liệu vận hành khi bạn gửi câu hỏi. Đối chiếu nguồn trước khi điều phối.</p>
             </div>
-          </>}
         </div>
       </div>
     </section>}

@@ -1,6 +1,6 @@
 # Lịch sử tồn hàng Return
 
-Trong **Bật AI → Phân tích**, bấm **Xem lịch sử Return**. Bộ lọc ngày/KV của báo cáo áp dụng cho cả chuỗi ngày, xếp KV và top quận. **AI phân tích Return** chuyển câu hỏi giữ đúng ngày/KV sang chat.
+Trong **Bật AI**, hỏi “Phân tích Return 7 ngày qua, KV nào đang tồn nhiều?” hoặc nêu khoảng ngày/KV cụ thể. AI đọc lịch sử khi bạn gửi câu hỏi và trả lời trong hội thoại; không tự hiện bảng số lượng khi mở trợ lý.
 
 Mỗi lần `publish_central_returns` công bố bộ dữ liệu đầy đủ, `capture_return_daily_history` lưu tổng hợp cùng giao dịch, dưới cùng advisory lock. Lịch sử không phụ thuộc người mở web. Nguồn Return hiện chạy theo lịch đồng bộ có sẵn (khoảng 30 phút), không tạo thêm job tải SPX. Lần cuối thành công của ngày theo `Asia/Ho_Chi_Minh` thay thế tổng hợp trong ngày; ngày cũ được giữ. Đồng bộ thiếu/lỗi rollback, không ghi snapshot giả; lần công bố đầy đủ thực sự rỗng được lưu là 0.
 

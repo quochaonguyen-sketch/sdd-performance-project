@@ -12,9 +12,15 @@ async function session() {
   return user ? { client, user } : null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await session();
   if (!auth) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
+
+  if (new URL(request.url).searchParams.get("preferencesOnly") === "1") {
+    const { data, error } = await auth.client.from("ai_user_preferences").select("memory_enabled").eq("user_id", auth.user.id).maybeSingle();
+    if (error) return NextResponse.json({ success: false, error: "Không tải được tùy chọn AI." }, { status: 500 });
+    return NextResponse.json({ success: true, memoryEnabled: data?.memory_enabled ?? true }, { headers: { "Cache-Control": "private, no-store" } });
+  }
 
   const [preferenceResult, conversationResult] = await Promise.all([
     auth.client
