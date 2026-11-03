@@ -12,7 +12,7 @@ export default async function LmhubInventoryPage() {
 
   return (
     <ProtectedPage>
-      <nav className="mb-3 text-sm"><Link href="/backlog-history?source=pickup">Lịch sử tồn · Đối chiếu 16:00 / 16:30 →</Link></nav>
+      <nav className="mb-3 text-sm"><Link href="/backlog-history?source=pickup">Snapshot Pickup 11:15 / 15:30 · Xem phường còn tồn →</Link></nav>
       <PickupInventoryView canQueue={canManageOperations(context?.profile.role)} />
     </ProtectedPage>
   );

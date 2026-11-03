@@ -1,9 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareBacklog, sortBacklogRows, hourlyValue, hourlyChanges, niceBacklogMax, validHistoryDay, vietnamDay, type BacklogHourlyPoint, type BacklogPivotRow } from "../lib/dashboard/backlog-history.ts";
+import { BACKLOG_CUTOFFS, remainingBacklogWards, compareBacklog, sortBacklogRows, hourlyValue, hourlyChanges, niceBacklogMax, validHistoryDay, vietnamDay, type BacklogHourlyPoint, type BacklogPivotRow } from "../lib/dashboard/backlog-history.ts";
 
 const row = (ward: string, cot1: number, cot2: number, district = "Quận 4", area = "KV1"): BacklogPivotRow => ({ area, district, ward, cot1, cot2, other: 0, orders: cot1+cot2 });
 const point = (hour: number, value: number | null): BacklogHourlyPoint => ({ hour, scheduled_for:"", status:value===null?"MISSED":"CAPTURED", is_final:value!==null, snapshot_id:value===null?null:`snapshot-${hour}`, source_started_at:null, source_snapshot_at:null, total_orders:value, areas:value===null?[]:[row("A",value,0)] });
+
+test("fixed cutoffs remain source-specific and remaining wards honor COT, KV and district identities", () => {
+  assert.deepEqual(BACKLOG_CUTOFFS.pickup, ["11:15", "15:30"]);
+  assert.deepEqual(BACKLOG_CUTOFFS.delivery, ["13:30", "17:30"]);
+  const data = [row("A",0,4),row("A",3,0),row("B",0,0),row("A",8,0,"Quận 7","KV2")];
+  const all = remainingBacklogWards(data,"orders");
+  assert.deepEqual(all.map(r=>r.after),[8,7]);
+  assert.equal(remainingBacklogWards(data,"cot1","KV1")[0].after,3);
+  assert.equal(remainingBacklogWards(data,"cot2","KV2").length,0);
+  assert.equal(remainingBacklogWards([],"orders").length,0);
+  assert.equal(data.length,4);
+});
 
 test("comparison priority sorts rising and falling backlogs without changing totals or source order", () => {
   const rows = compareBacklog([row("A",100,0),row("B",100,0),row("C",100,0)],[row("A",140,0),row("B",20,0),row("C",100,0)],"ward","orders");

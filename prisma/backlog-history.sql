@@ -72,6 +72,14 @@ alter table public.backlog_checkpoints enable row level security;
 revoke all on public.backlog_snapshots,public.backlog_snapshot_rows,public.backlog_checkpoints from public,anon,authenticated;
 grant select,insert,update on public.backlog_snapshots,public.backlog_snapshot_rows,public.backlog_checkpoints to service_role;
 
+create or replace function public.backlog_cutoff_times(p_source text)
+returns setof time language sql immutable security invoker set search_path=pg_catalog as $$
+  select t from (values ('pickup','11:15'::time),('pickup','15:30'::time),
+    ('delivery','13:30'::time),('delivery','17:30'::time)) v(source,t) where source=p_source;
+$$;
+revoke all on function public.backlog_cutoff_times(text) from public,anon,authenticated;
+grant execute on function public.backlog_cutoff_times(text) to service_role;
+
 create or replace function public.backlog_checkpoint_deadline(p_target timestamptz)
 returns timestamptz language sql immutable security invoker set search_path=pg_catalog as $$
   select p_target+case when extract(minute from p_target at time zone 'Asia/Ho_Chi_Minh')=50 then interval '10 minutes' else interval '15 minutes' end;
@@ -81,6 +89,8 @@ returns boolean language sql immutable security invoker set search_path=pg_catal
   select p_started>=p_target and p_finished>=p_started and case
     when extract(minute from p_target at time zone 'Asia/Ho_Chi_Minh')=50
       then p_started<public.backlog_checkpoint_deadline(p_target) and p_finished<public.backlog_checkpoint_deadline(p_target)
+    when (p_target at time zone 'Asia/Ho_Chi_Minh')::time in (select public.backlog_cutoff_times('pickup') union all select public.backlog_cutoff_times('delivery'))
+      then p_started<=public.backlog_checkpoint_deadline(p_target) and p_finished<=public.backlog_checkpoint_deadline(p_target)
     else p_started<=public.backlog_checkpoint_deadline(p_target) end;
 $$;
 
@@ -154,7 +164,7 @@ begin
     select s,(day+make_time(h,50,0)) at time zone 'Asia/Ho_Chi_Minh'
       from unnest(array['pickup','delivery']) s cross join generate_series(0,23) h
     union all select s,(day+t) at time zone 'Asia/Ho_Chi_Minh'
-      from unnest(array['pickup','delivery']) s cross join unnest(array['16:00'::time,'16:30'::time]) t
+      from unnest(array['pickup','delivery']) s cross join lateral public.backlog_cutoff_times(s) t
     on conflict do nothing;
   for c in select * from public.backlog_checkpoints where status in ('PENDING','QUEUED') and scheduled_for<=p_now order by scheduled_for,source for update loop
     hourly:=extract(minute from c.scheduled_for at time zone 'Asia/Ho_Chi_Minh')=50;
@@ -176,7 +186,9 @@ begin
         update public.backlog_checkpoints set status=case when hourly and p_now<deadline and c.attempts<2 then 'PENDING' else 'FAILED' end,
           job_id=case when hourly and p_now<deadline and c.attempts<2 then null else c.job_id end,
           message='Lượt đọc thất bại; chỉ thử lại khi còn trong giờ chốt',updated_at=p_now where source=c.source and scheduled_for=c.scheduled_for;
-      elsif (hourly and p_now>=deadline) or ((j.started_at is null or j.started_at>deadline) and p_now>deadline) then
+      elsif (hourly and p_now>=deadline)
+        or ((c.scheduled_for at time zone 'Asia/Ho_Chi_Minh')::time in (select public.backlog_cutoff_times(c.source)) and p_now>deadline)
+        or ((j.started_at is null or j.started_at>deadline) and p_now>deadline) then
         update public.backlog_checkpoints set status='MISSED',message='Không chốt kịp trong giờ; không gán dữ liệu của giờ sau',updated_at=p_now where source=c.source and scheduled_for=c.scheduled_for;
       end if;
       continue;

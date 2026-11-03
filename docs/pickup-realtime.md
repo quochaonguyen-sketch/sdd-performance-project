@@ -24,4 +24,14 @@ The website polls the authenticated API every minute while visible. The data wor
 
 ## Setup and validation
 
+## Daily OH cutoff snapshots
+
+Apply `prisma/pickup-cot-snapshots.sql`. A database trigger on the existing atomic full-fleet publication captures COT1 at **13:00** and COT2 at **17:00**, Asia/Ho_Chi_Minh, without depending on an open browser or a new worker process. It stores the first complete collection that **starts after the cutoff** and publishes within 15 minutes. The existing five-minute worker cadence means this is an observed post-cutoff snapshot, not an exact-to-the-second 13:00/17:00 measurement. UI shows both collection start and publication time. A stale/replayed source, wrong source date, pre-cutoff collection, malformed quantities or duplicate rider IDs cannot create a snapshot. Missing windows remain missing; no later backfill from current values.
+
+`pickup_cot_oh_snapshots` holds immutable daily COT rows with rider identity, COT membership, KV and Onhold quantities frozen at capture. Later publications/roster edits do not overwrite history. Quantities are **rider-attributed OH**, so shared orders may appear for multiple riders. Genuine zero is distinct from an absent snapshot. RLS and explicit grants restrict access to the authenticated, pickup-authorized server API (`/api/pickup-realtime/cot-snapshots?date=YYYY-MM-DD`); browser database roles have no table privileges. The UI supports date and KV selection, area subtotals, and expanding the complete frozen rider list (name, code, KV, COT and OH), including riders with zero OH. Other live rider/zone filters do not affect frozen totals. History begins when capture is installed, not retroactively.
+
+Database integration assertions: combine the schema SQL and `tests/pickup-cot-snapshots.integration.sql` in a temporary file and run `scripts/admin-audit-db.cjs <file> --test`. The test transaction rolls back all fixtures and clock stubs; includes real `service_role` trigger execution, cutoff windows, first-write preservation, genuine zero, frozen roster identity and access restrictions. API tests: `tests/pickup-cot-snapshots-route.test.ts`.
+
+## Existing source setup
+
 Apply `prisma/pickup-realtime-current.sql`. Python regression tests: `tests/test_pickup_realtime.py` in sdd-web-data. Web tests: `node --experimental-strip-types --test tests/pickup-realtime.test.ts`, TypeScript, ESLint and production build. Live verification reconciles every rider/group quantity and verifies data in each KV. UI previews anonymize rider names and IDs.

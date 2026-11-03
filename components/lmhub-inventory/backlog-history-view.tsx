@@ -6,6 +6,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, ChevronDown, Cl
 import { readJsonResponse } from "@/lib/http/json-response";
 import { compareBacklog, hourlyChanges, hourlyValue, sortBacklogRows, vietnamDay, type BacklogCot, type BacklogDetail, type BacklogHourlyDay, type BacklogLevel, type BacklogSort, type BacklogSource } from "@/lib/dashboard/backlog-history";
 import { BacklogDeltaChart, BacklogTrendChart } from "./backlog-hourly-charts";
+import { BacklogCutoffs } from "./backlog-cutoffs";
 import styles from "./backlog-history.module.css";
 
 const fmt = (n: number | null | undefined) => n == null ? "—" : n.toLocaleString("vi-VN");
@@ -102,6 +103,7 @@ export function BacklogHistoryView({ initialSource="pickup" }: {initialSource?:B
         </button>;
       })}
     </div>
+    <BacklogCutoffs source={source} day={day} checkpoints={current?.checkpoints} area={area} cot={cot} onCompare={(before,after)=>{setBaseline(day);setLevel("ward");setSelection({before,after});}} />
     <div className={styles.kpis}>
       <div><span><Layers3 size={15} aria-hidden="true"/>Tồn {names[source]} gần nhất</span><strong>{fmt(hourlyValue(latest,cot,area))}</strong><small>{latest?`${hh(latest.hour)} · Nguồn ${stamp(latest.source_snapshot_at)}`:"Chưa có snapshot"}</small></div>
       <div><span><ArrowDownRight size={15} aria-hidden="true"/>So với giờ liền trước</span><strong data-direction={(lastChange?.delta??0)>0?"up":(lastChange?.delta??0)<0?"down":"flat"}>{lastChange?.delta!=null&&lastChange.delta>0?"+":""}{fmt(lastChange?.delta)}</strong><small>{lastChange?.percent!=null?`${lastChange.percent>0?"+":""}${lastChange.percent.toLocaleString("vi-VN",{maximumFractionDigits:1})}% so với giờ trước`:"Cần hai giờ liên tiếp có dữ liệu"}</small></div>
@@ -136,7 +138,7 @@ export function BacklogHistoryView({ initialSource="pickup" }: {initialSource?:B
       <div className={styles.advancedBody}><h3>Biến động so với giờ liền trước</h3><p className={styles.note}>Cam: tồn tăng · Xanh: tồn giảm · Chỉ tính khi có đủ hai giờ liên tiếp.</p><BacklogDeltaChart day={current} cot={cot} area={area} onSelect={selectHour}/>
       <div className={styles.timelineHeading}><h3>Bản đồ nhiệt theo khu vực</h3><span>Bấm ô để chọn KV và giờ đối chiếu</span></div><div className={styles.heatScroll}><div className={styles.heatmap}><b>KV / Giờ</b>{Array.from({length:24},(_,h)=><span key={h}>{hh(h)}</span>)}{[1,2,3,4,5].map(n=><HeatRow key={n} name={`KV${n}`} day={current} cot={cot} max={heatMax} onSelect={h=>{setArea(`KV${n}`);selectHour(h);}}/>)}</div></div></div>
     </details>
-    <details className={`${styles.panel} ${styles.checkpoints}`}><summary><Clock3 size={17} aria-hidden="true"/>Mốc riêng 16:00 / 16:30 &amp; quy tắc chốt</summary><p className={styles.note}>Giữ độc lập với mốc chốt cuối giờ; có thể chọn trong danh sách A/B khi đã chụp thành công.</p>{current?.checkpoints.map(p=><div className={styles.checkpoint} key={p.scheduled_for}><strong>{stamp(p.scheduled_for)}</strong><span>{statuses[p.status]??p.status}</span><small>{p.message}</small></div>)}<p className={styles.note}>Worker cần hoạt động. Mốc :50 phải đọc xong trước giờ kế tiếp; nếu trễ sẽ ghi lỡ mốc, không gán dữ liệu giờ sau vào giờ trước.</p></details>
+    <details className={`${styles.panel} ${styles.checkpoints}`}><summary><Clock3 size={17} aria-hidden="true"/>Trạng thái các mốc chốt &amp; quy tắc lưu</summary><p className={styles.note}>Delivery 13:30 / 17:30 · Pickup 11:15 / 15:30. Mốc đã lưu có thể chọn trong danh sách A/B.</p>{current?.checkpoints.map(p=><div className={styles.checkpoint} key={p.scheduled_for}><strong>{stamp(p.scheduled_for)}</strong><span>{statuses[p.status]??p.status}</span><small>{p.message}</small></div>)}<p className={styles.note}>Worker cần hoạt động. Mốc :50 phải đọc xong trước giờ kế tiếp; nếu trễ sẽ ghi lỡ mốc, không gán dữ liệu giờ sau vào giờ trước.</p></details>
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="backlog-chart-title"><div className={styles.panelHeading}><h2 id="backlog-chart-title">Backlog theo giờ · {day}</h2><button type="button" onClick={()=>dialog.current?.close()}><X size={16} aria-hidden="true"/>Đóng</button></div><BacklogTrendChart daily={chartDaily} active={source} cot={cot} area={area} selected={selectedHour} onSelect={selectHour} large/></dialog>
   </div>;
 }

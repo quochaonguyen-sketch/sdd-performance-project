@@ -1,6 +1,6 @@
 -- Executed inside an explicit rollback-only transaction by apply-backlog-history.cjs --test.
 do $$
-declare target timestamptz:=(((now() at time zone 'Asia/Ho_Chi_Minh')::date+1)+'16:00'::time) at time zone 'Asia/Ho_Chi_Minh';
+declare target timestamptz:=(((now() at time zone 'Asia/Ho_Chi_Minh')::date+1)+'15:30'::time) at time zone 'Asia/Ho_Chi_Minh';
   legacy uuid; central uuid; snap uuid; same uuid; token text:='history-test-'||gen_random_uuid()::text;
 begin
   perform pg_advisory_xact_lock(948251,1);

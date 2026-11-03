@@ -16,6 +16,7 @@ import { PICKUP_AREAS, filterRiders, sum, type Area, type Metrics, type PickupRi
 import { cn } from "@/utils/cn";
 import { pendingPickup, pickupWorkload, type PickupFocus, type PickupSort } from "@/lib/pickup/workload";
 import s from "./pickup-realtime.module.css";
+import { CotOhSnapshots } from "./cot-oh-snapshots";
 
 const TONES: Record<Area, { color: string; tint: string }> = {
   KV1: { color: "var(--color-accent)", tint: "var(--color-accent-soft)" }, KV2: { color: "var(--color-success)", tint: "var(--color-success-soft)" },
@@ -110,6 +111,7 @@ export function PickupRealtimeView() {
         {label:"Onhold",value:fmt(totals.onhold),icon:Clock3,tone:"amber",sub:"Cần theo dõi xử lý lại"},
         {label:"Tỷ lệ lấy",value:rateLabel(totals),icon:UsersRound,tone:"purple",sub:"Đã lấy / tổng đơn gán"}].map(item=><article key={item.label} className={s.kpi} data-tone={item.tone}><div><span>{item.label}</span><item.icon size={17} aria-hidden="true"/></div><strong>{knownTotals ? item.value : "—"}</strong><p>{item.sub}</p></article>)}
     </div></section>
+    <CotOhSnapshots area={filters.area} />
     <section className={s.workspace}>
       <div className="flex gap-1 border-b border-slate-100 p-2"><button onClick={() => setTab("riders")} aria-pressed={tab === "riders"} className={cn("flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold", tab === "riders" ? "bg-slate-800 text-white" : "text-slate-500")}><UsersRound size={16}/>Theo rider</button><button onClick={() => setTab("zones")} aria-pressed={tab === "zones"} className={cn("rounded-lg px-4 py-2.5 text-xs font-bold", tab === "zones" ? "bg-slate-800 text-white" : "text-slate-500")}>Theo mã zone</button></div>
       <div className="grid gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-2 xl:grid-cols-3">

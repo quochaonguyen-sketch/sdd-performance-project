@@ -1,4 +1,5 @@
 export type BacklogSource = "pickup" | "delivery";
+export const BACKLOG_CUTOFFS = { pickup: ["11:15", "15:30"], delivery: ["13:30", "17:30"] } as const;
 export type BacklogPivotRow = { area: string; district: string; ward: string; cot1: number; cot2: number; other: number; orders: number };
 export type BacklogSnapshot = {
   id: string; source: BacklogSource; source_snapshot_id: string; source_started_at: string | null;
@@ -63,4 +64,9 @@ export function compareBacklog(before: BacklogPivotRow[], after: BacklogPivotRow
 export function sortBacklogRows(rows: ReturnType<typeof compareBacklog>, sort: BacklogSort) {
   return [...rows].sort((a,b) => (sort === "change" ? Math.abs(b.delta)-Math.abs(a.delta) : sort === "rising" ? b.delta-a.delta : sort === "falling" ? a.delta-b.delta : 0)
     || a.area.localeCompare(b.area,"vi") || a.district.localeCompare(b.district,"vi") || a.ward.localeCompare(b.ward,"vi"));
+}
+
+export function remainingBacklogWards(rows: BacklogPivotRow[], cot: BacklogCot, area = "") {
+  return compareBacklog([], rows, "ward", cot, area).filter(row => row.after > 0)
+    .sort((a, b) => b.after - a.after || a.area.localeCompare(b.area, "vi") || a.ward.localeCompare(b.ward, "vi"));
 }

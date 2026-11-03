@@ -1,4 +1,22 @@
 .page { container:pickup-live / inline-size; display:grid; gap:22px; min-width:0; padding-bottom:24px; color:var(--color-ink); }
+.cotSection { padding:20px; border:1px solid var(--color-rule); border-radius:12px; background:var(--color-paper); min-width:0; }
+.cotDate { display:grid; gap:5px; color:var(--color-muted); font-size:12px; }
+.cotDate input { min-height:44px; border:1px solid var(--color-rule); border-radius:8px; padding:8px 12px; background:var(--color-paper); color:var(--color-ink); font:inherit; }
+.cotHelp { font-size:12px; line-height:1.7; color:var(--color-muted); margin:12px 0; }
+.cotGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.cotCard { border:1px solid var(--color-rule); border-radius:10px; padding:18px; background:var(--color-paper-2); min-width:0; }
+.cotCard header { display:flex; justify-content:space-between; gap:10px; color:var(--color-accent); }
+.cotCard header span { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:650; }
+.cotCard > strong { display:flex; align-items:baseline; gap:8px; margin:20px 0 12px; font-size:32px; font-variant-numeric:tabular-nums; }
+.cotCard > strong small { font-size:12px; font-weight:400; color:var(--color-muted); }
+.cotCard p { color:var(--color-muted); font-size:12px; line-height:1.7; }
+.cotAreas { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
+.cotAreas span { display:grid; gap:6px; padding:8px 12px; border:1px solid var(--color-rule); border-radius:8px; font-size:12px; }
+.cotCard summary { cursor:pointer; min-height:44px; align-content:center; color:var(--color-accent); font-size:13px; }
+.cotRiders { max-height:300px; overflow:auto; }
+.cotRiders > div { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid var(--color-rule); font-size:13px; }
+.cotRiders small { display:block; margin-top:4px; color:var(--color-muted); }
+@media(max-width:640px) { .cotGrid { grid-template-columns:1fr; } .cotSection { padding:14px; } }
 .header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
 .eyebrow { color:var(--color-accent); font-size:10px; font-weight:700; letter-spacing:1.7px; margin:0 0 9px; }
 .header h1 { margin:0; font-size:30px; font-weight:700; line-height:1.2; letter-spacing:-.9px; }
