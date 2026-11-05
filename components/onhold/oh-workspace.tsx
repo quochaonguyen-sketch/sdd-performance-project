@@ -34,7 +34,6 @@ import {
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { OHOrderDialog } from "./oh-order-dialog";
 import { OHFullRankingsDialog } from "./oh-full-rankings-dialog";
-import { OHAnalysis } from "./oh-analysis";
 import s from "./oh-workspace.module.css";
 
 const nf = new Intl.NumberFormat("vi-VN");
@@ -498,9 +497,6 @@ export function OHWorkspace({
           </Link>
         </header>
 
-        {/* Skeleton notice */}
-        <div className="h-14 rounded-xl border border-slate-200 bg-white/70 animate-pulse dark:border-slate-800 dark:bg-slate-900/60" />
-
         {/* Skeleton Toolbar */}
         <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-slate-200 bg-white animate-pulse dark:border-slate-800 dark:bg-slate-900">
           <div className="h-10 w-36 bg-slate-200 dark:bg-slate-800 rounded-lg" />
@@ -610,18 +606,7 @@ export function OHWorkspace({
       </header>
 
       </div>
-      <OHAnalysis end={today} />
       <div className={s.workspace}>
-      {/* Info notice */}
-      <div className={s.notice}>
-        <Database size={18} />
-        <p>
-          <strong>Ghi nhận OH lũy kế.</strong> Mỗi mã được tính một lần/ngày, giữ lại dù sau đó hub nhận về hoặc đổi
-          trạng thái. Khóa khử trùng và mã đơn chi tiết được lưu 7 ngày gần nhất (hôm nay và 6 ngày trước). Qua thời hạn này,
-          danh sách mã đơn được giải phóng; thống kê pivot tổng hợp vẫn được bảo lưu.
-        </p>
-      </div>
-
       {/* Date Range Toolbar */}
       <form
         id="onhold-details"
@@ -651,9 +636,9 @@ export function OHWorkspace({
             required
           />
         </label>
-        <button disabled={busy} type="submit">
+        <button disabled={busy} type="submit" title={error || undefined}>
           <RefreshCw size={16} className={busy ? s.spinning : undefined} />
-          {busy ? "Đang tải…" : "Áp dụng / làm mới"}
+          {busy ? "Đang tải…" : error ? "Thử lại" : "Áp dụng / làm mới"}
         </button>
         <button
           type="button"
@@ -667,19 +652,13 @@ export function OHWorkspace({
         </button>
       </form>
 
-      {error && (
-        <div className={s.error} role="alert">
-          {error}
-        </div>
-      )}
-
       {/* Daily Overview Bar */}
       <section className={s.daily}>
         <div>
           <div className={s.eyebrow}>LŨY KẾ MÃ ĐƠN TRONG NGÀY</div>
           <h2>Toàn cảnh khu vực</h2>
           <p>
-            {report
+            {error ? "Chưa cập nhật được dữ liệu." : report
               ? `Cập nhật: ${timeLabel(report.fetched_at)} · ${
                   cumulative
                     ? `${report.scan_count ?? 0} lần quét · +${number(

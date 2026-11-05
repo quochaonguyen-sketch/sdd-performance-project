@@ -1,7 +1,7 @@
 .workspace{--ink:var(--color-ink);--muted:var(--color-muted);--line:var(--color-rule);--surface:var(--color-paper);--soft:var(--color-paper-2);color:var(--ink);max-width:1680px;margin:auto;padding:28px;display:grid;gap:22px;background:var(--soft);min-width:0}
 .header,.daily,.panelTitle{display:flex;align-items:center;justify-content:space-between;gap:16px}.eyebrow{font-size:11px;letter-spacing:.12em;font-weight:750;display:flex;align-items:center;gap:7px;color:var(--muted)}
 .workspace h1{font-size:32px;font-weight:760;letter-spacing:-.035em;margin:8px 0}.workspace h1 span{display:inline-block;font-size:13px;letter-spacing:0;color:#9a3412;background:var(--color-warning-soft);padding:5px 9px;border-radius:var(--radius-control);margin-left:12px;vertical-align:middle}.workspace h2{font-size:18px;font-weight:720;margin:3px 0}.workspace h3{font-size:19px;font-weight:700}.workspace p{font-size:13px;line-height:1.65;margin:0;color:var(--muted)}
-.sourceLink,.empty a{display:inline-flex;gap:8px;align-items:center;color:var(--color-accent);font-size:13px;font-weight:650}.notice{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--color-accent);border-radius:10px;padding:14px 18px}.notice svg{flex-shrink:0;margin-top:3px;color:var(--color-accent)}.notice strong{color:var(--ink)}
+.sourceLink,.empty a{display:inline-flex;gap:8px;align-items:center;color:var(--color-accent);font-size:13px;font-weight:650}
 
 /* Toolbar & Date Range */
 .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:end;padding:18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-panel)}
@@ -140,7 +140,6 @@
 .empty{padding:44px 20px;text-align:center;border:1px dashed var(--color-rule-strong);border-radius:var(--radius-panel);background:var(--surface);display:grid;justify-items:center;gap:10px}
 .empty svg{color:var(--color-muted)}
 .empty a{margin-top:8px;min-height:44px}
-.error{background:var(--color-error-soft);border:1px solid color-mix(in srgb, var(--color-error) 28%, var(--color-rule));color:var(--color-error);padding:14px;border-radius:9px;font-size:13px}
 .toastSuccess{position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;gap:10px;background:var(--color-success);color:var(--color-success-soft);padding:12px 20px;border-radius:10px;box-shadow:0 10px 25px -5px rgba(0,0,0,.3);font-size:13px;font-weight:600;animation:slideUp .2s ease-out}
 @keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
 .srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
@@ -167,7 +166,7 @@
 /* Dark Theme */
 :global(.dark) .workspace{--ink:var(--color-ink);--muted:var(--color-muted);--line:var(--color-rule);--surface:var(--color-paper);--soft:var(--color-paper-2)}
 :global(.dark) .area span{color:color-mix(in srgb,var(--area-color),white 40%)}
-:global(.dark) .notice strong{color:var(--color-muted)}
+
 :global(.dark) .sourceLink,:global(.dark) .empty a{color:var(--color-accent)}
 :global(.dark) .workspace th button[aria-pressed=true]{background:var(--color-accent-soft);color:var(--color-accent)}
 :global(.dark) .workspace input,:global(.dark) .workspace select{color-scheme:dark}
@@ -215,8 +214,8 @@
   .panel{padding:16px}
   .hourGrid{grid-template-columns:repeat(4,1fr)}
   .panelTitle{align-items:flex-start}
-  .notice{padding:12px}
-  .notice p{font-size:12px}
+
+
   .rankToolbar{flex-direction:column;align-items:stretch}
 }
 @media(prefers-reduced-motion:reduce){.workspace *{animation:none!important;transition:none!important}}
