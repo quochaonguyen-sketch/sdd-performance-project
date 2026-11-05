@@ -484,16 +484,15 @@ export function OvernightHoldsView({ initialDay }: { initialDay: string }) {
   return (
     <div className={s.container}>
       {/* Header */}
-      <div className={s.header}>
+      <div className={`ops-page-header ${s.header}`}>
         <div className={s.titleArea}>
-          <span className={s.eyebrow}><Moon size={15} aria-hidden="true"/> SDD OPERATIONS <span>/</span> MORNING FOLLOW-UP</span>
           <h1>Giữ hàng qua đêm<span className={s.cutoffBadge}>Chốt 23:00</span></h1>
           <p>
-            Danh sách chốt 23h gồm cả đơn từ nhiều ngày trước còn trên rider. Theo dõi và xử lý trong ca sáng.
+            Gồm đơn các ngày trước còn trên rider tại 23:00.
           </p>
         </div>
 
-        <div className={s.actions}>
+        <div className={`ops-page-actions ${s.actions}`}>
           <label className={s.dateField}><span>Ngày chốt 23h</span><input
             type="date"
             aria-label="Ngày chốt danh sách 23h"

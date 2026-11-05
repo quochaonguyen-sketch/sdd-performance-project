@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Play, Square, Server, RefreshCw, ArrowUpRight, Clock3, Database, Loader2, CheckCircle2, CircleAlert, Layers3, History, Search, KeyRound, ChevronDown } from "lucide-react";
+import { Play, Square, Server, RefreshCw, ArrowUpRight, Clock3, Loader2, CheckCircle2, CircleAlert, Layers3, History, Search, KeyRound, ChevronDown } from "lucide-react";
 import { DATA_SOURCES, vietnamDay, type DataSourceId } from "@/lib/data-sources/catalog";
 import { jobDurationMs, sourceFailureRate } from "@/lib/data-sources/metrics";
 import { SourceSchedule, type SourceScheduleSetting } from "./source-schedule";
@@ -41,8 +41,8 @@ export function DataSourcesView(){
     const job=latestJob(source.id);
     return (!query.trim()||fold(`${source.name} ${source.description} ${source.id}`).includes(fold(query.trim())))&&(filter==='all'||filter==='running'&&job&&active(job)||filter==='failed'&&job?.status==='FAILED');
   })??[];
-  return <div className="data-sources-page space-y-6 p-4 md:p-7">
-    <header className="ds-page-heading"><div><span className="ds-eyebrow"><Database size={14} aria-hidden="true"/> VẬN HÀNH DỮ LIỆU</span><h1>Điều khiển nguồn dữ liệu</h1><p>Theo dõi đồng bộ, hiệu suất và lịch chạy trong một màn hình.</p></div><button type="button" onClick={()=>void load()} className="ds-refresh"><RefreshCw size={15} aria-hidden="true"/>Làm mới</button></header>
+  return <div className="data-sources-page space-y-3">
+    <header className="ds-page-heading ops-page-header"><div><h1>Nguồn dữ liệu</h1></div><button type="button" onClick={()=>void load()} className="ds-refresh"><RefreshCw size={15} aria-hidden="true"/>Làm mới</button></header>
     <div className="ds-worker-strip" data-connected={!!workers.length}><Server size={18} aria-hidden="true"/><div><strong>{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</strong><p>{workers.length?workers.map(w=>`${w.hostname} · ${w.concurrency} nguồn song song`).join(" | "):"Lệnh sẽ xếp hàng. Bật run_sources_worker.cmd trên máy chủ để nhận lệnh."}</p></div><span>{state?.jobs.filter(active).length??0} chờ / chạy · cập nhật mỗi 5 giây</span></div>
     {error&&<div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</div>}{notice&&<div role="status" className="rounded-xl bg-blue-50 p-4 text-blue-700">{notice}</div>}
     {!state&&!error&&<p className="flex gap-2"><Loader2 className="animate-spin" size={18}/>Đang tải nguồn dữ liệu…</p>}

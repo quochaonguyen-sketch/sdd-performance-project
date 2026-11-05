@@ -5,23 +5,16 @@ import { useRememberedState } from "@/components/layout/filter-memory";
 import { OPERATING_AREAS, isOperatingArea } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BarChart3,
-  ChevronDown,
-  ChevronUp,
   Download,
-  MapPin,
   RefreshCcw,
   Search,
-  Truck,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart, ChartHead, Donut, RiskStrip, ShareRow } from "@/components/lmhub-inventory/lmhub-inventory-charts";
-import { HeatLegend, Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
+import { Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
 import { formatDateTime, formatRelative, RELOAD_DEBOUNCE_MS } from "@/components/lmhub-inventory/lmhub-inventory-model";
 import { DeliveryInventoryBoard } from "./delivery-inventory-board";
 import {
@@ -60,8 +53,6 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const [heat, setHeat] = useState<HeatFilter>("all");
 
   const [areaFilter, setAreaFilter] = useRememberedState<"all" | Area>("pickup-inventory-view:areaFilter", "all");
-
-  const [showCharts, setShowCharts] = useState(false);
 
   const [queueing, setQueueing] = useState(false);
   const [waitingSnapshot, setWaitingSnapshot] = useState(false);
@@ -252,58 +243,25 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const statusLabel = PICKUP_STATUS_LABEL[status];
   const areaWards = useMemo(() => filtered.map((board) => ({ area: board.area, wards: mergeWards(board.districts, cot) })), [filtered, cot]);
   const allWards = useMemo(() => areaWards.filter(board => areaFilter === "all" || board.area === areaFilter).flatMap((board) => board.wards), [areaWards, areaFilter]);
-  const topWards = useMemo(() => {
-    const map = new Map<string, { label: string; area: Area; value: number }>();
-    for (const district of allDistricts) {
-      for (const ward of district.wards) {
-        const current = map.get(`${ward.area}:${ward.district}:${ward.ward}`) ?? { label: `${ward.area} · ${ward.ward}`, area: ward.area, value: 0 };
-        current.value += visibleTotal(ward, cot);
-        map.set(`${ward.area}:${ward.district}:${ward.ward}`, current);
-      }
-    }
-    return [...map.values()].filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 10);
-  }, [allDistricts, cot]);
 
   useSupabaseRealtime({ table: "pickup_48h_no_api2", onChange: scheduleLoad, debounceMs: 1500 });
-
-  const clearFilters = () => {
-    setAreaFilter("all");
-    setQuery("");
-    setCot("all");
-    setHeat("all");
-  };
 
   return (
     <div className="pickup-inventory-page delivery-inventory-page pickup-workspace" data-area={areaFilter}>
       {/* Top Header Command Bar */}
-      <header className="pickup-workspace-header">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[var(--area-deep)]">
-            <MapPin size={14} aria-hidden="true" />
-            <span>VẬN HÀNH LẤY HÀNG</span>
-          </div>
+      <header className="pickup-workspace-header ops-page-header">
+        <div className="min-w-0 ops-page-heading">
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
             Pickup Backlog
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Theo dõi tồn theo khu vực → quận/huyện → phường và theo rider.
-          </p>
-        </div>
-
-        <div className="pickup-header-actions">
-          <div className="pickup-snapshot">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Dữ liệu cập nhật</p>
+          <div className="pickup-snapshot ops-page-timestamp">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cập nhật</p>
             <p className="font-mono text-sm font-bold text-slate-800">{formatDateTime(snapshotAt)}</p>
             <p className="text-[11px] text-slate-400">{formatRelative(snapshotAt)}</p>
           </div>
+        </div>
 
-          <Link
-            href="/inventory-delivery"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-blue-700"
-          >
-            <Truck size={15} />
-            <span>Tồn delivery</span>
-          </Link>
+        <div className="pickup-header-actions ops-page-actions">
 
           <Button
             type="button"
@@ -313,7 +271,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
             className="rounded-xl text-xs font-bold shadow-sm"
           >
             <RefreshCcw size={15} className={loading || refreshing ? "animate-spin" : undefined} />
-            <span>{refreshing ? "Đang tải..." : "Làm mới bảng"}</span>
+            <span>{refreshing ? "Đang tải..." : "Làm mới"}</span>
           </Button>
 
           {canQueue ? (
@@ -455,15 +413,6 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
 
         </>}
 
-        <button type="button" onClick={clearFilters} className="pickup-reset">Đặt lại</button>
-        <details className="relative text-xs text-slate-500">
-          <summary className="cursor-pointer select-none rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-600 hover:bg-slate-50">
-            Chú thích màu
-          </summary>
-          <div className="absolute right-0 z-30 mt-1 min-w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-            <HeatLegend />
-          </div>
-        </details>
       </div>
 
       </section>
@@ -489,65 +438,6 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
       )}
 
       </>}
-      {section === "zones" && <div className="pickup-analysis">      {/* Collapsible Analytics Charts */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <button
-          type="button"
-          onClick={() => setShowCharts((v) => !v)}
-          className="flex w-full items-center justify-between px-5 py-3.5 text-left text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
-        >
-          <div className="flex items-center gap-2">
-            <BarChart3 size={16} className="text-blue-600" />
-            <span>Biểu đồ phân tích cơ cấu & rủi ro địa bàn</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-slate-500">
-            <span>{showCharts ? "Thu gọn biểu đồ" : "Xem chi tiết biểu đồ"}</span>
-            {showCharts ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </div>
-        </button>
-
-        {showCharts ? (
-          <div className="grid grid-cols-1 gap-4 border-t border-slate-100 p-5 xl:grid-cols-12">
-            <article className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 xl:col-span-4">
-              <ChartHead title="Cơ cấu khu vực" caption={`${statusLabel} theo KV và COT đơn`} />
-              <div className="flex items-center gap-5 px-5 pb-5">
-                <Donut values={boards.map((board) => board.total)} />
-                <div className="min-w-0 flex-1 space-y-3">
-                  {boards.map((board) => (
-                    <ShareRow
-                      key={board.area}
-                      label={board.area}
-                      value={board.total}
-                      total={analytics.visible}
-                      tone="var(--area-color)"
-                    />
-                  ))}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <MiniMetric label="COT 1" value={analytics.cot1} />
-                    <MiniMetric label="COT 2" value={analytics.cot2} />
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <article className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 xl:col-span-8">
-              <ChartHead title="Áp lực theo phường" caption={`Top phường còn ${statusLabel}`} />
-              <div className="px-5 pb-5">
-                <BarChart rows={topWards} />
-              </div>
-            </article>
-
-            <article className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 xl:col-span-12">
-              <ChartHead title="Phổ rủi ro phường" caption="Hết tồn / ít / vừa / cao / đỏ" />
-              <div className="px-5 pb-5">
-                <RiskStrip bins={analytics.heatBins} />
-              </div>
-            </article>
-          </div>
-        ) : null}
-      </section>
-
-</div>}
       {orderScope && <PickupOrderDialog scope={orderScope} onClose={() => setOrderScope(null)}/>}
     </div>
   );
@@ -601,14 +491,5 @@ function StatTile({
       <p className={"mt-1 font-mono text-3xl font-black tracking-tight " + tone}>{value.toLocaleString("vi-VN")}</p>
       <p className="mt-1 text-xs text-slate-500">{hint}</p>
     </article>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-2.5 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 font-mono text-sm font-black text-slate-800">{value.toLocaleString("vi-VN")}</p>
-    </div>
   );
 }

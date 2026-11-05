@@ -77,11 +77,9 @@ export function DeliveryVolumeDashboard({
   const isAverage = viewMode !== "day";
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between ops-page-header">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Tổng quan khu vực</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">Delivery Volume</h1>
-          <p className="mt-1 text-sm text-slate-500">Tổng lượng đơn theo ngày, quận/huyện và phường/xã.</p>
         </div>
         <VolumeNavigation />
       </header>

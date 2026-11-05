@@ -127,11 +127,9 @@ export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between ops-page-header">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Vận hành rider</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Chấm công · Theo tuần</h1>
-          <p className="mt-1 text-sm text-slate-500">Theo dõi quân số đi làm và OFF trong toàn bộ tuần vận hành.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">{actions}</div>
       </header>

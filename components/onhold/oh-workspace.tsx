@@ -4,7 +4,6 @@ import { useRememberedState } from "@/components/layout/filter-memory";
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import {
-  BarChart3,
   Download,
   RefreshCw,
   Database,
@@ -488,15 +487,11 @@ export function OHWorkspace({
   if (loading) {
     return (
       <div className={s.workspace} aria-busy="true" aria-label="Đang tải phân tích Onhold">
-        <header className={s.header}>
+        <header className={`ops-page-header ${s.header}`}>
           <div>
-            <div className={s.eyebrow}>
-              <BarChart3 size={16} /> DELIVERY INTELLIGENCE
-            </div>
             <h1>
               Phân tích Onhold<span>OH</span>
             </h1>
-            <p>Theo dõi áp lực OH theo khu vực, quận, phường, lý do và thời điểm.</p>
           </div>
           <Link className={s.sourceLink} href="/data-sources">
             Quản lý nguồn dữ liệu <ArrowUpRight size={16} />
@@ -603,15 +598,11 @@ export function OHWorkspace({
     <div className={s.page}>
       <div className={s.workspace}>
       {/* Header */}
-      <header className={s.header}>
+      <header className={`ops-page-header ${s.header}`}>
         <div>
-          <div className={s.eyebrow}>
-            <BarChart3 size={16} /> DELIVERY INTELLIGENCE
-          </div>
           <h1>
             Phân tích Onhold<span>OH</span>
           </h1>
-          <p>Theo dõi áp lực OH theo khu vực, quận, phường, lý do và thời điểm.</p>
         </div>
         <Link className={s.sourceLink} href="/data-sources">
           Quản lý nguồn dữ liệu <ArrowUpRight size={16} />
@@ -621,7 +612,6 @@ export function OHWorkspace({
       </div>
       <OHAnalysis end={today} />
       <div className={s.workspace}>
-
       {/* Info notice */}
       <div className={s.notice}>
         <Database size={18} />

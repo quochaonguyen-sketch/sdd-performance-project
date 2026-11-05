@@ -54,7 +54,7 @@ export function RouteSheetView() {
   }
 
   return <div className="mx-auto max-w-[1500px] space-y-5">
-    <header><p className="text-xs font-bold uppercase tracking-widest text-blue-700">Quản lý tuyến</p><h1 className="mt-1 text-2xl font-bold">Excel / Google Sheet</h1><p className="mt-2 text-sm text-slate-600">Chỉnh tuyến rider, COT, KV, phường giao / lấy và tuyến PUP trong cùng một file.</p></header>
+    <header className="ops-page-header"><h1 className="mt-1 text-2xl font-bold">Quản lý tuyến · Excel / Sheets</h1></header>
     <section className="grid gap-4 lg:grid-cols-3">
       <div className="rounded-xl border bg-white p-5"><h2 className="font-bold">1. Lấy dữ liệu đang dùng</h2><p className="my-3 text-sm text-slate-600">Tải dữ liệu web để có đúng mã rider và mã phân công. File mẫu có danh mục chọn và ví dụ điền.</p><div className="flex flex-wrap gap-2"><a className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold" href="/templates/SDD_Quan_ly_tuyen.xlsx"><FileSpreadsheet size={16} />File mẫu Excel</a><a className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold" href="/api/operations-sheet?download=data"><Download size={16} />Dữ liệu web</a></div></div>
       <div className="rounded-xl border bg-white p-5"><h2 className="font-bold">2. Chỉnh trong Excel hoặc Sheets</h2><p className="mt-3 text-sm text-slate-600">Giữ nguyên tên tab và hàng tiêu đề. Ô trống giữ giá trị đang có; nhập <code>[XOA]</code> để xóa trường tuyến tùy chọn. Dòng bị xóa khỏi file không xóa dữ liệu web.</p><p className="mt-2 text-sm text-slate-600">Mỗi tab tối đa 5.000 dòng. Các tab hướng dẫn, danh mục và ví dụ không được nhập vào web.</p></div>

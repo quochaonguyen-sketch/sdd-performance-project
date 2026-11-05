@@ -8,11 +8,11 @@
 .cutoffBadge { display:inline-flex; padding:5px 9px; border:1px solid var(--color-inverse-rule); border-radius:var(--radius-control); font-size:11px; font-weight:500; letter-spacing:0; color:var(--color-muted); }
 .titleArea p { margin:0; font-size:13px; line-height:1.7; color:var(--color-inverse-muted); }
 .actions { display:flex; align-items:flex-end; flex-wrap:wrap; gap:8px; flex-shrink:0; }
-.dateField { display:flex; flex-direction:column; gap:7px; font-size:11px; color:var(--color-inverse-muted); }
+.dateField { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--color-muted); }
 .dateInput { min-height:42px; width:154px; padding:8px 10px; border:1px solid var(--color-inverse-rule); border-radius:var(--radius-control); background:var(--color-graphite); color:var(--color-graphite-ink); font:inherit; font-size:13px; color-scheme:dark; }
 .actions .primaryAction,.actions .secondaryAction { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:42px; padding:10px 13px; border-radius:var(--radius-control); font-size:12px; font-weight:600; cursor:pointer; }
-.actions .primaryAction { background:var(--color-graphite-ink); color:var(--color-graphite); border:1px solid var(--color-graphite-ink); }
-.actions .secondaryAction { background:transparent; color:var(--color-muted); border:1px solid var(--color-inverse-rule); }
+.actions .primaryAction { background:var(--color-accent); color:var(--color-accent-ink); border:1px solid var(--color-accent); }
+.actions .secondaryAction { background:var(--color-paper); color:var(--color-ink-2); border:1px solid var(--color-rule-strong); }
 .actions button:disabled { opacity:.45; cursor:not-allowed; }
 .snapshotStatus { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border:1px solid var(--color-rule); border-radius:9px; color:var(--color-ink-2); font-size:12px; line-height:1.6; background:var(--color-paper); }
 .snapshotStatus[data-state="pending"] { border-color:color-mix(in srgb, var(--color-warning) 28%, var(--color-rule)); background:color-mix(in srgb,var(--color-paper) 95%,var(--color-warning)); }

@@ -91,9 +91,9 @@ export function NotesView() {
   }
 
   return <div className={styles.page}>
-    <header className={styles.header}>
-      <div><p className={styles.eyebrow}>Private workspace · only you</p><h1>My notes</h1><p>Ghi nhanh, lưu rõ và quay lại đúng việc bạn đang xử lý.</p></div>
-      <div className={styles.headerActions}><Button type="button" variant="outline" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} className={loading ? styles.spin : undefined} />Làm mới</Button><Button type="button" onClick={startNew}><Plus size={16} />Note mới</Button></div>
+    <header className={`ops-page-header ${styles.header}`}>
+      <div><h1>My notes</h1></div>
+      <div className={`ops-page-actions ${styles.headerActions}`}><Button type="button" variant="outline" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} className={loading ? styles.spin : undefined} />Làm mới</Button><Button type="button" onClick={startNew}><Plus size={16} />Note mới</Button></div>
     </header>
 
     <section className={styles.stats} aria-label="Tóm tắt note cá nhân"><Metric label="Đang dùng" value={stats.active} /><Metric label="Đã ghim" value={stats.pinned} /><Metric label="Lưu trữ" value={stats.archived} /></section>

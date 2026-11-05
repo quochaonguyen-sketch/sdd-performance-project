@@ -617,16 +617,14 @@ export function RidersView({
 
   return (
     <div className={cn("riders-workbench mx-auto max-w-[1600px]", directoryStyles.page)}>
-      <header className="riders-command-header">
+      <header className="riders-command-header ops-page-header">
         <div className="riders-command-title">
           <div className="flex min-w-0 items-center gap-3">
             <span className="riders-command-mark">
               <Bike size={21} />
             </span>
             <div className="min-w-0">
-              <span className={directoryStyles.eyebrow}>SDD OPERATIONS / PEOPLE</span>
               <h1>Rider Directory</h1>
-              <p>Hiểu đội ngũ theo địa bàn. Tìm đúng rider, quản lý đúng khu vực.</p>
             </div>
           </div>
           <div className="riders-live-readout" aria-live="polite">
@@ -634,7 +632,7 @@ export function RidersView({
             {loading ? "Đang nạp dữ liệu" : `${formatNumber(registry.total)} / ${formatNumber(stats.total)} rider`}
           </div>
         </div>
-        <div className="riders-command-actions">
+        <div className="riders-command-actions ops-page-actions">
           {canManageRiders ? <>
             <input
               ref={fileInputRef}

@@ -201,7 +201,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between ops-page-header">
         <div className="flex items-start gap-3">
           <Link
             href={`/attendance?month=${month}`}
@@ -210,7 +210,6 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
             <ArrowLeft size={19} />
           </Link>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Lịch cá nhân</p>
             <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">
               {rider?.full_name ?? (loading ? "Đang tải rider..." : "Rider")}
             </h1>
@@ -218,7 +217,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ops-page-actions">
           <Button
             type="button"
             variant="secondary"

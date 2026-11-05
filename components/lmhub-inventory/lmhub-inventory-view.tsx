@@ -5,7 +5,7 @@ import { useRememberedState } from "@/components/layout/filter-memory";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { Select } from "@/components/ui/select";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, MapPin, PackageCheck, RefreshCcw, Search, Truck, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, MapPin, RefreshCcw, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { BarChart, ChartHead, RiskStrip } from "@/components/lmhub-inventory/lmhub-inventory-charts";
 import { HeatLegend, Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
 import { DeliveryInventoryBoard } from "@/components/lmhub-inventory/delivery-inventory-board";
-import { DeliveryBacklogReport } from "@/components/lmhub-inventory/delivery-backlog-report";
 import "./delivery-inventory.css";
 import {
   COLUMNS,
@@ -235,24 +234,22 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
 
   return (
     <div className="dashboard-control delivery-inventory-page mx-auto max-w-[1680px] space-y-4" data-area={areaFilter}>
-      <header className="delivery-page-header flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
-        <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-600">Trung tâm điều hành · Giao hàng</p>
+      <header className="delivery-page-header flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 ops-page-header">
+        <div className="min-w-0 ops-page-heading">
           <h1 className="text-xl font-bold text-slate-900">Tồn Delivery</h1>
-          <p className="mt-1 text-xs text-slate-500">Theo dõi tồn theo địa bàn, xác định phường cần ưu tiên xử lý.</p>
-        </div>
-        <div className="dashboard-command-actions">
-          <div className="min-w-[150px] px-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">Cập nhật gần nhất</p>
+          <div className="ops-page-timestamp">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">Cập nhật</p>
             <p className="font-mono text-xs font-semibold text-[var(--color-ink)]">{formatDateTime(snapshotAt)}</p>
           </div>
-          <Button type="button" variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => void load()} disabled={loading}>
+        </div>
+        <div className="dashboard-command-actions ops-page-actions">
+          <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
             <RefreshCcw size={16} className={loading ? "animate-spin" : undefined} /><span>Làm mới</span>
           </Button>
           {canQueue ? (
-            <Button type="button" className="h-7 px-2 text-[11px]" onClick={() => void queueLmhub()} disabled={queueing || waitingSnapshot}>
+            <Button type="button" onClick={() => void queueLmhub()} disabled={queueing || waitingSnapshot}>
               <Download size={16} className={queueing || waitingSnapshot ? "animate-pulse" : undefined} />
-              <span>{queueing ? "Đang gửi yêu cầu..." : waitingSnapshot ? "Đang cập nhật dữ liệu" : "Lấy dữ liệu mới"}</span>
+              <span>{queueing ? "Đang gửi…" : waitingSnapshot ? "Đang đồng bộ…" : "Đồng bộ SPX"}</span>
             </Button>
           ) : null}
         </div>
@@ -312,12 +309,6 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
         </div>
       </section>
 
-      <section aria-label="Số liệu trong phạm vi đang hiển thị" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Tổng tồn đang hiển thị" value={analytics.visible} hint="Theo địa bàn và bộ lọc bên dưới" accent="ink" />
-        <StatTile label="COT 1" value={analytics.cot1} hint={cot === "cot2" ? "Đang ẩn bởi bộ lọc COT" : "Đơn COT 1 trong kết quả"} accent="blue" />
-        <StatTile label="COT 2" value={analytics.cot2} hint={cot === "cot1" ? "Đang ẩn bởi bộ lọc COT" : "Đơn COT 2 trong kết quả"} accent="teal" />
-        <StatTile label="Phường cần ưu tiên" value={analytics.hotWards} hint="Từ 36 đơn theo COT đang chọn" accent={analytics.hotWards ? "red" : "green"} />
-      </section>
       <div className="flex flex-wrap items-center gap-2">
         <span className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
@@ -328,8 +319,6 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
         <details className="relative text-[11px] text-slate-500"><summary className="cursor-pointer py-1">Chú thích màu</summary><div className="absolute right-0 z-20 mt-1 min-w-60 rounded-lg border border-slate-200 bg-white p-2 shadow-sm"><HeatLegend /></div></details>
       </div>
 
-      <DeliveryBacklogReport districts={filtered} cot={cot} snapshotAt={snapshotAt} disabled={loading || !!error}
-        scope={[scopeLabel, cot === "all" ? "COT 1 + COT 2" : cot === "cot1" ? "COT 1" : "COT 2", query.trim() ? `Tìm: ${query.trim()}` : "", heat === "hot" ? "Chỉ phường đỏ" : ""].filter(Boolean).join(" · ")} />
       {error ? <div role="alert" className="dashboard-error">{error}</div> : null}
       {loading && !rows.length ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -443,20 +432,6 @@ function DeliveryOrderDialog({
         </div>
       </div>
     </section></dialog>
-  );
-}
-
-function StatTile({ label, value, hint, accent }: { label: string; value: number; hint: string; accent: "ink" | "blue" | "teal" | "red" | "green" }) {
-  const tone = { ink: "text-[var(--color-ink)]", blue: "text-[var(--color-accent)]", teal: "text-[var(--color-success)]", red: "text-[var(--color-error)]", green: "text-[var(--color-success)]" }[accent];
-  return (
-    <article data-accent={accent} className="delivery-stat rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] px-4 py-3">
-      <div className="flex items-center justify-between gap-1">
-        <p className="text-[10px] font-semibold text-[var(--color-muted)]">{label}</p>
-        {accent === "blue" ? <Truck size={15} className="text-[var(--color-accent)]" /> : accent === "red" ? <MapPin size={15} className="text-[var(--color-error)]" /> : <PackageCheck size={15} className="text-[var(--color-muted)]" />}
-      </div>
-      <p className={"font-mono text-xl font-bold leading-6 tracking-tight " + tone}>{value.toLocaleString("vi-VN")}</p>
-      <p className="text-[10px] leading-3 text-[var(--color-muted)]">{hint}</p>
-    </article>
   );
 }
 

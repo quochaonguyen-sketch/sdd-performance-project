@@ -720,14 +720,11 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between ops-page-header">
         <div>
           <h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Chấm công rider</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Theo dõi quân số, tình trạng đi làm và lịch nghỉ theo ngày.
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 ops-page-actions">
           <input
             ref={fileInputRef}
             type="file"

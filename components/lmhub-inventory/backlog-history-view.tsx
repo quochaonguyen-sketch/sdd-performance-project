@@ -81,9 +81,9 @@ export function BacklogHistoryView({ initialSource="pickup" }: {initialSource?:B
   function selectHour(h:number){const point=current?.hours[h];if(point?.snapshot_id)setSelection({before:"auto",after:point.snapshot_id});}
   function reset(){setSelection({before:"auto",after:"auto"});}
   return <div className={styles.page}>
-    <header className={styles.header}>
-      <div><p className={styles.eyebrow}>SDD OPERATIONS / HISTORY</p><h1>Backlog History</h1><p>Đối chiếu các mốc tồn. Nhận diện địa bàn tăng tồn và theo dõi tiến độ xử lý.</p></div>
-      <div className={styles.headerActions}><Link href={source==="pickup"?"/lmhub-inventory":"/inventory-delivery"}>Xem tồn hiện tại<ArrowUpRight size={15} aria-hidden="true"/></Link><button type="button" disabled={loading} onClick={()=>setVersion(v=>v+1)}><RefreshCcw size={15} aria-hidden="true" className={loading?styles.spinning:undefined}/>{loading?"Đang tải…":"Làm mới"}</button></div>
+    <header className={`ops-page-header ${styles.header}`}>
+      <div><h1>Backlog History</h1></div>
+      <div className={`ops-page-actions ${styles.headerActions}`}><Link href={source==="pickup"?"/lmhub-inventory":"/inventory-delivery"}>Xem tồn hiện tại<ArrowUpRight size={15} aria-hidden="true"/></Link><button type="button" disabled={loading} onClick={()=>setVersion(v=>v+1)}><RefreshCcw size={15} aria-hidden="true" className={loading?styles.spinning:undefined}/>{loading?"Đang tải…":"Làm mới"}</button></div>
     </header>
     <div className={styles.toolbar}>
       <span className={styles.filterTitle}><History size={17} aria-hidden="true"/>Phạm vi phân tích</span>

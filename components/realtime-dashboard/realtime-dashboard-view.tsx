@@ -170,14 +170,12 @@ export function RealtimeDashboardView() {
 
   return (
     <div className="dashboard-control realtime-premium mx-auto max-w-[1600px] space-y-6">
-      <header className="rt-command">
+      <header className="rt-command ops-page-header">
         <div className="rt-command-main">
-          <div className="rt-eyebrow"><Activity size={14} />SDD OPERATIONS<span>DELIVERY</span></div>
           <h1>Toàn cảnh giao hàng<span>.</span></h1>
-          <p>Theo sát tiến độ. Nhận diện điểm nghẽn. Điều phối kịp thời.</p>
           <div className="rt-command-meta"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span>Tất cả rider nguồn Delivery</span>{workDate ? <span>Ngày {workDate.split("-").reverse().join("/")}</span> : null}</div>
         </div>
-        <div className="rt-command-side">
+        <div className="rt-command-side ops-page-actions">
           <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : undefined} />Làm mới dữ liệu</Button>
           <div className="rt-hero-progress"><div><span>Tiến độ toàn đội</span><strong>{loading ? "—" : `${totals.assigned ? Math.round(totals.delivered / totals.assigned * 100) : 0}%`}</strong></div><p>{loading ? "Đang tải dữ liệu" : `${totals.delivered.toLocaleString("vi-VN")} / ${totals.assigned.toLocaleString("vi-VN")} đơn đã giao`}</p></div>
         </div>
@@ -200,9 +198,7 @@ export function RealtimeDashboardView() {
       <section aria-labelledby="district-bento-heading" className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2"><span className="font-mono text-xs font-bold tracking-[0.12em] text-[var(--color-accent)]">PHÂN VÙNG VẬN HÀNH</span><span className="h-px w-8 bg-[var(--color-rule-strong)]" aria-hidden="true" /></div>
-            <h2 id="district-bento-heading" className="mt-1 text-base font-bold tracking-tight text-[var(--color-ink)]">Vận hành theo khu vực</h2>
-            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">Chọn khu vực để xem các quận, chọn quận để theo dõi đội rider.</p>
+            <h2 id="district-bento-heading" className="text-base font-bold tracking-tight text-[var(--color-ink)]">Vận hành theo khu vực</h2>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-[var(--color-error)]" />Cảnh báo</span>
@@ -230,9 +226,8 @@ export function RealtimeDashboardView() {
             {kvFilter !== "all" && visibleDistricts.length === 0 ? (
               <p className="col-span-12 rounded-xl border border-dashed border-[var(--color-rule)] bg-[var(--color-paper)] p-6 text-center text-sm text-[var(--color-muted)]">Không có quận nào trong {kvFilter}.</p>
             ) : null}
-            {visibleDistricts.map((d, idx) => {
-              const isLarge = idx < 2;
-              return <DistrictBentoCard key={d.key} district={d} large={isLarge} active={activeDistrict === d.key} onSelect={() => { setActiveDistrict((cur) => cur === d.key ? null : d.key); setZone("all"); setPage(1); }} />;
+            {visibleDistricts.map((d) => {
+              return <DistrictBentoCard key={d.key} district={d} active={activeDistrict === d.key} onSelect={() => { setActiveDistrict((cur) => cur === d.key ? null : d.key); setZone("all"); setPage(1); }} />;
             })}
             </div>
           </div>
@@ -279,7 +274,6 @@ function KvBentoTile({ kv, detail, active, onSelect, loading = false }: { kv: st
   const pct = detail ? Math.min(100, detail.rate) : 0;
   return <button type="button" onClick={onSelect} disabled={loading} aria-busy={loading} aria-pressed={active} data-area={kv} className={cn("rt-area-card", active && "is-selected")}>
     <div className="rt-area-top"><span className="rt-area-code">{kv}</span><ChevronRight size={16} /></div>
-    <h3>{kv.startsWith("KV") ? `Khu vực ${kv.slice(2)}` : kv}</h3>
     <p className="rt-area-riders"><UsersRound size={13} />{loading ? "Đang tải rider…" : detail ? `${detail.riders.length.toLocaleString("vi-VN")} rider` : "Chưa có rider"}</p>
     <div className="rt-area-progress"><strong>{loading ? "—" : pct}<small>%</small></strong><span>đã giao</span></div>
     <div className="rt-area-track" role="progressbar" aria-label={`Tiến độ ${kv}`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
@@ -288,7 +282,7 @@ function KvBentoTile({ kv, detail, active, onSelect, loading = false }: { kv: st
   </button>;
 }
 
-function DistrictBentoCard({ district, large, active, onSelect }: { district: DistrictDetail; large: boolean; active: boolean; onSelect: () => void }) {
+function DistrictBentoCard({ district, active, onSelect }: { district: DistrictDetail; active: boolean; onSelect: () => void }) {
   const pct = district.totalAssigned ? Math.round((district.delivered / district.totalAssigned) * 100) : 0;
   const failurePct = district.totalAssigned ? Math.round((district.failed / district.totalAssigned) * 100) : 0;
   const topWarnings = district.riders.filter((r) => r.status === "warning").slice(0, 2);
@@ -300,9 +294,9 @@ function DistrictBentoCard({ district, large, active, onSelect }: { district: Di
       aria-pressed={active}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
       className={cn(
-        "group relative flex min-h-[168px] cursor-pointer flex-col rounded-xl border bg-[var(--color-paper)] p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]",
+        "group relative flex min-w-0 cursor-pointer flex-col rounded-xl border bg-[var(--color-paper)] p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]",
         active ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] shadow-md" : "border-[var(--color-rule)] hover:border-[var(--color-rule-strong)]",
-        large ? "col-span-12 md:col-span-6" : "col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3",
+        "col-span-12 sm:col-span-6 xl:col-span-4",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -313,40 +307,38 @@ function DistrictBentoCard({ district, large, active, onSelect }: { district: Di
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted)]">
             <span className="inline-flex rounded-full bg-[var(--color-paper-2)] px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wide text-[var(--color-ink-2)] ring-1 ring-[var(--color-rule)]">{district.kv}</span>
-            <span>{district.riders.length} rider</span>·<span>{district.area}</span>
+            <span>{district.riders.length} rider</span>
           </p>
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-1 font-mono text-xs font-bold tabular-nums", pct >= 80 ? "bg-[var(--color-success-soft)] text-[var(--color-success)]" : pct >= 50 ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]" : "bg-[var(--color-warning-soft)] text-[var(--color-warning)]")}>{pct}%</span>
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-2 border-y border-[var(--color-rule)] py-3">
+      <div className="mt-2 grid grid-cols-4 gap-1 border-y border-[var(--color-rule)] py-2">
         <div className="text-center"><p className="font-mono text-[10px] font-bold tracking-wide text-[var(--color-muted)]">GÁN</p><p className="mt-1 text-sm font-bold tabular-nums text-[var(--color-ink)]">{district.totalAssigned}</p></div>
         <div className="text-center border-l border-[var(--color-rule)]"><p className="font-mono text-[10px] font-bold tracking-wide text-[var(--color-muted)]">XONG</p><p className="mt-1 text-sm font-bold tabular-nums text-[var(--color-success)]">{district.delivered}</p></div>
         <div className="text-center border-l border-[var(--color-rule)]"><p className="font-mono text-[10px] font-bold tracking-wide text-[var(--color-muted)]">ĐANG</p><p className="mt-1 text-sm font-bold tabular-nums text-[var(--color-accent)]">{district.delivering}</p></div>
         <div className="text-center border-l border-[var(--color-rule)]"><p className="font-mono text-[10px] font-bold tracking-wide text-[var(--color-muted)]">LỖI</p><p className="mt-1 text-sm font-bold tabular-nums text-[var(--color-error)]">{district.failed}</p>{failurePct >= 20 ? <p className="text-[10px] font-bold text-[var(--color-error)]">{failurePct}%</p> : null}</div>
       </div>
 
-      <div className="mt-3">
-        <div className="flex items-center justify-between text-xs"><span className="font-medium text-[var(--color-muted)]">Tiến độ</span><span className="font-mono font-bold tabular-nums text-[var(--color-ink-2)]">{district.delivered}/{district.totalAssigned}</span></div>
-        <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-[var(--color-paper-3)]">
+      <div className="mt-2">
+        <div role="img" aria-label={`${district.delivered} đã giao, ${district.delivering} đang giao, ${district.failed} lỗi`} className="flex h-1 overflow-hidden rounded-full bg-[var(--color-paper-3)]">
           <div className="h-full bg-[var(--color-success)] transition-all" style={{ width: `${district.totalAssigned ? (district.delivered / district.totalAssigned) * 100 : 0}%` }} />
           <div className="h-full bg-[var(--color-accent)] transition-all" style={{ width: `${district.totalAssigned ? (district.delivering / district.totalAssigned) * 100 : 0}%` }} />
           <div className="h-full bg-[var(--color-error)] transition-all" style={{ width: `${district.totalAssigned ? (district.failed / district.totalAssigned) * 100 : 0}%` }} />
         </div>
-        <div className="mt-1 flex gap-3 text-[10px]"><span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-[var(--color-success)]" />Đã giao</span><span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-[var(--color-accent)]" />Đang giao</span><span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-[var(--color-error)]" />Lỗi</span></div>
       </div>
 
       {district.warning > 0 ? (
-        <div className="mt-3 rounded-lg bg-[var(--color-error-soft)] px-2.5 py-2">
+        <div className="mt-2 rounded-lg bg-[var(--color-error-soft)] px-2 py-1.5">
           <p className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-[var(--color-error)]"><CircleAlert size={11} />{district.warning} cảnh báo</p>
-          <ul className="mt-1.5 space-y-1">
+          <ul className="mt-1 space-y-0.5">
             {topWarnings.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 text-xs"><span className="truncate font-medium text-[var(--color-ink-2)]">{r.name}</span><span className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]">{r.delivering} đang · {formatDuration(r.idle_delivery_seconds) || "chờ"}</span></li>
             ))}
           </ul>
         </div>
       ) : district.delivering === 0 && district.totalAssigned > 0 ? (
-        <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-[var(--color-success-soft)] px-2 py-1 font-mono text-[10px] font-bold text-[var(--color-success)]"><CheckCircle2 size={11} />Hoàn tất</p>
+        <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--color-success-soft)] px-2 py-1 font-mono text-[10px] font-bold text-[var(--color-success)]"><CheckCircle2 size={11} />Hoàn tất</p>
       ) : null}
 
       <span className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-transparent group-hover:ring-[var(--color-rule-strong)]" aria-hidden="true" />

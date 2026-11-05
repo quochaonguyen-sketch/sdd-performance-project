@@ -171,16 +171,14 @@ export function PickupManagementView() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.commandHeader}>
+      <header className={`ops-page-header ${styles.commandHeader}`}>
         <div className={styles.titleBlock}>
           <span className={styles.titleIcon}><ListChecks size={20} /></span>
           <div>
-            <p className={styles.contextLine}>SDD OPERATIONS / PICKUP</p>
             <h1>Pickup Points<span className={styles.hubBadge}>Toàn hub</span></h1>
-            <p className={styles.lede}>Theo dõi shop, tuyến lấy hàng và sản lượng trung bình mỗi ngày.</p>
           </div>
         </div>
-        <div className={styles.commandActions}>
+        <div className={`ops-page-actions ${styles.commandActions}`}>
           <Button type="button" variant="secondary" onClick={refresh} disabled={loading} className={styles.actionButton}>
             <RefreshCcw size={16} className={loading ? styles.spinning : undefined} />
             Làm mới

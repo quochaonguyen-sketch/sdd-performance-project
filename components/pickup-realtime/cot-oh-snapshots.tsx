@@ -12,6 +12,14 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Mi
 const fmt = (n: number) => n.toLocaleString("vi-VN");
 
 export function CotOhSnapshots({ area }: { area: string }) {
+  const [open, setOpen] = useState(false);
+  return <details className={s.cotDisclosure} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>Chốt OH hằng ngày · COT1 13:00 / COT2 17:00</summary>
+    {open && <CotOhSnapshotContent area={area} />}
+  </details>;
+}
+
+function CotOhSnapshotContent({ area }: { area: string }) {
   const [day, setDay] = useState(today);
   const [clock, setClock] = useState(() => Date.now());
   const [result, setResult] = useState<{ day: string; snapshots: Snapshot[] } | null>(null);

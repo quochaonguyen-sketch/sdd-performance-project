@@ -76,10 +76,10 @@ export function ZonesView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 ops-page-header">
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl bg-slate-950 text-white"><Map size={21} /></span>
-          <div><h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Quản lý Zones</h1><p className="mt-0.5 text-sm text-slate-500">Quản lý địa bàn và quân số vận hành KV1–KV5.</p></div>
+          <div><h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Quản lý Zones</h1></div>
         </div>
         <Button type="button" variant="secondary" className="shrink-0 px-3" onClick={() => void load()} disabled={loading}><RefreshCcw className={loading ? "animate-spin" : ""} size={16} /><span className="hidden sm:inline">Tải lại</span></Button>
       </div>

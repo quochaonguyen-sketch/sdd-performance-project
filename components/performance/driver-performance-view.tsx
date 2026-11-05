@@ -5,7 +5,7 @@ import Link from "next/link";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, TriangleAlert,Download, PackageCheck, RefreshCcw, Search,SlidersHorizontal, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, TriangleAlert,Download, PackageCheck, RefreshCcw, Search,SlidersHorizontal, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -219,17 +219,10 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
 
 function PageHeader({filters}:{filters:PerformanceFilters}) {
   return (
-    <header className="perf-header">
+    <header className="perf-header ops-page-header">
       <div className="perf-header-top">
-        <span className="perf-mark">
-          <BarChart3 size={24} aria-hidden="true" />
-        </span>
         <div className="perf-header-copy">
-          <p className="perf-kicker">RIDER OPERATIONS / ANALYTICS</p>
           <h1 className="perf-title">Rider Performance</h1>
-          <p className="perf-desc">
-            Theo dõi sản lượng, đối chiếu COT và phân tích hiệu suất từng rider.
-          </p>
         </div>
       </div>
       <div className="perf-scope">

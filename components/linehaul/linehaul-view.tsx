@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Boxes, CheckCircle2, Clock3, MapPin, Navigation, RefreshCw, Search, Truck, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Boxes, CheckCircle2, Clock3, MapPin, Navigation, RefreshCw, Search, X } from "lucide-react";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { gpsIsStale, inTodayHistory, LH_PHASES, sortTrips, type LinehaulData, type LinehaulTrip } from "@/lib/linehaul/model";
 import styles from "./linehaul.module.css";
@@ -55,7 +55,7 @@ export function LinehaulView(){
  const hasCargo=filtered.some(trip=>trip.orders!==null||trip.bags!==null||trip.loose!==null||trip.pack_unknown||(view==="history"&&(trip.load_total!==null||trip.unloaded_units!==null)));
  const stale=!!data?.snapshotAt&&now-Date.parse(data.snapshotAt)>10*60000;
  return <div className={styles.page}>
-  <header className={styles.header}><div><span className={styles.eyebrow}><Truck size={15}/> SDD OPERATIONS / LINEHAUL</span><h1>Linehaul Management<span>Hôm nay</span></h1><p>Theo dõi xe về hub. Chủ động chuẩn bị người xuất / xả tải.</p></div><div className={styles.headerActions}><div><small>Ngày vận hành · giờ Việt Nam</small><strong>{data?.day.split("-").reverse().join("/")??"Đang tải…"}</strong></div>{data?.canRefresh?<button type="button" onClick={()=>void sync()} disabled={syncing}><RefreshCw size={15}/>{syncing?"Đang gửi…":"Đồng bộ SPX"}</button>:null}<button type="button" onClick={()=>void load()} aria-label="Đọc lại dữ liệu web"><RefreshCw size={16}/></button></div></header>
+  <header className={`ops-page-header ${styles.header}`}><div className="ops-page-heading"><h1>Linehaul Management<span>Hôm nay</span></h1><div className="ops-page-timestamp"><small>Ngày vận hành</small><strong>{data?.day.split("-").reverse().join("/")??"Đang tải…"}</strong></div></div><div className={`ops-page-actions ${styles.headerActions}`}>{data?.canRefresh?<button type="button" className="ops-page-primary-action" onClick={()=>void sync()} disabled={syncing}><RefreshCw size={15}/>{syncing?"Đang gửi…":"Đồng bộ SPX"}</button>:null}<button type="button" onClick={()=>void load()} aria-label="Đọc lại dữ liệu web"><RefreshCw size={16}/></button></div></header>
   <div className={styles.sourceStatus} data-stale={stale}><span><span className={styles.statusDot}/>{!data?.snapshotAt?"Chưa có snapshot hôm nay":stale?"Dữ liệu cần cập nhật":"Đã đồng bộ từ SPX"}{data?.snapshotAt?` · ${time(data.snapshotAt)}`:""}</span><span>Hôm nay · đã gán tài xế · hub 4232 · cập nhật mỗi 5 phút</span></div>
   {error?<p className={styles.error} role="alert">{error}</p>:null}{message?<p className={styles.notice} role="status">{message}</p>:null}
   <LinehaulSummary trips={all} day={data?.day??""} loading={loading&&!data} onSelect={setSelected}/>

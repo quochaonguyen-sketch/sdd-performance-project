@@ -134,13 +134,11 @@ export function DashboardView() {
   useDashboardSpotlight(spotlightRoot, { ready: !loading && !error, version: lastUpdated?.getTime() ?? 0, scope: range });
 
   return <div ref={spotlightRoot} className={cn("dashboard-control ops-overview ops-dashboard mx-auto max-w-[1600px] space-y-6", spotlightStyles.root)}>
-    <header className="dashboard-command-header">
+    <header className="dashboard-command-header ops-page-header">
       <div className="min-w-0">
-        <div className="dashboard-kicker">SDD · Hệ thống quản lý vận hành</div>
         <h1>Tổng quan vận hành</h1>
-        <p>Theo dõi sản lượng giao nhận và tiến độ xử lý tại Khu vực 1–5.</p>
       </div>
-      <div className="dashboard-command-actions">
+      <div className="dashboard-command-actions ops-page-actions">
         <Select value={range} onChange={(event) => setRange(event.target.value as RangeKey)} aria-label="Khoảng thời gian"><option value="today">Hôm nay</option><option value="yesterday">Hôm qua</option><option value="7d">7 ngày gần nhất</option></Select>
         <Button type="button" variant="secondary" onClick={refresh} disabled={loading}><RefreshCcw size={16} className={loading ? "animate-spin" : undefined} /><span>Làm mới</span></Button>
       </div>

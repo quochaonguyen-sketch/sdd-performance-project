@@ -288,16 +288,9 @@ export function PickupReplacementView() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
+      <header className={`ops-page-header ${styles.header}`}>
         <div className={styles.headingBlock}>
-          <div className={styles.orientation}>
-            <span className={styles.orientationMark} aria-hidden="true" />
-            Điều phối rider pick theo tuần
-          </div>
           <h1 className={styles.title}>Lịch thế pick</h1>
-          <p className={styles.lede}>
-            Chọn rider thay ngay trên ma trận ngày. Thay đổi được lưu vào Supabase và đối chiếu với Google Sheet.
-          </p>
         </div>
         <dl className={styles.weekSummary} aria-label="Tóm tắt lịch thế pick">
           <div>

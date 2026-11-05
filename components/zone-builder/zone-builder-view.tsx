@@ -321,13 +321,11 @@ export function ZoneBuilderView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between ops-page-header">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Zone drawing</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">Zone Builder KV 5,6</h1>
-          <p className="mt-1 text-sm text-slate-500">Co san Q12, Go Vap, Hoc Mon, Q2, Q3, Binh Thanh; ve them va xuat GeoJSON.</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row ops-page-actions">
           <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <FileUp size={16} />
             Import

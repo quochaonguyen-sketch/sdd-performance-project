@@ -62,8 +62,8 @@ export function FeedbackView() {
 
 
   return <div className={styles.page}>
-    <header className={styles.header}>
-      <div className={styles.headerCopy}><span className={styles.eyebrow}><span /> LẮNG NGHE ĐỂ CẢI TIẾN</span><h1>Báo lỗi <span>& góp ý.</span></h1><p>Mỗi phản hồi giúp trải nghiệm làm việc tốt hơn.<br />Gửi vấn đề bạn gặp, chúng tôi cùng bạn giải quyết.</p></div>
+    <header className={`ops-page-header ${styles.header}`}>
+      <div className={styles.headerCopy}><h1>Báo lỗi & góp ý</h1></div>
       <a className={styles.headerLink} href="#feedback-history">Theo dõi phản hồi <ArrowDown size={16} aria-hidden="true" /></a>
     </header>
     <div className={styles.overview} aria-label="Tổng quan phản hồi trên trang hiện tại">

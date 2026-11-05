@@ -68,11 +68,9 @@ export function PickupVolumeDashboard({
   }, [scoped]);
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between ops-page-header">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Volume theo địa bàn</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">Pickup Volume</h1>
-          <p className="mt-1 text-sm text-slate-500">Sản lượng theo địa chỉ seller/người gửi, COT và địa bàn lấy hàng.</p>
         </div>
         <VolumeNavigation />
       </header>

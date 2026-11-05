@@ -109,7 +109,7 @@ export function TeamView({ canEdit }: { canEdit: boolean }) {
     const a = document.createElement("a"); a.href = url; a.download = `lich-nhan-su-${range.from}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   return <div className={styles.page}>
-    <header className={styles.header}><div><p className={styles.eyebrow}>SDD · ĐỘI NGŨ VẬN HÀNH</p><h1>Nhân sự & lịch FTE</h1><p>SUP, LEAD, FTE và BPO theo khu vực · Danh bạ và lịch làm việc chung</p></div><div className={styles.actions}>
+    <header className={`ops-page-header ${styles.header}`}><div><h1>Nhân sự & lịch FTE</h1></div><div className={`ops-page-actions ${styles.actions}`}>
       <button onClick={download} disabled={loading}><Download size={16} />Xuất lịch</button>
       {canEdit && <><input ref={fileInput} type="file" accept=".csv" hidden onChange={e => { const file = e.target.files?.[0]; if (file) void importCsv(file, true); e.target.value = ""; }} /><button disabled={saving} onClick={() => fileInput.current?.click()}><Upload size={16} />Nhập CSV</button><button className={styles.primary} onClick={() => setStaffEdit(emptyStaff())}><Plus size={16} />Thêm nhân sự</button></>}
     </div></header>

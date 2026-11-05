@@ -252,11 +252,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .ops-login-access { display: grid; place-items: center; padding: 48px; border: 1px solid var(--color-rule); border-radius: 16px; background: var(--color-paper); }
 .ops-login-form { width: 100%; max-width: 350px; }
 .ops-login-form h1 { margin-top: 12px; font-size: 28px; font-weight: 500; line-height: 36px; letter-spacing: -.6px; }
-.ops-login-description { margin: 12px 0 32px; color: var(--color-muted); font-size: 14px; line-height: 23px; }
+.ops-login-description { margin: 8px 0 20px; color: var(--color-muted); font-size: 14px; line-height: 23px; }
 .ops-login-form .ops-button { height: 44px; }
 .ops-login-domain { margin-top: 16px; color: var(--color-muted); text-align: center; font-size: 12px; }
 .ops-login-domain strong { font-weight: 500; }
-.ops-login-help { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--color-rule); font-size: 12px; line-height: 21px; }
+.ops-login-help { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-rule); font-size: 12px; line-height: 21px; }
 .ops-login-help strong { font-weight: 500; }
 .ops-login-help p { margin-top: 4px; color: var(--color-muted); }
 .ops-login-error { margin-bottom: 20px; padding: 12px; border-left: 3px solid var(--color-error); background: var(--color-error-soft); color: var(--color-ink); font-size: 13px; line-height: 21px; }
@@ -318,7 +318,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   .ops-login-intro .ops-login-eyebrow { display: none; }
   .ops-login-access { padding: 36px 24px; border: 0; border-radius: 0; align-items: start; }
   .ops-login-form { max-width: 420px; }
-  .ops-login-help { margin-top: 32px; }
+  .ops-login-help { margin-top: 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ops-button, .ops-input, .app-nav-chevron { transition: none; }

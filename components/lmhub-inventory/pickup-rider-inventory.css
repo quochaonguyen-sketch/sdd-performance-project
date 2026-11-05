@@ -1,16 +1,6 @@
 .pickup-rider-workbench { display:grid; gap:14px; min-width:0; }
-.pickup-rider-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
-.pickup-rider-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; color:var(--color-muted); }
-.pickup-rider-heading h2 { margin:4px 0; font-size:21px; font-weight:650; letter-spacing:-.025em; color:var(--color-ink); }
-.pickup-rider-heading p { margin:0; font-size:12px; color:var(--color-muted); }
 .pickup-rider-export,.pickup-rider-toolbar>button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:8px 12px; border:1px solid var(--color-rule-strong); border-radius:var(--radius-control); background:var(--color-paper); color:var(--color-ink-2); font-size:12px; font-weight:500; }
 .pickup-rider-export:hover:enabled,.pickup-rider-toolbar>button:hover:enabled { color:var(--color-accent); background:var(--color-accent-soft); border-color:var(--color-accent); }
-.pickup-rider-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:0; }
-.pickup-rider-metrics>div { padding:12px 14px; background:var(--color-paper); border:1px solid var(--color-rule); border-radius:var(--radius-panel); }
-.pickup-rider-metrics>div:first-child { border-top:3px solid var(--color-accent); }
-.pickup-rider-metrics dt { font-size:12px; color:var(--color-muted); }
-.pickup-rider-metrics dd { margin:6px 0 3px; font-size:26px; font-weight:650; line-height:1.2; letter-spacing:-.04em; color:var(--color-ink); font-variant-numeric:tabular-nums; }
-.pickup-rider-metrics small { font-size:11px; color:var(--color-muted); }
 .pickup-rider-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
 .pickup-rider-toolbar>span { color:var(--color-muted); font-size:12px; }
 .pickup-rider-search { position:relative; flex:1; min-width:min(260px,100%); }
@@ -50,10 +40,6 @@
 .pickup-rider-empty :is(h3,p) { margin:0; }
 .pickup-rider-error { margin:0; padding:16px; color:var(--color-error); background:var(--color-error-soft); border-radius:var(--radius-control); }
 @media(max-width:767px) {
-  .pickup-rider-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-  .pickup-rider-metrics>div { padding:12px; }
-  .pickup-rider-metrics dd { font-size:25px; }
-  .pickup-rider-heading h2 { font-size:20px; }
   .pickup-rider-search { flex-basis:100%; }
   .pickup-rider-toolbar>button { margin-left:auto; }
   .pickup-rider-group-caption { display:none; }

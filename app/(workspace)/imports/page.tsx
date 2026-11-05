@@ -5,9 +5,8 @@ export default function ImportsPage() {
   return (
     <ProtectedPage>
       <div className="space-y-6">
-        <div>
+        <div className="ops-page-header">
           <h1 className="text-2xl font-semibold text-slate-950">Imports</h1>
-          <p className="text-sm text-slate-500">Server endpoints for Python data ingestion.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>

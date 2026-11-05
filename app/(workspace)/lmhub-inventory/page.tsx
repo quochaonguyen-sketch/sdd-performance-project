@@ -1,5 +1,4 @@
 import { ProtectedPage } from "@/components/layout/protected-page";
-import Link from "next/link";
 import { PickupInventoryView } from "@/components/lmhub-inventory/pickup-inventory-view";
 import { notFound } from "next/navigation";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
@@ -12,7 +11,6 @@ export default async function LmhubInventoryPage() {
 
   return (
     <ProtectedPage>
-      <nav className="mb-3 text-sm"><Link href="/backlog-history?source=pickup">Snapshot Pickup 11:15 / 15:30 · Xem phường còn tồn →</Link></nav>
       <PickupInventoryView canQueue={canManageOperations(context?.profile.role)} />
     </ProtectedPage>
   );

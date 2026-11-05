@@ -52,7 +52,7 @@ test('responsive cascade at 375, 768 and 1440px preserves readable inputs and wr
  const file='app/design-system.css',input='.workspace-content :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]):not([type=hidden]),select,textarea)';
  assert.equal(value(file,input,'font-size',375),'16px');
  assert.equal(value(file,input,'font-size',768),'14px');
- assert.equal(value(file,'.app-main','padding',375),'20px 16px 100px');
+ assert.equal(value(file,'.app-main','padding',375),'12px 12px 100px');
  assert.equal(value(file,'.workspace-content h1','font-size',375),'23px');
  assert.equal(value(file,'.workspace-content h1','font-size',1440),'26px');
  assert.equal(value('components/linehaul/linehaul.module.css','.header h1','flex-wrap',375),'wrap');

@@ -31,7 +31,6 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       <section className="ops-login-story" aria-label="Rider Operations">
         <AppBrand />
         <div className="ops-login-intro">
-          <p className="ops-login-eyebrow">Nền tảng vận hành SDD</p>
           <h2>Điều phối chính xác.<br />Vận hành hiệu quả.</h2>
           <p>Quản lý tập trung hoạt động giao hàng, lấy hàng và hoàn trả tại Khu vực 1–5.</p>
           <div className="ops-route-diagram" aria-hidden="true">
@@ -44,15 +43,14 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       </section>
       <section className="ops-login-access">
         <div className="ops-login-form">
-          <p className="ops-login-eyebrow">Dành cho thành viên</p>
-          <h1>Vào ca làm việc</h1>
-          <p className="ops-login-description">Đăng nhập bằng tài khoản Google công ty đã được quản trị viên cấp quyền.</p>
+          <h1>Đăng nhập</h1>
+          <p className="ops-login-description">Dùng tài khoản Google công ty đã được cấp quyền.</p>
           {error ? <p role="alert" className="ops-login-error">{error}</p> : null}
           <Button type="button" className="w-full" disabled={loading} onClick={() => void signInWithGoogle()}>
             <GoogleIcon />{loading ? "Đang chuyển đến Google..." : "Đăng nhập với Google"}
           </Button>
           <p className="ops-login-domain">Tài khoản <strong>@spxexpress.com</strong></p>
-          <div className="ops-login-help"><strong>Chưa có quyền truy cập?</strong><p>Liên hệ quản trị viên để thêm email của bạn vào danh sách thành viên.</p></div>
+          <div className="ops-login-help"><strong>Chưa có quyền truy cập?</strong><p>Liên hệ quản trị viên để cấp quyền cho email của bạn.</p></div>
         </div>
       </section>
     </main>

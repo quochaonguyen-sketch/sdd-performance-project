@@ -13,7 +13,6 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [closedAreas, setClosedAreas] = useState<Record<string, boolean>>({});
   const boardId = useId();
-  const total = districts.reduce((sum, district) => addCounts(sum, district.totals), emptyCounts());
   const groups = Array.from(new Set(districts.map(district => district.area))).sort((a,b)=>a.localeCompare(b,"vi",{numeric:true})).map(area=>{
     const items = districts.filter(district => district.area === area);
     return {area, districts:items, totals:items.reduce((sum,district)=>addCounts(sum,district.totals),emptyCounts()), wards:items.reduce((sum,district)=>sum+district.wards.length,0)};
@@ -22,7 +21,7 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
 
   return <section aria-label={`Tồn ${kind} trong phạm vi đã chọn`} className="space-y-3">
     <header className="delivery-board-heading flex flex-wrap items-center justify-between gap-3 text-xs">
-      <div><h2 className="text-sm font-bold text-slate-900">Tồn theo khu vực và địa bàn</h2><p className="mt-1 text-xs text-slate-500">{groups.length} khu vực · {districts.length} địa bàn quận/huyện · <span className="tabular-nums">{visibleTotal(total, cot).toLocaleString("vi-VN")}</span> đơn · Mở khu vực → quận/huyện → phường.</p></div>
+      <div><h2 className="text-sm font-bold text-slate-900">Tồn theo khu vực và địa bàn</h2></div>
       <button type="button" disabled={forceExpanded || !districts.length} onClick={() => {setClosedAreas(Object.fromEntries(groups.map(group=>[group.area,allOpen])));setCollapsed(Object.fromEntries(districts.map((district) => [`${district.area}:${district.district}`, allOpen])));}} className="min-h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">{allOpen ? "Thu tất cả" : "Mở tất cả"}</button>
     </header>
     {!districts.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center"><p className="text-sm font-semibold text-slate-700">Không có tồn phù hợp</p><p className="mt-1 text-xs text-slate-500">Thử mở rộng địa bàn, đổi COT hoặc đặt lại bộ lọc.</p></div> : null}

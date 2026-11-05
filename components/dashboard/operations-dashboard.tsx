@@ -130,9 +130,9 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
   const deliveryError = data.operations.error ?? data.operations.data?.backlog.error;
   const issues = [liveError && "Live Dashboard", data.pickup.error && "Live Pickup", data.pickupBacklog.error && "Pickup Backlog", deliveryError && "Delivery Backlog", data.volume.error && "Volume"].filter(Boolean);
   return <div className={s.dashboard}>
-    <header className={s.header}>
-      <div><p className={s.eyebrow}>SDD · OPERATIONS INTELLIGENCE</p><h1>Operations Overview</h1><p>Tiến độ, hiệu suất và tồn giao nhận trong một màn hình.</p></div>
-      <div className={s.headerActions}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
+    <header className={`ops-page-header ${s.header}`}>
+      <div><h1>Operations Overview</h1></div>
+      <div className={`ops-page-actions ${s.headerActions}`}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
     <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold Analytics","/onhold"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
     <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
