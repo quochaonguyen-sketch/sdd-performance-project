@@ -404,7 +404,7 @@ function DeliveryOrderDialog({
         <h3 className="font-semibold text-[var(--color-ink)]">Danh sách vận đơn</h3>
         <span>Mới về hub trước</span>
       </div>
-      <div className="delivery-order-list max-h-[min(55vh,36rem)] overflow-y-auto px-4">
+      <div className="delivery-order-list max-h-[min(55vh,36rem)] overflow-y-auto px-4" tabIndex={0} role="region" aria-label="Danh sách vận đơn">
         {!orders.length ? <p className="py-8 text-center text-xs text-[var(--color-muted)]">Không có đơn khớp bộ lọc trong dữ liệu cập nhật gần nhất.</p> : (
           <ul className="divide-y divide-[var(--color-rule)]">
             {orders.map((row) => (

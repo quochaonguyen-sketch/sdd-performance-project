@@ -9,6 +9,7 @@ export const DATA_SOURCES = [
   { id:"delivery_volume", name:"Sản lượng Delivery", description:"Đồng bộ sản lượng theo ngày", href:"/volume/delivery", permission:"manage_volume", color:"var(--color-accent)", dated:true, interval:1800 },
   { id:"performance", name:"Performance", description:"Hiệu suất rider theo ngày", href:"/performance", permission:"manage_performance", color:"var(--color-accent)", dated:true, interval:1800 },
   { id:"return_inventory", name:"Hàng trả", description:"Chờ trả tại hub và đang đi trả · KV1–KV5", href:"/return-orders", permission:"manage_return", color:"var(--color-accent)", dated:false, interval:1800 },
+  { id:"wh_tracking", name:"WH / iPhone High Value", description:"Đơn WH giá trị cao · tiến độ giao · SLA 4H / WH / SDD", href:"/wh-dashboard", permission:"manage_performance", color:"var(--color-accent)", dated:false, interval:300 },
 ] as const;
 export type DataSourceId = typeof DATA_SOURCES[number]["id"];
 export function dataSource(id: unknown) { return DATA_SOURCES.find(s=>s.id===id); }

@@ -37,7 +37,7 @@
 .delivery-order-dialog { position:fixed; inset:0; width:min(860px,calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); margin:auto; padding:0; overflow:hidden; border:1px solid var(--color-rule); border-radius:var(--radius-modal); background:var(--color-paper); color:var(--color-ink); box-shadow:0 24px 80px color-mix(in srgb,var(--color-shadow) 25%,transparent); }
 .delivery-order-dialog::backdrop { background:var(--color-scrim); }
 .delivery-order-dialog .delivery-order-panel { display:flex; flex-direction:column; max-height:calc(100dvh - 34px); border:0; border-radius:0; }
-.delivery-order-dialog .delivery-order-panel>div { flex-shrink:0; }
+.delivery-order-dialog .delivery-order-panel>div:not(.delivery-order-list) { flex-shrink:0; }
 .delivery-order-dialog .delivery-order-list { flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; overscroll-behavior:contain; }
 .delivery-order-dialog .delivery-order-list li { padding:14px 4px; }
 .delivery-board-heading h2 { font-size:16px; font-weight:650; }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import {canViewPage} from "@/lib/auth/page-access";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DATA_SOURCES, sourceAllowed, sourceAction,canViewSource } from "@/lib/data-sources/catalog";
@@ -6,7 +7,7 @@ import { DATA_SOURCES, sourceAllowed, sourceAction,canViewSource } from "@/lib/d
 export async function GET() {
   const context = await getCurrentUserContext().catch(() => null);
   if (!context) return NextResponse.json({error:"Chưa đăng nhập"},{status:401});
-  const sources = DATA_SOURCES.filter(s=>canViewSource(context.profile.role,context.profile.permissions,s.id)).map(source=>({...source,canControl:sourceAllowed(context.profile.role,context.profile.permissions,source.id)}));
+  const sources = DATA_SOURCES.filter(s=>(s.id!=="wh_tracking"||canViewPage(context.profile.role,context.profile.page_access,"wh_tracking"))&&canViewSource(context.profile.role,context.profile.permissions,s.id)).map(source=>({...source,canControl:sourceAllowed(context.profile.role,context.profile.permissions,source.id)}));
   if (!sources.length) return NextResponse.json({error:"Không có quyền quản lý nguồn dữ liệu"},{status:403});
   const db=createAdminClient(), ids=sources.map(s=>s.id);
   const [settings,jobs,workers]=await Promise.all([
@@ -24,7 +25,7 @@ export async function POST(request:Request) {
   let command:ReturnType<typeof sourceAction>;
   try { command=sourceAction(await request.json()); }
   catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Yêu cầu không hợp lệ"},{status:400}); }
-  if(!sourceAllowed(context.profile.role,context.profile.permissions,command.source)) return NextResponse.json({error:"Không có quyền điều khiển nguồn này"},{status:403});
+  if((command.source==="wh_tracking"&&!canViewPage(context.profile.role,context.profile.page_access,"wh_tracking"))||!sourceAllowed(context.profile.role,context.profile.permissions,command.source)) return NextResponse.json({error:"Không có quyền điều khiển nguồn này"},{status:403});
   const db=createAdminClient();
   const {data,error}=command.action==="auto"
     ? await db.rpc("configure_data_source_schedule",{p_source:command.source,p_actor:context.user.id,p_enabled:command.enabled,p_mode:command.mode,p_interval:command.interval,p_time:command.time,p_offset:command.offset,p_start:command.start,p_end:command.end})

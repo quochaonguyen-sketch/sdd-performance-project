@@ -27,6 +27,7 @@ const volumeItems = [
 ];
 
 const navItems = [
+  { href: "/wh-dashboard", label: "WH / iPhone High Value", icon: PackageSearch },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
@@ -53,7 +54,7 @@ const navItems = [
 ];
 
 const navigationGroups = [
-  { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime"] },
+  { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime", "/wh-dashboard"] },
   { label: "Backlog", icon: PackageOpen, paths: ["/lmhub-inventory", "/inventory-delivery", "/backlog-history", "/overnight-holds"] },
   { label: "Volume", icon: Truck, paths: volumeItems.map(item => item.href) },
   { label: "Pickup Management", icon: ListChecks, paths: ["/pickup-management", "/pickup-management?view=replacement"] },
@@ -69,7 +70,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/wh-dashboard","/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};

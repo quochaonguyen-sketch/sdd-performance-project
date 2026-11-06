@@ -1,6 +1,7 @@
 import type {MemberPermissions} from "./permissions";
 
 export const PAGE_ACCESS_OPTIONS=[
+ {key:"wh_tracking",label:"WH / iPhone High Value",path:"/wh-dashboard"},
  {key:"dashboard",label:"Dashboard",path:"/dashboard"},
  {key:"delivery_realtime",label:"Delivery Realtime",path:"/realtime-dashboard"},
  {key:"pickup_realtime",label:"Pickup Realtime",path:"/pickup-realtime"},
@@ -50,6 +51,7 @@ export function pageForPath(path:string):PageAccessKey|"admin"|null{
  return PAGE_ACCESS_OPTIONS.find(item=>clean===item.path||clean.startsWith(item.path+"/"))?.key??null;
 }
 const API_PAGES:Array<[string,PageAccessKey[]]>=[
+ ["wh-dashboard",["wh_tracking"]],
  ["zones",["zones"]],
  ["team",["team"]],["pickup-points",["pickup_management"]],["pickup-replacements",["pickup_management"]],
  ["linehaul",["linehaul"]],["pickup-realtime",["pickup_realtime"]],["pickup-inventory",["pickup_backlog"]],
@@ -75,7 +77,7 @@ export function viewPermissions(base:MemberPermissions,access:PageAccess):Member
   manage_dashboard:access.dashboard||access.delivery_realtime||access.linehaul,
   manage_return:access.return,
   manage_volume:access.delivery_volume||access.pickup_volume,
-  manage_performance:access.performance||access.onhold,
+  manage_performance:access.performance||access.onhold||access.wh_tracking,
   manage_pickup:access.pickup_realtime||access.pickup_backlog||access.delivery_backlog||access.backlog_history||access.pickup_management||access.pickup_volume||access.sheets,
  };
 }
