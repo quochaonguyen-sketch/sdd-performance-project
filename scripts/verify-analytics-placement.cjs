@@ -33,6 +33,21 @@ assert.ok(onhold.includes('href="#onhold-details"'));
 const failed = render(OHAnalysisContent, { source: { data: null, error: 'OH unavailable' }, end: '2026-10-30', loading: false, onRefresh() {} });
 assert.ok(failed.includes('OH unavailable'));
 assert.ok(failed.includes('Chưa có dữ liệu OH'));
+const { OHWorkspace } = require('../components/onhold/oh-workspace.tsx');
+const fixtureCell = { report_date: '2026-10-28', area: 'Khu vực 1', district: 'Quận A', ward: 'Phường A', rider_code: 'R1', rider_name: 'Rider A', reason: '169', status: 5, hour: 10, orders: 3 };
+const workspace = render(OHWorkspace, { from: '2026-10-28', today: '2026-10-30', initialData: {
+  reports: ['2026-10-28', '2026-10-29'].map(report_date => ({ report_date, fetched_at: `${report_date}T10:00:00Z`, total_orders: 3, input_count: 3, excluded_count: 0 })),
+  cells: [fixtureCell, { ...fixtureCell, report_date: '2026-10-29', status: 1, orders: 4 }],
+} });
+assert.ok(workspace.includes('28/10/2026 – 30/10/2026'));
+assert.ok(workspace.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').includes('7 lượt OH'));
+assert.ok(workspace.includes('Rider A'));
+assert.ok(workspace.includes('Phường A'));
+assert.ok(!workspace.includes('<dialog'), 'Closed dialogs must not build their rows');
+const { OHFullRankingsDialog } = require('../components/onhold/oh-full-rankings-dialog.tsx');
+const rankings = render(OHFullRankingsDialog, { isOpen: true, onClose() {}, day: '2026-10-28 → 2026-10-30', areaFilter: 'all', totalOrders: 120, wards: [], districts: [], riders: Array.from({ length: 120 }, (_, i) => ({ key: `${i}`, name: `Fixture rider ${String(i).padStart(3, '0')}`, detail: `R${i}`, orders: 1 })) });
+assert.ok(rankings.includes('Fixture rider 049'));
+assert.ok(!rankings.includes('Fixture rider 050'), 'Rankings render only the current page');
 const { PerformanceAnalysis } = require('../components/performance/performance-analysis.tsx');
 const { buildPerformanceAnalysis } = require('../lib/performance/analysis.ts');
 const totals = { delivery_assigned: 10, delivery_delivered: 8, pickup_assigned: 5, pickup_picked: 3 };

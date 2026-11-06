@@ -1,6 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ohRange, ohSummary, ohRankings, reasonName, reasonNameVi, type OHCell } from '../lib/onhold/model.ts';
+import { ohRange, ohWeekRange, ohPivotIndex, ohSummary, ohRankings, resolveOHRiders, reasonName, reasonNameVi, type OHCell } from '../lib/onhold/model.ts';
+
+test('missing rider IDs use names and exact unique directory matches without inventing identities', () => {
+  const directory = [{ rider_code: 'R1', rider_name: 'Nguyễn Văn A' }, { rider_code: 'R2', rider_name: 'Trần Văn B' }, { rider_code: 'R3', rider_name: 'Trần Văn B' }];
+  const rows = resolveOHRiders([
+    { rider_code: '0', rider_name: ' nguyễn  văn a ' },
+    { rider_code: 'R1', rider_name: 'Chưa rõ rider' },
+    { rider_code: 'unknown', rider_name: 'Trần Văn B' },
+    { rider_code: 'unknown', rider_name: 'Chưa rõ rider' },
+    { rider_code: 'R9', rider_name: 'Unknown' },
+    { rider_code: 'R9', rider_name: 'Tên từ nguồn OH' },
+  ], directory);
+  assert.equal(rows[0].rider_code, 'R1');
+  assert.equal(rows[1].rider_name, 'Nguyễn Văn A');
+  assert.equal(rows[2].rider_code, 'unknown', 'Duplicate names cannot be assigned an arbitrary ID');
+  assert.equal(rows[2].rider_name, 'Trần Văn B');
+  assert.equal(rows[3].rider_name, 'Chưa rõ rider', 'No name can be inferred without either identity');
+  assert.equal(rows[4].rider_name, 'Tên từ nguồn OH');
+});
+
+test('rider ranking recovers a later name for the same ID and retains name-only orders', () => {
+  const row: OHCell = { report_date: '2026-11-06', area: 'Khu vực 1', reason: '169', hour: 10, status: 5, orders: 2, rider_code: 'R1', rider_name: 'Chưa rõ rider' };
+  const rows = [row, { ...row, rider_name: 'Tên rider' }, { ...row, rider_code: '0', rider_name: ' tên RIDER ' }];
+  const ranks = ohRankings(rows, 'rider');
+  assert.equal(ranks.length, 1);
+  assert.equal(ranks[0].name, 'Tên rider');
+  assert.equal(ranks[0].orders, 6);
+  assert.equal(ohSummary(rows).total, ranks[0].orders);
+});
+
+test('ISO week selection handles year boundaries, invalid weeks and current partial week', () => {
+  assert.deepEqual(ohWeekRange('2026-W45', '2026-11-06'), { from: '2026-11-02', to: '2026-11-06' });
+  assert.deepEqual(ohWeekRange('2026-W44', '2026-11-06'), { from: '2026-10-26', to: '2026-11-01' });
+  assert.deepEqual(ohWeekRange('2026-W01', '2026-11-06'), { from: '2025-12-29', to: '2026-01-04' });
+  assert.deepEqual(ohWeekRange('2020-W53', '2021-01-04'), { from: '2020-12-28', to: '2021-01-03' });
+  for (const week of ['', '2026-W00', '2025-W53', '2026-W54', '2026-W46']) assert.throws(() => ohWeekRange(week, '2026-11-06'));
+});
+
+test('indexed pivot preserves daily totals across areas, reasons, hours and statuses', () => {
+  const base: OHCell = { report_date: '2026-11-01', area: 'Khu vực 1', reason: '169', hour: 10, status: 5, orders: 2 };
+  const cells: OHCell[] = [base, { ...base, reason: '170', hour: 12, status: 1, orders: 3 }, { ...base, area: 'Chưa rõ KV', orders: 4 }, { ...base, report_date: '2026-11-02', orders: 7 }];
+  const index = ohPivotIndex(cells);
+  assert.equal(index.get('2026-11-01')?.get('Khu vực 1'), 5);
+  assert.equal(index.get('2026-11-01')?.get('Chưa rõ KV'), 4);
+  assert.equal(index.get('2026-11-02')?.get('Khu vực 1'), 7);
+  assert.equal(index.get('2026-11-03'), undefined);
+  assert.equal([...index.values()].reduce((n, areas) => n + [...areas.values()].reduce((sum, count) => sum + count, 0), 0), ohSummary(cells).total);
+});
 
 test('OH date ranges reject impossible, future, reversed and oversized windows', () => {
   assert.deepEqual(ohRange('2026-10-01', '2026-10-25', '2026-10-25'), { from: '2026-10-01', to: '2026-10-25' });

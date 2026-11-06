@@ -83,9 +83,37 @@ export function ohRange(from:string,to:string,today:string) {
   return {from,to};
 }
 
+// ISO weeks run Monday–Sunday; the current week stops at today's Vietnam date.
+export function ohWeekRange(week: string, today: string) {
+  if (!/^\d{4}-W\d{2}$/.test(week)) throw new Error("Tuần không hợp lệ.");
+  const year = Number(week.slice(0, 4)), number = Number(week.slice(6));
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = jan4.getTime() - ((jan4.getUTCDay() + 6) % 7) * 86400000 + (number - 1) * 7 * 86400000;
+  const thursday = new Date(monday + 3 * 86400000);
+  if (number < 1 || number > 53 || thursday.getUTCFullYear() !== year) throw new Error("Tuần không hợp lệ.");
+  const from = new Date(monday).toISOString().slice(0, 10);
+  const to = new Date(monday + 6 * 86400000).toISOString().slice(0, 10);
+  return ohRange(from, to > today ? today : to, today);
+}
+
+export function ohPivotIndex(cells: OHCell[]) {
+  const totals = new Map<string, Map<string, number>>();
+  for (const cell of cells) {
+    let areas = totals.get(cell.report_date);
+    if (!areas) { areas = new Map(); totals.set(cell.report_date, areas); }
+    areas.set(cell.area, (areas.get(cell.area) ?? 0) + cell.orders);
+  }
+  return totals;
+}
+
 export function ohSummary(cells:OHCell[]) {
-  const total=cells.reduce((n,c)=>n+c.orders,0),held=cells.filter(c=>c.status===5).reduce((n,c)=>n+c.orders,0);
-  return {total,held,received:total-held,unknown:cells.filter(c=>c.area==="Chưa rõ KV").reduce((n,c)=>n+c.orders,0)};
+  let total = 0, held = 0, unknown = 0;
+  for (const c of cells) {
+    total += c.orders;
+    if (c.status === 5) held += c.orders;
+    if (c.area === "Chưa rõ KV") unknown += c.orders;
+  }
+  return {total,held,received:total-held,unknown};
 }
 
 export type OHRank = {
@@ -101,36 +129,42 @@ export type OHRank = {
   wards?: string[];
 };
 
+type RiderIdentity = { rider_code?: string | null; rider_name?: string | null };
+const normalizeRider = (value: string) => value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleUpperCase("vi");
+const missingRider = new Set(["", "0", "UNKNOWN", "NULL", "UNDEFINED", "NONE", "N/A", "-", "CHƯA RÕ RIDER", "CHƯA CÓ MÃ RIDER"]);
+const riderValue = (value?: string | null) => value && !missingRider.has(normalizeRider(value)) ? value.trim().replace(/\s+/g, " ") : "";
+
+export function resolveOHRiders<T extends RiderIdentity>(rows: T[], directory: RiderIdentity[] = []): T[] {
+  const byCode = new Map<string, string>();
+  const byName = new Map<string, Set<string>>();
+  for (const row of [...directory, ...rows]) {
+    const code = riderValue(row.rider_code), name = riderValue(row.rider_name);
+    if (!code || !name) continue;
+    if (!byCode.has(code)) byCode.set(code, name);
+    const key = normalizeRider(name), codes = byName.get(key) ?? new Set<string>();
+    codes.add(code); byName.set(key, codes);
+  }
+  return rows.map(row => {
+    let code = riderValue(row.rider_code), name = riderValue(row.rider_name);
+    const candidates = name ? byName.get(normalizeRider(name)) : undefined;
+    if (!code && candidates?.size === 1) code = candidates.values().next().value!;
+    if (!name && code) name = byCode.get(code) ?? "";
+    return { ...row, rider_code: code || "unknown", rider_name: name || "Chưa rõ rider" };
+  });
+}
+
 export function ohRankings(cells: OHCell[], kind: "district" | "ward" | "rider"): OHRank[] {
+  if (kind === "rider") cells = resolveOHRiders(cells);
   type GroupRank = OHRank & {
     _areas: Map<string, number>;
     _districts: Map<string, number>;
     _wards: Map<string, number>;
   };
   const groups = new Map<string, GroupRank>();
-  const names = new Map<string, Set<string>>();
-  const normalizeName = (name: string) =>
-    name.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleUpperCase("vi");
-
-  for (const c of cells) {
-    if (c.rider_name && c.rider_code && !["unknown", "0"].includes(c.rider_code)) {
-      const name = normalizeName(c.rider_name),
-        codes = names.get(name) || new Set<string>();
-      codes.add(c.rider_code);
-      names.set(name, codes);
-    }
-  }
-
   for (const c of cells) {
     const district = c.district || "Chưa rõ quận",
       ward = c.ward || "Chưa rõ phường";
-    const aliases = names.get(normalizeName(c.rider_name || ""));
-    const code =
-      c.rider_code && !["unknown", "0"].includes(c.rider_code)
-        ? c.rider_code
-        : aliases?.size === 1
-        ? [...aliases][0]
-        : "";
+    const code = riderValue(c.rider_code);
     const name =
       kind === "rider"
         ? c.rider_name || "Chưa rõ rider"
@@ -139,7 +173,7 @@ export function ohRankings(cells: OHCell[], kind: "district" | "ward" | "rider")
         : ward;
     const key =
       kind === "rider"
-        ? JSON.stringify([code || normalizeName(name)])
+        ? JSON.stringify([code || normalizeRider(name)])
         : JSON.stringify(kind === "district" ? [district] : [district, ward]);
 
     let rank = groups.get(key);

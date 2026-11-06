@@ -29,8 +29,8 @@ export function BacklogTrendChart({ daily, active, cot, area, selected, onSelect
   return <div className={`${styles.trendCanvas}${large?` ${styles.trendLarge}`:""}`}>
     <div className={styles.chartToolbar}><span>Di chuột hoặc chạm để xem từng giờ</span><div role="group" aria-label="Phạm vi biểu đồ"><button type="button" aria-pressed={!fullDay} onClick={()=>setFullDay(false)}>Đến giờ có dữ liệu</button><button type="button" aria-pressed={fullDay} onClick={()=>setFullDay(true)}>Đủ 24 giờ</button></div></div>
     <div className={styles.trendReadout} aria-live="polite">
-      <div className={styles.readoutTime}><span>GIỜ ĐANG XEM</span><strong>{focus===null?"—":hour(focus)}</strong><small>{focus===null?"Chọn một mốc trên biểu đồ":"Bấm để chọn làm mốc B"}</small></div>
-      {points.map(({source,values})=>{const value=focus===null?null:values[focus];const previous=focus===null?null:values[focus-1];const delta=value!==null&&previous!=null?value-previous:null;return <div key={source} className={styles.readoutSource} style={{"--series-color":colors[source]} as React.CSSProperties}><span><i/>{labels[source]} <small>{focus!==null&&value!==null?(daily[source]?.hours[focus]?.is_final?"Đã chốt":"Tạm tính"):"Chưa có dữ liệu"}</small></span><strong>{fmt(value)} <small>đơn</small></strong><small data-direction={delta===null||delta===0?"flat":delta>0?"up":"down"}>{delta===null?"Chưa đủ dữ liệu giờ liền trước":`${delta>0?"↑ +":delta<0?"↓ ":""}${fmt(delta)} đơn so với giờ trước`}</small></div>;})}
+      <div className={styles.readoutTime}><span>GIỜ ĐANG XEM</span><strong>{focus===null?"—":hour(focus)}</strong><small>{focus===null?"Chọn một mốc trên biểu đồ":"Mốc giờ đang xem"}</small></div>
+      {points.map(({source,values})=>{const value=focus===null?null:values[focus];return <div key={source} className={styles.readoutSource} style={{"--series-color":colors[source]} as React.CSSProperties}><span><i/>{labels[source]} <small>{focus!==null&&value!==null?(daily[source]?.hours[focus]?.is_final?"Đã chốt":"Tạm tính"):"Chưa có dữ liệu"}</small></span><strong>{fmt(value)} <small>đơn</small></strong></div>;})}
     </div>
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Biểu đồ tồn Pickup và Delivery từ 00h đến ${hour(end)}; giờ thiếu dữ liệu được để trống`}>
       <defs>{points.map(({source})=><linearGradient key={source} id={`${id}-${source}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={colors[source]} stopOpacity=".16"/><stop offset="100%" stopColor={colors[source]} stopOpacity=".015"/></linearGradient>)}</defs>
@@ -54,7 +54,6 @@ export function BacklogTrendChart({ daily, active, cot, area, selected, onSelect
       </g>)}
       {!hasData&&<text x={W/2} y={H/2} textAnchor="middle" className={styles.emptyChart}>Chưa có dữ liệu cho ngày này · hệ thống chốt mỗi giờ lúc :50</text>}
     </svg>
-    <div className={styles.chartPeaks}><span>ĐỈNH TRONG NGÀY</span>{points.map(({source,values})=>{const observed=values.filter((v):v is number=>v!==null);if(!observed.length)return null;const peak=Math.max(...observed),h=values.indexOf(peak);return <button type="button" key={source} onClick={()=>onSelect(h)} style={{"--series-color":colors[source]} as React.CSSProperties}><i/>{labels[source]} <strong>{fmt(peak)}</strong><span>đơn · {hour(h)}</span><span aria-hidden="true">↗</span></button>;})}</div>
   </div>;
 }
 

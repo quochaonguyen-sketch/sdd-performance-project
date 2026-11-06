@@ -9,8 +9,6 @@ import {
   Users,
   MapPin,
   Building2,
-  TrendingUp,
-  ArrowUpDown,
   Filter,
   CheckCircle2,
   Eye,
@@ -54,11 +52,10 @@ export function OHFullRankingsDialog({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"orders-desc" | "orders-asc" | "name-asc">("orders-desc");
   const [toast, setToast] = useState("");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
-      setTab(initialTab);
-      setSearch("");
       const node = dialog.current;
       if (!node?.open) node?.showModal();
     } else {
@@ -98,6 +95,9 @@ export function OHFullRankingsDialog({
 
     return result;
   }, [rawList, search, sortBy]);
+
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(filteredList.length / 50) - 1));
+  const visibleList = filteredList.slice(currentPage * 50, (currentPage + 1) * 50);
 
   const maxOrders = useMemo(() => {
     return rawList.length ? Math.max(...rawList.map((r) => r.orders), 1) : 1;
@@ -222,7 +222,7 @@ export function OHFullRankingsDialog({
               Thống kê toàn diện Rider & Địa bàn Onhold
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Xem đầy đủ toàn bộ rider và địa bàn có đơn OH trong ngày, không bị giới hạn Top 25.
+              Tổng lượt OH trong kỳ đã chọn. Mỗi trang hiển thị tối đa 50 dòng; xuất CSV gồm toàn bộ kết quả lọc.
             </p>
           </div>
           <button
@@ -240,7 +240,7 @@ export function OHFullRankingsDialog({
           {/* Tabs */}
           <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-800">
             <button
-              onClick={() => setTab("riders")}
+              onClick={() => { setTab("riders"); setPage(0); }}
               className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
                 tab === "riders"
                   ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
@@ -251,7 +251,7 @@ export function OHFullRankingsDialog({
               Tất cả Rider ({riders.length})
             </button>
             <button
-              onClick={() => setTab("wards")}
+              onClick={() => { setTab("wards"); setPage(0); }}
               className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
                 tab === "wards"
                   ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
@@ -262,7 +262,7 @@ export function OHFullRankingsDialog({
               Tất cả Phường ({wards.length})
             </button>
             <button
-              onClick={() => setTab("districts")}
+              onClick={() => { setTab("districts"); setPage(0); }}
               className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
                 tab === "districts"
                   ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
@@ -281,7 +281,7 @@ export function OHFullRankingsDialog({
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 placeholder={
                   tab === "riders"
                     ? "Tìm tên hoặc mã rider…"
@@ -296,7 +296,7 @@ export function OHFullRankingsDialog({
             {/* Sort Dropdown */}
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => { setSortBy(e.target.value as typeof sortBy); setPage(0); }}
               className="h-9 rounded-lg border border-slate-200 bg-transparent px-3 text-xs font-medium text-slate-700 outline-none dark:border-slate-700 dark:text-slate-300"
             >
               <option value="orders-desc">Đơn OH nhiều nhất</option>
@@ -356,8 +356,8 @@ export function OHFullRankingsDialog({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredList.map((item, idx) => {
-                const rank = idx + 1;
+              {visibleList.map((item, idx) => {
+                const rank = currentPage * 50 + idx + 1;
                 const percent = totalOrders ? Math.round((item.orders / totalOrders) * 100) : 0;
                 const barWidth = Math.max(4, Math.round((item.orders / maxOrders) * 100));
 
@@ -488,6 +488,7 @@ export function OHFullRankingsDialog({
                     <td className="px-4 py-3 text-center">
                       {tab === "riders" ? (
                         <button
+                          disabled={!onFilterRider && !onViewOrdersForRider}
                           onClick={() => {
                             if (onFilterRider) onFilterRider(item.name, item.detail);
                             if (onViewOrdersForRider) onViewOrdersForRider(item.name);
@@ -531,9 +532,14 @@ export function OHFullRankingsDialog({
         {/* Footer */}
         <footer className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-850">
           <div>
-            Đang hiển thị <strong>{filteredList.length}</strong> / <strong>{rawList.length}</strong> mục
+            Đang hiển thị <strong>{visibleList.length}</strong> / <strong>{filteredList.length}</strong> mục
             {search && <span> (lọc theo từ khóa)</span>}
           </div>
+          <nav aria-label="Phân trang xếp hạng OH" className="flex items-center gap-3">
+            <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Trước</button>
+            <span>{currentPage + 1}/{Math.max(1, Math.ceil(filteredList.length / 50))}</span>
+            <button type="button" disabled={(currentPage + 1) * 50 >= filteredList.length} onClick={() => setPage(currentPage + 1)}>Sau</button>
+          </nav>
           <button
             onClick={onClose}
             className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600"
