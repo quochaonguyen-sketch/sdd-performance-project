@@ -33,6 +33,13 @@ test("old snapshots, missing OH and negative MP are unavailable rather than inve
  assert.equal(negative.metrics[1].actual,null);assert.ok(negative.issues.some(s=>s.includes("lớn hơn")));
  const missingOh=buildDailyReport(day,hub,operations,lh,null);
  assert.equal(missingOh.metrics[4].actual,null);
+ const partialLh:LinehaulData={day,snapshotAt:stamp,canRefresh:false,trips:[
+  {trip_id:"t1",trip_day:day,direction:"inbound",phase:"unloaded",hub_unloaded_at:stamp,expected_unload:null,orders:150} as LinehaulTrip,
+  {trip_id:"t2",trip_day:day,direction:"inbound",phase:"unloaded",hub_unloaded_at:stamp,expected_unload:100,unloaded_units:20,orders:500} as LinehaulTrip,
+ ]};
+ const partial=buildDailyReport(day,hub,operations,partialLh,oh);
+ assert.equal(partial.metrics[0].actual,150);
+ assert.ok(partial.issues.some(s=>s.includes("chưa rõ số đơn")));
 });
 
 test("FTE excludes ten supervisors once, preserves OS/BPO and never becomes negative",()=>{

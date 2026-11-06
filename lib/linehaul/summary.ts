@@ -10,6 +10,15 @@ export function fullyUnloaded(trip:LinehaulTrip){
  return trip.direction!=="outbound"&&trip.phase==="unloaded"&&!!trip.hub_unloaded_at
   &&total!==null&&total>0&&expected===total&&actual!==null&&actual>=total;
 }
+export function isSubstantiallyUnloaded(trip:LinehaulTrip){
+ const total=quantity(trip.load_total),expected=quantity(trip.expected_unload),actual=quantity(trip.unloaded_units);
+ if(trip.direction==="outbound"||trip.phase!=="unloaded"||!trip.hub_unloaded_at)return false;
+ if(fullyUnloaded(trip)||trip.expected_unload===null||trip.unload_confirmation==="active_list_absence")return true;
+ if(total!==null&&expected!==null&&actual!==null&&total>0&&expected===total){
+  return actual>=total-5||actual>=total*0.95;
+ }
+ return false;
+}
 export function isTripUnloaded(trip:LinehaulTrip){
  return trip.direction!=="outbound"&&trip.phase==="unloaded";
 }
@@ -24,7 +33,7 @@ export function loadStage(trip:LinehaulTrip):LoadStage|null{
 }
 export function stageOrders(trip:LinehaulTrip,stage:LoadStage){
  if(stage==="unloaded"){
-  if(trip.direction!=="outbound"&&trip.phase==="unloaded"&&(fullyUnloaded(trip)||trip.expected_unload===null||trip.unload_confirmation==="active_list_absence"))return quantity(trip.orders);
+  if(trip.direction!=="outbound"&&trip.phase==="unloaded"&&(isSubstantiallyUnloaded(trip)||trip.expected_unload===null||trip.unload_confirmation==="active_list_absence"))return quantity(trip.orders);
   if(trip.direction!=="inbound"||!fullyUnloaded(trip))return null;
  }
  return quantity(trip.orders);

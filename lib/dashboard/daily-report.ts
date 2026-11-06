@@ -22,7 +22,7 @@ export function buildDailyReport(day:string, hub:ReportHub|null, operations:Oper
   const forecast=hub?.fc?.data?.rows.find(r=>r.date===day);
   const ohReport=oh?.reports.find(r=>r.report_date===day);
   const unloaded=lh?.day===day&&lh.snapshotAt?linehaulSummary(lh.trips,day).groups.unloaded:null;
-  const wh=unloaded&&!unloaded.missing?unloaded.knownOrders:null;
+  const wh=unloaded?(unloaded.knownOrders>0?unloaded.knownOrders:null):null;
   const inbound=currentHub?.totals.lm_hub_inbounded_order_qty_eod??null;
   const mp=inbound!==null&&wh!==null&&inbound>=wh?inbound-wh:null;
   const onhold=ohReport?.total_orders??null, nonAttempt=backlog?.total??null;

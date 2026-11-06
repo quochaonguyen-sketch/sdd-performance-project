@@ -63,3 +63,18 @@ test("completion by absence contributes orders without inventing an unload hour"
  assert.equal(result.groups.unloaded.knownOrders,71);assert.equal(result.groups.at_hub.knownOrders,0);
  assert.equal(result.unplaced.unloaded,1);assert.ok(result.hourly.every(h=>h.orders.unloaded===0));
 });
+
+test("inbound unloaded trip with minor scan discrepancy contributes orders while large discrepancy returns null",()=>{
+ const minorShortTrip={...trip,trip_id:"minor1",phase:"unloaded",orders:2259,load_total:291,expected_unload:291,unloaded_units:288,hub_unloaded_at:"2026-10-28T12:00:00+07:00"} as LinehaulTrip;
+ assert.equal(stageOrders(minorShortTrip,"unloaded"),2259);
+ const res=linehaulSummary([minorShortTrip],day);
+ assert.equal(res.groups.unloaded.knownOrders,2259);
+ assert.equal(res.groups.unloaded.missing,0);
+
+ const largeShortTrip={...trip,trip_id:"large1",phase:"unloaded",orders:500,load_total:100,expected_unload:100,unloaded_units:50,hub_unloaded_at:"2026-10-28T13:00:00+07:00"} as LinehaulTrip;
+ assert.equal(stageOrders(largeShortTrip,"unloaded"),null);
+ const resLarge=linehaulSummary([largeShortTrip],day);
+ assert.equal(resLarge.groups.unloaded.knownOrders,0);
+ assert.equal(resLarge.groups.unloaded.missing,1);
+
+});
