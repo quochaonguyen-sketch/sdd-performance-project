@@ -4,9 +4,9 @@ import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { Select } from "@/components/ui/select";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, MapPin, RefreshCcw, Search, X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { readJsonResponse } from "@/lib/http/json-response";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,11 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const snapshotIdRef = useRef<string | null>(null);
   const [cot, setCot] = useRememberedState<CotFilter>("lmhub-inventory-view:cot", "all");
   const [heat, setHeat] = useState<HeatFilter>("all");
   const [areaFilter, setAreaFilter] = useRememberedState("lmhub-inventory-view:areaFilter", "all");
@@ -62,54 +65,42 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   useReportInitialDataLoading("lmhub-inventory", loading);
 
   const requestRef = useRef(0);
-  const load = useCallback(async (background = false) => {
+  const load = useCallback(async (background = false, refresh = false) => {
     const requestId = ++requestRef.current;
-    const supabase = createClient();
     if (!background) setLoading(true);
-    const latestHead = () => supabase.from("lmhub_inventory_rows").select("snapshot_id,snapshot_at")
-      .in("area", OPERATING_AREAS).order("snapshot_at", { ascending: false }).limit(1).maybeSingle();
+    else setRefreshing(true);
     try {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const latest = await latestHead();
-        if (requestId !== requestRef.current) return;
-        if (latest.error) throw new Error(latest.error.message);
-        const snapshotId = latest.data?.snapshot_id;
-        const collected: InventoryRow[] = [];
-        let nextSnapshotAt = latest.data?.snapshot_at ?? null;
-        if (snapshotId) {
-          for (let from = 0; ; from += PAGE_ROWS) {
-            if (from > 100000) throw new Error("Tồn Delivery vượt giới hạn tải; chưa thay thế bảng hiện tại.");
-            const result = await supabase.from("lmhub_inventory_rows").select(COLUMNS).in("area", OPERATING_AREAS)
-              .eq("snapshot_id", snapshotId).order("shipment_id", { ascending: true }).range(from, from + PAGE_ROWS - 1);
-            if (requestId !== requestRef.current) return;
-            if (result.error) throw new Error(result.error.message);
-            collected.push(...((result.data ?? []) as InventoryRow[]).map(normalizeRow));
-            if ((result.data ?? []).length < PAGE_ROWS) break;
-          }
-        } else {
-          const completed = await supabase.from("lmhub_fetch_jobs").select("finished_at").eq("status", "DONE")
-            .in("params->>kind", ["delivery", "ton_delivery", "all", "both"])
-            .order("finished_at", { ascending: false }).limit(1).maybeSingle();
-          if (completed.error) throw new Error(completed.error.message);
-          nextSnapshotAt = completed.data?.finished_at ?? null;
-        }
-        const current = await latestHead();
-        if (requestId !== requestRef.current) return;
-        if (current.error) throw new Error(current.error.message);
-        // A publish can replace rows between pages; never display a partial old snapshot.
-        if (current.data?.snapshot_id !== snapshotId || current.data?.snapshot_at !== latest.data?.snapshot_at) continue;
-        setRows(deliveryInventoryRows(collected));
-        setSnapshotAt(nextSnapshotAt);
-        setError(null);
-        return;
-      }
-      throw new Error("Dữ liệu Delivery vừa thay đổi khi tải. Hệ thống sẽ tự thử lại.");
+      const url = `/api/inventory-delivery${refresh ? "?refresh=1" : ""}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const payload = await readJsonResponse(res, "Tồn Delivery");
+      if (requestId !== requestRef.current) return;
+      if (!res.ok || !payload.success) throw new Error(payload.error ?? `API ${res.status}`);
+      setRows(payload.rows ?? []);
+      setSnapshotAt(payload.snapshotAt ?? null);
+      snapshotIdRef.current = payload.snapshotId ?? null;
+      setError(null);
     } catch (err) {
       if (requestId === requestRef.current) setError(err instanceof Error ? err.message : "Không tải được tồn Delivery.");
     } finally {
-      if (requestId === requestRef.current) setLoading(false);
+      if (requestId === requestRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
+
+  const checkSnapshotHead = useCallback(async () => {
+    try {
+      const res = await fetch("/api/inventory-delivery?head=1", { cache: "no-store" });
+      const payload = await res.json().catch(() => null);
+      if (!payload?.success) return;
+      if (payload.snapshotId && payload.snapshotId !== snapshotIdRef.current) {
+        await load(true);
+      }
+    } catch {
+      // ignore transient poll error
+    }
+  }, [load]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleLoad = useCallback(() => {
@@ -120,7 +111,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   // Initial async data load also sets the loading indicator before the request.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
-  useSupabaseRealtime({ table: "lmhub_inventory_rows", onChange: scheduleLoad, debounceMs: 800 });
+  useSupabaseRealtime({ table: "lmhub_inventory_rows", onChange: checkSnapshotHead, debounceMs: 1500 });
 
   const refreshQueueStatus = useCallback(async () => {
     const response = await fetch("/api/lmhub-inventory/refresh", { cache: "no-store" });
@@ -170,7 +161,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
       if (stopped || polling || document.visibilityState === "hidden") return;
       polling = true;
       try {
-        await Promise.all([load(true), refreshQueueStatus().catch(() => null)]);
+        await Promise.all([checkSnapshotHead(), refreshQueueStatus().catch(() => null)]);
       } finally {
         polling = false;
       }
@@ -179,11 +170,11 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
         setQueueNote("Worker chưa ghi snapshot Delivery mới sau 20 phút. Kiểm tra trang Nguồn dữ liệu.");
       }
     };
-    const timer = setInterval(() => void tick(), waitingSnapshot ? 8000 : 15000);
-    const onVisible = () => { if (document.visibilityState === "visible") void tick(); };
+    const timer = setInterval(() => void tick(), waitingSnapshot ? 8000 : 25000);
+    const onVisible = () => { if (document.visibilityState === "visible") void checkSnapshotHead(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [waitingSnapshot, load, refreshQueueStatus]);
+  }, [waitingSnapshot, checkSnapshotHead, refreshQueueStatus]);
 
   useEffect(() => {
     if (!waitingSnapshot || !snapshotAt) return;
@@ -196,7 +187,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
   const allBoards = useMemo(() => buildDeliveryDistrictBoards(rows), [rows]);
   const districtBoards = useMemo(() => scopeDeliveryBoards(allBoards, areaFilter, "all", "all"), [allBoards, areaFilter]);
   const wardBoards = useMemo(() => scopeDeliveryBoards(allBoards, areaFilter, districtFilter, "all"), [allBoards, areaFilter, districtFilter]);
-  const filtered = useMemo(() => filterBoard(scopeDeliveryBoards(allBoards, areaFilter, districtFilter, wardFilter), query, cot, heat), [allBoards, areaFilter, districtFilter, wardFilter, query, cot, heat]);
+  const filtered = useMemo(() => filterBoard(scopeDeliveryBoards(allBoards, areaFilter, districtFilter, wardFilter), deferredQuery, cot, heat), [allBoards, areaFilter, districtFilter, wardFilter, deferredQuery, cot, heat]);
   const analytics = useMemo(() => buildAnalytics(filtered, [], cot), [filtered, cot]);
   const visibleWards = useMemo(() => new Set(filtered.flatMap((district) => district.wards.map(focusKey))), [filtered]);
   const scopedDistrict = districtBoards.find((item) => districtKey(item.area, item.district) === districtFilter);
@@ -243,8 +234,8 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
           </div>
         </div>
         <div className="dashboard-command-actions ops-page-actions">
-          <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
-            <RefreshCcw size={16} className={loading ? "animate-spin" : undefined} /><span>Làm mới</span>
+          <Button type="button" variant="secondary" onClick={() => void load(false, true)} disabled={loading || refreshing}>
+            <RefreshCcw size={16} className={loading || refreshing ? "animate-spin" : undefined} /><span>{refreshing ? "Đang tải..." : "Làm mới"}</span>
           </Button>
           {canQueue ? (
             <Button type="button" onClick={() => void queueLmhub()} disabled={queueing || waitingSnapshot}>

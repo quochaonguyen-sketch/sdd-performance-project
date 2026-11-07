@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import {useCallback,useEffect,useRef,useState} from "react";
-import {ChevronDown,CircleAlert,Clock3,Download,PackageOpen,RefreshCw,Search,Smartphone,Truck} from "lucide-react";
+import {AlertTriangle,CheckCircle2,ChevronDown,CircleAlert,Clock3,Download,Info,MapPin,PackageOpen,RefreshCw,Search,Smartphone,Truck} from "lucide-react";
 import {useReportInitialDataLoading} from "@/components/layout/app-loading-store";
 import {AREAS,areaName,compareWhOrders,counts,isUnassigned,isOnhold,remaining,riderOrder,sla,type WhData,type WhOrder,type WhSortOption,type Sla} from "@/lib/wh/model";
 import styles from "./wh.module.css";
@@ -84,7 +84,6 @@ export function WhDashboard(){
   {data&&!data.snapshotAt&&<p className={styles.notice}>Chưa có dữ liệu hôm nay. Chạy nguồn WH / iPhone trong Nguồn dữ liệu.</p>}
   {expired&&<p role="status" className={styles.notice}>Đã sang ngày mới. Đang chờ dữ liệu WH hôm nay.</p>}
   {data?.snapshotAt&&!expired&&now-Date.parse(data.snapshotAt)>10*60000&&<p className={styles.notice}>Dữ liệu đã hơn 10 phút chưa cập nhật. Kiểm tra lịch và kết nối worker.</p>}
-  <div className={styles.filters}><label>Khu vực<select value={area} onChange={e=>{setArea(e.target.value);setPage(1);}}><option value="all">Tất cả khu vực</option>{AREAS.map(a=><option key={a} value={a}>{areaName(a)}</option>)}</select></label><label className={styles.search}>Tìm đơn / rider / địa bàn<div><Search size={16} aria-hidden="true"/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Mã đơn, tên rider, quận, phường…"/></div></label><button onClick={download} disabled={!filtered.length}><Download size={16} aria-hidden="true"/>Xuất CSV</button></div>
   <section className={styles.summary} aria-label="Tổng quan WH">
    <div className={styles.summaryGrid}>
     <article className={styles.summaryCard} aria-labelledby="wh-volume-title">
@@ -123,17 +122,289 @@ export function WhDashboard(){
     </article>
    </div>
   </section>
-  <section className={styles.panel}><h2>Orders by area</h2><div className={styles.scroll}><table><caption className={styles.caption}>Đơn WH theo địa bàn hiện tại</caption><thead><tr>{["Khu vực","Total","Backlog","Received D0","Delivering","Delivered","Success Rate","Unassigned","On-Hold","Riders","Late 4H","On time 4H"].map(h=><th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{AREAS.filter(a=>area==="all"||a===area).map(a=>{const n=counts(scope.filter(r=>r.area===a),data?.day??"");return <tr key={a}><th scope="row">{areaName(a)}</th>{[n.total,n.areaBacklog,n.received,n.delivering,n.delivered,`${n.rate.toFixed(1)}%`,n.unassigned,n.onhold,n.riders,n.late,n.ontime].map((v,i)=><td key={i}>{v}</td>)}</tr>;})}</tbody></table></div><p className={styles.hint}>Theo Sheet gốc: Backlog tổng = Total − Created − WH Ready − Received D0; Backlog từng KV = Total − Created − Received D0. Bộ lọc tìm kiếm áp dụng cho danh sách và CSV.</p></section>
-  <div className={styles.split}><section className={styles.panel}><h2>Chờ xuất giao <span>{waiting.length}</span></h2><p className={styles.hint}>LMhub_received, Created và SOC pending như danh sách Unassigned trên Sheet; KPI Unassigned chỉ đếm đơn chưa gán thực sự.</p><div className={styles.scroll}><table><thead><tr><th>Mã đơn</th><th>KV / Quận</th><th>Aging</th><th>Nhận hàng</th><th>Attempt</th><th>Còn lại 4H</th></tr></thead><tbody>{waiting.slice(0,50).map(r=><tr key={r.shipment_id}><th>{r.shipment_id}</th><td>{areaName(r.area)}<small>{r.district}</small></td><td>{duration(age(r,now))}</td><td>{r.received_at?"Received":"Not Received"}</td><td>{r.attempt??"—"}</td><td>{duration(remaining(r,now))}</td></tr>)}{!waiting.length&&<tr><td colSpan={6}>Không có đơn chờ xuất giao.</td></tr>}</tbody></table></div>{waiting.length>50&&<p className={styles.hint}>Hiển thị 50 đơn đầu; xem đủ trong danh sách bên dưới hoặc CSV.</p>}</section>
-  <section className={styles.panel}><h2>SOC pending receive <span>{pending.length}</span></h2><div className={styles.scroll}><table><thead><tr><th>Mã đơn</th><th>Khu vực</th><th>Tạo đơn</th><th>Aging</th></tr></thead><tbody>{pending.slice(0,50).map(r=><tr key={r.shipment_id}><th>{r.shipment_id}</th><td>{areaName(r.area)}</td><td>{stamp(r.created_at)}</td><td data-overdue={(age(r,now)??0)>=60}>{duration(age(r,now))}</td></tr>)}{!pending.length&&<tr><td colSpan={4}>Không có đơn SOC pending receive.</td></tr>}</tbody></table></div>{pending.length>50&&<p className={styles.hint}>Hiển thị 50 đơn đầu; lọc SOC_pendingReceive bên dưới để xem đủ.</p>}</section></div>
-  <section className={`${styles.panel} ${styles.ordersPanel}`}>
-   <div className={styles.orderToolbar}>
-    <div><h2>Chi tiết đơn &amp; rider <span>{fmt(filtered.length)}</span></h2><p>Mở một đơn để xem mốc thời gian và lý do On-Hold.</p></div>
-    <div className={styles.orderControls}>
-     <label>Sắp xếp<select value={sort} onChange={e=>{setSort(e.target.value as WhSortOption);setPage(1);}}><option value="status">Trạng thái (Delivering / On-Hold trước)</option><option value="remaining_asc">Hạn 4H: Gấp nhất trước</option><option value="created_desc">Tạo đơn: Mới nhất trước</option><option value="created_asc">Tạo đơn: Cũ nhất trước</option><option value="attempt_desc">Attempt: Nhiều nhất trước</option></select></label>
-     <label>Trạng thái<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>{[["all","Tất cả"],["Delivering","Delivering"],["onhold","On-Hold"],["Delivered","Delivered"],["late","Late 4H"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+  <section className={styles.panel}>
+   <div className={styles.panelHead}>
+    <div className={styles.panelTitleGroup}>
+     <div className={styles.panelIconWrapper}>
+      <MapPin size={17} aria-hidden="true"/>
+     </div>
+     <div>
+      <div className={styles.panelHeadingRow}>
+       <h2 className={styles.panelTitle}>Orders by area</h2>
+       <span className={styles.panelBadge}>
+        {area==="all"?`${AREAS.length} khu vực`:areaName(area)}
+       </span>
+      </div>
+      <p className={styles.panelSubtitle}>Thống kê tiến độ giao, tồn đọng và SLA theo từng khu vực quản lý</p>
+     </div>
     </div>
    </div>
+   <div className={styles.scroll}>
+    <table aria-label="Bảng đơn WH theo từng khu vực">
+     <caption className={styles.caption}>Đơn WH theo địa bàn hiện tại</caption>
+     <thead>
+      <tr>
+       <th scope="col">Khu vực</th>
+       <th scope="col" className={styles.colRight}>Total</th>
+       <th scope="col" className={styles.colRight}>Backlog</th>
+       <th scope="col" className={styles.colRight}>Received D0</th>
+       <th scope="col" className={styles.colRight}>Delivering</th>
+       <th scope="col" className={styles.colRight}>Delivered</th>
+       <th scope="col" className={styles.colCenter}>Success Rate</th>
+       <th scope="col" className={styles.colRight}>Unassigned</th>
+       <th scope="col" className={styles.colRight}>On-Hold</th>
+       <th scope="col" className={styles.colRight}>Riders</th>
+       <th scope="col" className={styles.colRight}>Late 4H</th>
+       <th scope="col" className={styles.colRight}>On time 4H</th>
+      </tr>
+     </thead>
+     <tbody>
+      {AREAS.filter(a=>area==="all"||a===area).map(a=>{
+       const n=counts(scope.filter(r=>r.area===a),data?.day??"");
+       return <tr key={a}>
+        <th scope="row">
+         <span className={styles.areaPill} data-area={a}>
+          <span className={styles.areaDot} aria-hidden="true"/>
+          {areaName(a)}
+         </span>
+        </th>
+        <td className={`${styles.colRight} ${styles.cellTotal}`}>{fmt(n.total)}</td>
+        <td className={styles.colRight}>
+         {n.areaBacklog>0?<span className={styles.badgeWarning}>{fmt(n.areaBacklog)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={`${styles.colRight} ${styles.cellNum}`}>{fmt(n.received)}</td>
+        <td className={styles.colRight}>
+         {n.delivering>0?<span className={styles.badgeInfo}>{fmt(n.delivering)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {n.delivered>0?<span className={styles.badgeSuccess}>{fmt(n.delivered)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colCenter}>
+         <div className={styles.rateCell}>
+          <span className={styles.rateValue} data-high={n.rate>=80} data-low={n.rate===0}>{n.rate.toFixed(1)}%</span>
+          <div className={styles.rateBarTrack} aria-hidden="true"><div className={styles.rateBarFill} style={{width:`${Math.min(100,Math.max(0,n.rate))}%`}}/></div>
+         </div>
+        </td>
+        <td className={styles.colRight}>
+         {n.unassigned>0?<span className={styles.badgeAttention}>{fmt(n.unassigned)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {n.onhold>0?<span className={styles.badgeWarning}>{fmt(n.onhold)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={`${styles.colRight} ${styles.cellNum}`}>{fmt(n.riders)}</td>
+        <td className={styles.colRight}>
+         {n.late>0?<span className={styles.badgeDanger}><AlertTriangle size={11} aria-hidden="true"/>{fmt(n.late)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {n.ontime>0?<span className={styles.badgeSuccessLight}>{fmt(n.ontime)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+       </tr>;
+      })}
+     </tbody>
+     {area==="all"&&(
+      <tfoot>
+       <tr className={styles.totalRow}>
+        <th scope="row">Tổng cộng</th>
+        <td className={`${styles.colRight} ${styles.cellTotal}`}>{fmt(c.total)}</td>
+        <td className={styles.colRight}>
+         {c.backlog>0?<span className={styles.badgeWarning}>{fmt(c.backlog)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={`${styles.colRight} ${styles.cellNum}`}>{fmt(c.received)}</td>
+        <td className={styles.colRight}>
+         {c.delivering>0?<span className={styles.badgeInfo}>{fmt(c.delivering)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {c.delivered>0?<span className={styles.badgeSuccess}>{fmt(c.delivered)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colCenter}>
+         <div className={styles.rateCell}>
+          <span className={styles.rateValue} data-high={c.rate>=80} data-low={c.rate===0}>{c.rate.toFixed(1)}%</span>
+          <div className={styles.rateBarTrack} aria-hidden="true"><div className={styles.rateBarFill} style={{width:`${Math.min(100,Math.max(0,c.rate))}%`}}/></div>
+         </div>
+        </td>
+        <td className={styles.colRight}>
+         {c.unassigned>0?<span className={styles.badgeAttention}>{fmt(c.unassigned)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {c.onhold>0?<span className={styles.badgeWarning}>{fmt(c.onhold)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={`${styles.colRight} ${styles.cellNum}`}>{fmt(c.riders)}</td>
+        <td className={styles.colRight}>
+         {c.late>0?<span className={styles.badgeDanger}><AlertTriangle size={11} aria-hidden="true"/>{fmt(c.late)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+        <td className={styles.colRight}>
+         {c.ontime>0?<span className={styles.badgeSuccessLight}>{fmt(c.ontime)}</span>:<span className={styles.cellMuted}>0</span>}
+        </td>
+       </tr>
+      </tfoot>
+     )}
+    </table>
+   </div>
+   <div className={styles.panelFootnote}>
+    <Info size={14} aria-hidden="true" className={styles.footnoteIcon}/>
+    <div className={styles.footnoteText}>
+     <span><strong>Quy tắc tính Sheet gốc:</strong> Backlog tổng = Total − Created − WH Ready − Received D0; Backlog từng KV = Total − Created − Received D0.</span>
+     <span className={styles.footnoteMuted}>Bộ lọc tìm kiếm phía trên tự động đồng bộ cho danh sách và CSV xuất ra.</span>
+    </div>
+   </div>
+  </section>
+  <div className={styles.split}>
+   <section className={styles.panel}>
+    <div className={styles.panelHead}>
+     <div className={styles.panelTitleGroup}>
+      <div className={styles.panelIconWrapper} data-tone="warning">
+       <Clock3 size={17} aria-hidden="true"/>
+      </div>
+      <div>
+       <div className={styles.panelHeadingRow}>
+        <h2 className={styles.panelTitle}>Chờ xuất giao</h2>
+        <span className={styles.counterBadge} data-alert={waiting.length>0}>
+         {waiting.length}
+        </span>
+       </div>
+       <p className={styles.panelSubtitle}>Đơn lưu Hub chưa gán hoặc chưa xuất giao tới rider</p>
+      </div>
+     </div>
+    </div>
+    <div className={styles.queueInfoBanner}>
+     <Info size={13} aria-hidden="true"/>
+     <span>LMhub_received, Created và SOC pending như danh sách Unassigned trên Sheet; KPI Unassigned chỉ đếm đơn chưa gán thực sự.</span>
+    </div>
+    <div className={`${styles.scroll} ${styles.tableScroll}`} tabIndex={0} role="region" aria-label="Bảng đơn chờ xuất giao">
+     <table>
+      <thead>
+       <tr>
+        <th scope="col">Mã đơn</th>
+        <th scope="col">KV / Quận</th>
+        <th scope="col" className={styles.colRight}>Aging</th>
+        <th scope="col">Nhận hàng</th>
+        <th scope="col" className={styles.colCenter}>Attempt</th>
+        <th scope="col" className={styles.colRight}>Còn lại 4H</th>
+       </tr>
+      </thead>
+      <tbody>
+       {waiting.slice(0,50).map(r=>{
+        const orderAge=age(r,now);
+        const rem=remaining(r,now);
+        return <tr key={r.shipment_id}>
+         <th scope="row"><span className={styles.shipmentCode}>{r.shipment_id}</span></th>
+         <td>
+          <div className={styles.areaDistrictCol}>
+           <span className={styles.areaMiniPill} data-area={r.area}>{r.area==="UNRESOLVED"?"Chưa rõ KV":r.area}</span>
+           <span className={styles.districtName}>{r.district||"Chưa rõ quận"}</span>
+          </div>
+         </td>
+         <td className={styles.colRight}>
+          <span className={orderAge!==null&&orderAge>=720?styles.agingCritical:orderAge!==null&&orderAge>=240?styles.agingWarning:styles.agingNormal}>
+           {duration(orderAge)}
+          </span>
+         </td>
+         <td>{r.received_at?<span className={styles.statusPillReceived}>Received</span>:<span className={styles.statusPillUnreceived}>Chưa nhận</span>}</td>
+         <td className={styles.colCenter}>{(r.attempt??0)>0?<span className={styles.attemptBadgeWarning}>Attempt {r.attempt}</span>:<span className={styles.attemptBadge}>{r.attempt??"—"}</span>}</td>
+         <td className={styles.colRight}>
+          {rem===null?<span className={styles.cellMuted}>—</span>:rem<=0?<span className={styles.slaOverdue}><AlertTriangle size={11} aria-hidden="true"/>{duration(rem)}</span>:rem<=60?<span className={styles.slaUrgent}><Clock3 size={11} aria-hidden="true"/>{duration(rem)}</span>:<span className={styles.slaNormal}><Clock3 size={11} aria-hidden="true"/>{duration(rem)}</span>}
+         </td>
+        </tr>;
+       })}
+       {!waiting.length&&<tr><td colSpan={6}><div className={styles.tableEmpty}><CheckCircle2 size={24} className={styles.emptySuccessIcon} aria-hidden="true"/><p>Không có đơn chờ xuất giao</p><small>Tất cả đơn đã được xử lý hoặc gán rider thành công</small></div></td></tr>}
+      </tbody>
+     </table>
+    </div>
+    {waiting.length>50&&<div className={styles.tableFooterNote}>Hiển thị 50 đơn ưu tiên nhất; xem danh sách đầy đủ bên dưới hoặc xuất CSV.</div>}
+   </section>
+   <section className={styles.panel}>
+    <div className={styles.panelHead}>
+     <div className={styles.panelTitleGroup}>
+      <div className={styles.panelIconWrapper} data-tone="info">
+       <Truck size={17} aria-hidden="true"/>
+      </div>
+      <div>
+       <div className={styles.panelHeadingRow}>
+        <h2 className={styles.panelTitle}>SOC pending receive</h2>
+        <span className={styles.counterBadge} data-alert={pending.length>0}>
+         {pending.length}
+        </span>
+       </div>
+       <p className={styles.panelSubtitle}>Đơn đang chuyển từ SOC tới Hub, đang chờ quét nhận</p>
+      </div>
+     </div>
+    </div>
+    <div className={`${styles.scroll} ${styles.tableScroll}`} tabIndex={0} role="region" aria-label="Bảng đơn SOC pending receive">
+     <table>
+      <thead>
+       <tr>
+        <th scope="col">Mã đơn</th>
+        <th scope="col">Khu vực</th>
+        <th scope="col">Tạo đơn</th>
+        <th scope="col" className={styles.colRight}>Aging</th>
+       </tr>
+      </thead>
+      <tbody>
+       {pending.slice(0,50).map(r=>{
+        const orderAge=age(r,now)??0;
+        const isOverdue=orderAge>=60;
+        return <tr key={r.shipment_id}>
+         <th scope="row"><span className={styles.shipmentCode}>{r.shipment_id}</span></th>
+         <td><span className={styles.areaMiniPill} data-area={r.area}>{areaName(r.area)}</span></td>
+         <td><time dateTime={r.created_at??undefined} className={styles.timeText}>{stamp(r.created_at)}</time></td>
+         <td className={styles.colRight}>
+          {isOverdue?<span className={styles.agingCritical} data-overdue="true"><AlertTriangle size={11} aria-hidden="true"/>{duration(orderAge)}</span>:<span className={styles.agingNormal}>{duration(orderAge)}</span>}
+         </td>
+        </tr>;
+       })}
+       {!pending.length&&<tr><td colSpan={4}><div className={styles.tableEmpty}><CheckCircle2 size={24} className={styles.emptySuccessIcon} aria-hidden="true"/><p>Không có đơn SOC pending receive</p><small>Không có kiện hàng nào đang tắc ở luồng chuyển tiếp SOC</small></div></td></tr>}
+      </tbody>
+     </table>
+    </div>
+    {pending.length>50&&<div className={styles.tableFooterNote}>Hiển thị 50 đơn đầu; lọc SOC_pendingReceive bên dưới để xem đủ.</div>}
+   </section>
+  </div>
+  <section className={`${styles.panel} ${styles.ordersPanel}`}>
+    <div className={styles.orderToolbar}>
+     <div className={styles.orderToolbarHead}>
+      <div>
+       <h2>Chi tiết đơn &amp; rider <span>{fmt(filtered.length)}</span></h2>
+       <p>Mở một đơn để xem mốc thời gian và lý do On-Hold.</p>
+      </div>
+      <button onClick={download} disabled={!filtered.length} className={styles.exportBtn}>
+       <Download size={15} aria-hidden="true"/>Xuất CSV
+      </button>
+     </div>
+     <div className={styles.orderFilterRow}>
+      <label className={styles.search}>
+       <span>Tìm đơn / rider / địa bàn</span>
+       <div>
+        <Search size={15} aria-hidden="true"/>
+        <input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Mã đơn, tên rider, quận, phường…"/>
+       </div>
+      </label>
+      <div className={styles.orderFilterSelects}>
+       <label>
+        <span>Khu vực</span>
+        <select value={area} onChange={e=>{setArea(e.target.value);setPage(1);}}>
+         <option value="all">Tất cả khu vực</option>
+         {AREAS.map(a=><option key={a} value={a}>{areaName(a)}</option>)}
+        </select>
+       </label>
+       <label>
+        <span>Trạng thái</span>
+        <select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}>
+         {[["all","Tất cả"],["Delivering","Delivering"],["onhold","On-Hold"],["Delivered","Delivered"],["late","Late 4H"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+        </select>
+       </label>
+       <label>
+        <span>Sắp xếp</span>
+        <select value={sort} onChange={e=>{setSort(e.target.value as WhSortOption);setPage(1);}}>
+         <option value="status">Trạng thái (Delivering / On-Hold trước)</option>
+         <option value="remaining_asc">Hạn 4H: Gấp nhất trước</option>
+         <option value="created_desc">Tạo đơn: Mới nhất trước</option>
+         <option value="created_asc">Tạo đơn: Cũ nhất trước</option>
+         <option value="attempt_desc">Attempt: Nhiều nhất trước</option>
+        </select>
+       </label>
+      </div>
+     </div>
+    </div>
    <OrderList orders={visible} now={now}/>
    <div className={styles.pagination}><span>Trang {activePage} / {pages} · {filtered.length} đơn thuộc bảng SLA rider</span><button disabled={activePage===1} onClick={()=>setPage(activePage-1)}>Trước</button><button disabled={activePage===pages} onClick={()=>setPage(activePage+1)}>Sau</button></div>
   </section>

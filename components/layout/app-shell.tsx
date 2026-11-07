@@ -27,8 +27,8 @@ const volumeItems = [
 ];
 
 const navItems = [
-  { href: "/wh-dashboard", label: "WH / iPhone High Value", icon: PackageSearch },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/wh-dashboard", label: "WH / iPhone High Value", icon: PackageSearch },
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },

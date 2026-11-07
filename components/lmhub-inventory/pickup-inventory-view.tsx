@@ -3,7 +3,7 @@ import { readJsonResponse } from "@/lib/http/json-response";
 import { useRememberedState } from "@/components/layout/filter-memory";
 
 import { OPERATING_AREAS, isOperatingArea } from "@/lib/locations/operating-areas";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
   RefreshCcw,
@@ -49,6 +49,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [cot, setCot] = useRememberedState<CotFilter>("pickup-inventory-view:cot", "all");
   const [heat, setHeat] = useState<HeatFilter>("all");
 
@@ -61,9 +62,10 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineRef = useRef<string | null>(null);
 
-  const load = useCallback(async (nextStatus = status) => {
+  const load = useCallback(async (nextStatus = status, refresh = false) => {
     const requestId = ++loadId.current;
     const params = new URLSearchParams({ view: "geography-dashboard", p_status: PICKUP_STATUS_LABEL[nextStatus] });
+    if (refresh) params.set("refresh", "1");
     const res = await fetch(`/api/pickup-inventory?${params}`, { cache: "no-store" });
     const payload = await readJsonResponse(res, "Pickup Backlog");
     if (!res.ok || !payload.success) throw new Error(payload.error ?? `API ${res.status}`);
@@ -72,38 +74,31 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
       const area = String(row.area ?? "").trim().toUpperCase();
       const orders = Number(row.orders);
       if (!isOperatingArea(area) || !Number.isFinite(orders) || orders <= 0) continue;
-      const district=String(row.district??"").trim()||"Chưa có quận",ward=String(row.ward??"").trim()||"Chưa có phường";
-      collected.push({ area, district, ward, zone:null, cot: row.cot,
+      const district = String(row.district ?? "").trim() || "Chưa có quận", ward = String(row.ward ?? "").trim() || "Chưa có phường";
+      collected.push({ area, district, ward, zone: null, cot: row.cot,
         orders, snapshot_id: null, snapshot_at: payload.snapshotAt ?? null, updated_at: null });
     }
     if (requestId === loadId.current) setData({ rows: collected, riders: payload.riders ?? [], snapshotAt: payload.snapshotAt ?? null });
   }, [status]);
 
-  const runLoad = useCallback(async () => {
-    setLoading(true);
+  const runLoad = useCallback(async (refresh = false) => {
+    if (!data.rows.length) setLoading(true);
+    else setRefreshing(true);
     setError(null);
     try {
-      await load();
+      await load(status, refresh);
     } catch (err) {
       console.error("[pickup-board]", err);
       setError(err instanceof Error ? `Không tải được tồn pickup: ${err.message}` : "Không tải được tồn pickup.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [load]);
+  }, [load, data.rows.length, status]);
 
   const refreshStatus = useCallback(async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không refresh được bảng trạng thái pickup.");
-    } finally {
-      setRefreshing(false);
-      setLoading(false);
-    }
-  }, [load]);
+    await runLoad(true);
+  }, [runLoad]);
 
   const scheduleLoad = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -214,7 +209,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
         setQueueNote("Worker chưa ghi snapshot pickup mới sau 20 phút. Kiểm tra trang Nguồn dữ liệu.");
       }
     };
-    const timerId = setInterval(() => void tick(), waitingSnapshot ? 8000 : 15000);
+    const timerId = setInterval(() => void tick(), waitingSnapshot ? 8000 : 25000);
     const onVisible = () => { if (document.visibilityState === "visible") void tick(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -233,8 +228,8 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   }, [waitingSnapshot, snapshotAt]);
 
   const filtered = useMemo(
-    () => OPERATING_AREAS.map((area) => ({ area, districts: filterPickupBoard(buildPickupBoard(rows, area), query, cot, heat) })),
-    [rows, query, cot, heat],
+    () => OPERATING_AREAS.map((area) => ({ area, districts: filterPickupBoard(buildPickupBoard(rows, area), deferredQuery, cot, heat) })),
+    [rows, deferredQuery, cot, heat],
   );
   const allDistricts = useMemo(() => filtered.filter(board => areaFilter === "all" || board.area === areaFilter).flatMap((board) => board.districts), [filtered, areaFilter]);
   const globalAnalytics = useMemo(() => pickupAnalytics(filtered.flatMap(board => board.districts), [], cot), [filtered, cot]);

@@ -4,11 +4,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { pickupOrderParams } from "@/lib/pickup/inventory-orders";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 
 // Proxy cung origin cho trang Ton pickup: browser goi /api/pickup-inventory
 // (khong can apikey Supabase), server doc DB bang service key.
 // Ly do: mot so trinh duyet/mang chan request truc tiep ra Supabase
 // ("No API key found in request"), trong khi server chay on dinh.
+const dashboardCache = new TtlCache<Record<string, unknown>>(20_000, 10);
+const ridersCache = new TtlCache<Record<string, unknown>>(20_000, 10);
+
 export async function GET(request: Request) {
   const context = await getCurrentUserContext().catch(() => null);
   if (!context) {
@@ -20,6 +24,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "board";
+  const refresh = url.searchParams.get("refresh") === "1";
   const admin = createAdminClient();
 
   try {

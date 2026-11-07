@@ -1,5 +1,5 @@
 "use client";
-import { useId, useMemo, useState } from "react";
+import { useDeferredValue, useId, useMemo, useState } from "react";
 import { ArrowUpRight, ChevronDown, ChevronRight, Copy, Search, UsersRound } from "lucide-react";
 import { PickupOrderDialog } from "./pickup-order-dialog";
 import type { PickupOrderScope } from "@/lib/pickup/inventory-orders";
@@ -11,12 +11,25 @@ import { inventoryRiders, type RiderInventoryRow } from "@/lib/pickup/inventory-
 export function PickupRiderInventory({ area,cot,status,rows,loading,error }: {area:string;cot:CotFilter;status:string;rows:RiderInventoryRow[];loading:boolean;error:string|null}) {
   const [orderScope,setOrderScope]=useState<PickupOrderScope|null>(null);
   const [query,setQuery]=useState("");
+  const deferredQuery=useDeferredValue(query);
   const [closed,setClosed]=useState<Record<string,boolean>>({});
   const [copying,setCopying]=useState(false);
   const [copyNotice,setCopyNotice]=useState("");
   const boardId=useId();
-  const riders=useMemo(()=>inventoryRiders(rows,area,cot,query),[rows,area,cot,query]);
-  const groups=useMemo(()=>OPERATING_AREAS.filter(a=>area==='all'||a===area).map(a=>({area:a,riders:inventoryRiders(rows,a,cot,query)})).filter(g=>g.riders.length),[rows,area,cot,query]);
+  const riders=useMemo(()=>inventoryRiders(rows,area,cot,deferredQuery),[rows,area,cot,deferredQuery]);
+  const groups=useMemo(()=>{
+    const list=OPERATING_AREAS.filter(a=>area==='all'||a===area);
+    if(area!=='all')return riders.length?[{area,riders}]:[];
+    const map=new Map<string,typeof riders>();
+    for(const r of riders){
+      for(const a of r.areas){
+        let arr=map.get(a);
+        if(!arr){arr=[];map.set(a,arr);}
+        arr.push(r);
+      }
+    }
+    return list.map(a=>({area:a,riders:map.get(a)??[]})).filter(g=>g.riders.length);
+  },[riders,area]);
   const allOpen=groups.every(g=>!closed[g.area]);
   async function copyImage() {
     setCopying(true);
@@ -78,7 +91,7 @@ export function PickupRiderInventory({ area,cot,status,rows,loading,error }: {ar
     </div>
     {copyNotice&&<p className="pickup-rider-note" role="status">{copyNotice}</p>}
     <p className="pickup-rider-note">Lọc theo COT phụ trách; số tồn gồm cả đơn từ COT trước. Rider có đơn ở nhiều KV xuất hiện trong từng nhóm. Một đơn gán nhiều rider được tính cho từng người, vì vậy không cộng các dòng để ra số đơn duy nhất.</p>
-    {loading?<p className="pickup-rider-empty" role="status">Đang tải tồn rider…</p>:error?<p role="alert" className="pickup-rider-error">{error}</p>:!groups.length?<div className="pickup-rider-empty"><UsersRound size={28} aria-hidden="true"/><h3>Không có rider phù hợp</h3><p>Thử tìm tên khác hoặc mở rộng bộ lọc khu vực/COT.</p></div>:<div className="delivery-area-groups">
+    {loading && !rows.length?<p className="pickup-rider-empty" role="status">Đang tải tồn rider…</p>:error?<p role="alert" className="pickup-rider-error">{error}</p>:!groups.length?<div className="pickup-rider-empty"><UsersRound size={28} aria-hidden="true"/><h3>Không có rider phù hợp</h3><p>Thử tìm tên khác hoặc mở rộng bộ lọc khu vực/COT.</p></div>:<div className="delivery-area-groups">
       {groups.map(group=>{
         const id=`${boardId}-${group.area}`,open=!closed[group.area];
         const openOrders=(r:typeof riders[number])=>setOrderScope({area:group.area,status,cot:'all',rider:r.id,riderCot:r.cot,title:`${r.name} · ${group.area}`});
