@@ -229,3 +229,237 @@
 .caption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @media(max-width:1000px){.split{grid-template-columns:1fr}.header{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.summaryCard{padding:14px 16px;gap:12px}.actions{width:100%}.actions button{flex:1}.header h1{font-size:22px}.search{min-width:180px}.filters{align-items:stretch}.filters>label{flex:1}.sectionHead{padding:0 12px 12px}.pagination{justify-content:space-between}.pagination span{flex-basis:100%}}
+
+/* Time Filter Toolbar & Range Controls */
+.timeFilterBar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--color-paper, #fff);
+  border: 1px solid var(--color-rule, #dce5ed);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.timeFilterHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timeFilterTabs {
+  display: inline-flex;
+  background: var(--color-paper-2, #f1f5f9);
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.timeTab {
+  min-height: 32px !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--color-ink-2, #64748b) !important;
+  cursor: pointer !important;
+  transition: all 120ms ease;
+}
+
+.timeTab:hover:not(.timeTabActive) {
+  background: rgba(255,255,255,0.6) !important;
+  color: var(--color-ink, #0f172a) !important;
+}
+
+.timeTabActive {
+  background: var(--color-paper, #fff) !important;
+  color: var(--color-accent, #0284c7) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.activeRangeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--color-accent-soft, #e0f2fe);
+  color: var(--color-accent, #0369a1);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.timeControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-rule, #e2e8f0);
+}
+
+.timeControls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-2, #64748b);
+}
+
+.dateInput {
+  min-height: 34px !important;
+  padding: 4px 8px !important;
+  border: 1px solid var(--color-rule-strong, #cbd5e1) !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  background: var(--color-paper, #fff) !important;
+  color: var(--color-ink, #0f172a) !important;
+}
+
+.quickBtn {
+  min-height: 32px !important;
+  padding: 3px 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border: 1px solid var(--color-rule, #e2e8f0) !important;
+  border-radius: 6px !important;
+  background: var(--color-paper, #fff) !important;
+  color: var(--color-ink-2, #475569) !important;
+  cursor: pointer !important;
+}
+
+.quickBtn:hover {
+  background: var(--color-paper-2, #f8fafc) !important;
+  color: var(--color-ink, #0f172a) !important;
+}
+
+.summarySlaHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.slaTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink, #0f172a);
+}
+
+.slaRatioText {
+  font-size: 11px;
+  color: var(--color-muted, #64748b);
+  font-weight: 500;
+}
+
+.slaPercent {
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 0.9;
+}
+
+.slaRatioBar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-paper-3, #e2e8f0);
+  overflow: hidden;
+  display: flex;
+  margin-top: 6px;
+}
+
+.slaRatioOntime {
+  height: 100%;
+  background: var(--color-success, #087b64);
+  transition: width 200ms ease;
+}
+
+.slaRatioLate {
+  height: 100%;
+  background: var(--color-error, #b42318);
+  transition: width 200ms ease;
+}
+
+/* Near Late (Chuẩn bị trễ) Styling */
+.orderCountdown[data-warning="true"] {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.orderRow[data-ontime="Warning"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.summaryNearLate {
+  color: #d97706 !important;
+  font-weight: 700;
+}
+
+.badgeWarning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.statusPillGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.statusFilterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid var(--color-rule, #dce5ed);
+  background: var(--color-paper, #fff);
+  color: var(--color-ink-2, #52677d);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.statusFilterBtn:hover {
+  border-color: var(--color-muted, #94a3b8);
+  background: var(--color-paper-2, #f5f8fb);
+  color: var(--color-ink, #0f172a);
+}
+
+.statusFilterBtnActive {
+  background: var(--color-ink, #0f172a) !important;
+  color: #fff !important;
+  border-color: var(--color-ink, #0f172a) !important;
+}
+
+.statusFilterBtnNearLate {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.statusFilterBtnNearLate.statusFilterBtnActive {
+  background: #d97706 !important;
+  border-color: #d97706 !important;
+  color: #fff !important;
+}

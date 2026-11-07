@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
 import headerStyles from "./workspace-header.module.css";
-import { Activity, BarChart3, Bike, ChevronDown, LayoutGrid, Map, Settings2, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, Bike, ChevronDown, FolderKanban, LayoutGrid, Map, Settings2, Smartphone, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
 import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/app-brand";
@@ -18,6 +18,7 @@ import { ProductUpdateNotifications } from "@/components/feedback/product-update
 import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
 import { QuickNoteButton } from "@/components/notes/quick-note-button";
+import { FloatingAiBot } from "@/components/ai/floating-ai-bot";
 import { AiLauncher } from "@/components/ai/ai-launcher";
 import {pageForPath,canViewPage,type PageAccess} from "@/lib/auth/page-access";
 
@@ -28,7 +29,7 @@ const volumeItems = [
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/wh-dashboard", label: "WH / iPhone High Value", icon: PackageSearch },
+  { href: "/wh-dashboard", label: "iPhone / WH High Value", icon: Smartphone },
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
@@ -54,9 +55,10 @@ const navItems = [
 ];
 
 const navigationGroups = [
-  { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime", "/wh-dashboard"] },
+  { label: "Live Monitoring", icon: Activity, paths: ["/realtime-dashboard", "/pickup-realtime"] },
   { label: "Backlog", icon: PackageOpen, paths: ["/lmhub-inventory", "/inventory-delivery", "/backlog-history", "/overnight-holds"] },
   { label: "Volume", icon: Truck, paths: volumeItems.map(item => item.href) },
+  { label: "Dự án (Projects)", icon: FolderKanban, paths: ["/wh-dashboard"] },
   { label: "Pickup Management", icon: ListChecks, paths: ["/pickup-management", "/pickup-management?view=replacement"] },
 ];
 
@@ -70,9 +72,9 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/wh-dashboard","/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
-type WorkspaceModule = "operations" | "team" | "routes" | "data" | "settings";
+type WorkspaceModule = "operations" | "wh" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
 
 function getTrustedFrameContext() {
@@ -101,6 +103,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const memberToolRestricted = visibleToolItems.length===0;
   const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
   const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
+  const whPaths = ["/wh-dashboard"];
   const teamPaths = ["/riders", "/team", "/notes"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
@@ -112,7 +115,8 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     ...navItems.filter((item) => item.href === "/feedback"&&allowedHref(item.href)),
   ];
   const pickupActive = pathname.startsWith("/pickup-management");
-  const routeModule: WorkspaceModule = teamPaths.some((path) => pathname.startsWith(path)) ? "team"
+  const routeModule: WorkspaceModule = whPaths.some((path) => pathname.startsWith(path)) ? "wh"
+    : teamPaths.some((path) => pathname.startsWith(path)) ? "team"
     : dataPaths.some((path) => pathname.startsWith(path)) ? "data"
     : toolItems.some((item) => pathname.startsWith(item.href)) && !memberToolRestricted ? "routes"
     : pathname.startsWith("/settings") || pathname.startsWith("/role-permissions") || pathname.startsWith("/user-activity") || pathname.startsWith("/site-health") ? "settings" : "operations";
@@ -120,12 +124,14 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const selectedModule = moduleSelection?.pathname === pathname ? moduleSelection.module : routeModule;
   const modules = [
     { id: "operations" as const, label: "Operations", icon: LayoutGrid },
+    { id: "wh" as const, label: "Dự án", icon: FolderKanban },
     { id: "team" as const, label: "Workforce", icon: UsersRound },
     ...(!memberToolRestricted ? [{ id: "routes" as const, label: "Maps & Routes", icon: Map }] : []),
     { id: "data" as const, label: "Data Management", icon: Table2 },
     { id: "settings" as const, label: "Administration", icon: Settings2 },
   ];
-  const moduleItems = selectedModule === "team" ? workspaceItems.filter((item) => teamPaths.includes(item.href))
+  const moduleItems = selectedModule === "wh" ? workspaceItems.filter((item) => whPaths.includes(item.href))
+    : selectedModule === "team" ? workspaceItems.filter((item) => teamPaths.includes(item.href))
     : selectedModule === "routes" ? visibleToolItems
     : selectedModule === "data" ? workspaceItems.filter((item) => dataPaths.includes(item.href))
     : selectedModule === "settings" ? systemItems
@@ -188,7 +194,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
             <p className="app-nav-eyebrow">{selectedModule === "operations" ? "Monitoring & Analytics" : modules.find((module) => module.id === selectedModule)?.label}</p>
             {moduleItems.map((item) => {
               const group = navigationGroups.find(group => group.paths.includes(item.href));
-              if (group) {
+              if (group && selectedModule !== "wh") {
                 if (moduleItems.find(child=>group.paths.includes(child.href))?.href !== item.href) return null;
                 const items = moduleItems.filter(child => group.paths.includes(child.href));
                 return <NavigationGroup key={`${group.label}:${pathname}`} label={group.label} icon={group.icon} active={items.some(child => isNavigationItemActive(child, pathname, searchParams.get("view")))}>
@@ -264,6 +270,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
         </main>
         <footer className="app-footer"><AppCopyright /><p>Rider Ops Console · {currentPage?.label ?? "Operations"}</p></footer>
         <QuickNoteButton />
+        <FloatingAiBot />
       </div>
 
       {moreOpen ? <button type="button" aria-label="Đóng menu" className="app-mobile-scrim" onClick={() => setMoreOpen(false)} /> : null}

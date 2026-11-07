@@ -18,8 +18,14 @@ export function canReadLegacyAiContext(context: CurrentUserContext, question: st
 export function analysisAccess(context: CurrentUserContext) {
   const { role, page_access, permissions } = context.profile;
   const view = (key: Parameters<typeof canViewPage>[2]) => canViewPage(role, page_access, key);
-  return { backlog: view("backlog_history") && canAccessPickupManagement(role, permissions),
+  return {
+    backlog: view("backlog_history") && canAccessPickupManagement(role, permissions),
     oh: view("onhold") && (role === "admin" || permissions.manage_performance),
     volume: view("delivery_volume") && (role === "admin" || permissions.manage_volume),
-    overnight: view("overnight"), fc: view("dashboard"), returns: view("return") && canManageReturn(role, permissions) };
+    overnight: view("overnight"),
+    fc: view("dashboard"),
+    returns: view("return") && canManageReturn(role, permissions),
+    deliveryRealtime: view("delivery_realtime"),
+    pickupRealtime: view("pickup_realtime") && canAccessPickupManagement(role, permissions),
+  };
 }

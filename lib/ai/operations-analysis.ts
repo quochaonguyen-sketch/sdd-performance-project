@@ -12,11 +12,82 @@ export type AnalysisScope = { from: string; to: string; area: string; hour: numb
 export type AnalysisOvernightSnapshot = { cutoff_date: string; captured_at: string; status: string; status_synced_at: string | null };
 export type AnalysisOvernightRow = { cutoff_date: string; area: string; current_status: string };
 export type AnalysisHub = { date: string; totals: Record<string, number | null>; stations: { fetchedAt: string }[]; fc?: { data: { rows: { date: string; total: number | null; mismatch: boolean }[]; checkedAt: string }; error: string | null } };
+export type AnalysisDeliveryRealtime = {
+  snapshotAt: string | null;
+  summary: {
+    totalAssigned: number;
+    delivered: number;
+    delivering: number;
+    failed: number;
+    rate: number;
+    totalRiders: number;
+    warningCount: number;
+  };
+  byArea: Record<string, {
+    totalAssigned: number;
+    delivered: number;
+    delivering: number;
+    failed: number;
+    rate: number;
+    warningCount: number;
+    ridersCount: number;
+  }>;
+  warningRiders: Array<{
+    id: string;
+    name: string;
+    kv: string;
+    district: string;
+    totalAssigned: number;
+    delivered: number;
+    delivering: number;
+    failed: number;
+    idleMinutes: number;
+    reason: string;
+  }>;
+};
+
+export type AnalysisPickupRealtime = {
+  snapshotAt: string | null;
+  summary: {
+    assigned: number;
+    picked: number;
+    pending: number;
+    onhold: number;
+    rate: number;
+    totalRiders: number;
+  };
+  byArea: Record<string, {
+    assigned: number;
+    picked: number;
+    pending: number;
+    onhold: number;
+    rate: number;
+    ridersCount: number;
+  }>;
+  heavyPendingRiders: Array<{
+    id: string;
+    name: string;
+    area: string;
+    assigned: number;
+    picked: number;
+    pending: number;
+    onhold: number;
+  }>;
+  topOnholdRiders: Array<{
+    id: string;
+    name: string;
+    area: string;
+    onhold: number;
+  }>;
+};
+
 export type AnalysisInput = {
   scope: AnalysisScope; today: string; now: string; sources: BriefingSource[];
   backlog: BacklogHourlyDay[] | null; oh: OHData | null; volume: DashboardVolumeRow[] | null;
   overnight: { snapshots: AnalysisOvernightSnapshot[]; rows: AnalysisOvernightRow[] } | null;
   hub: AnalysisHub | null; returns: ReturnWorkspaceData | null; returnHistory?: ReturnHistoryData | null;
+  deliveryRealtime?: AnalysisDeliveryRealtime | null;
+  pickupRealtime?: AnalysisPickupRealtime | null;
 };
 export function validateAnalysisScope(scope: AnalysisScope, today: string) {
   if (!validHistoryDay(scope.from) || !validHistoryDay(scope.to) || scope.from > scope.to || scope.to > today || Date.parse(scope.to)-Date.parse(scope.from)>30*86400000 || !Number.isInteger(scope.hour) || scope.hour<0 || scope.hour>23 || scope.area !== "all" && !OPERATING_AREAS.includes(scope.area as typeof OPERATING_AREAS[number])) throw Error("Chọn khoảng ngày hợp lệ trong quá khứ/hiện tại, tối đa 31 ngày; KV1–KV5 và giờ 0–23.");
@@ -32,7 +103,8 @@ export function analysisScopeForQuestion(question: string, today: string): Analy
   const area = /toan bo|toan doi|tat ca|kv1\s*[-–]\s*kv5/.test(clean) ? null : clean.match(/\b(?:kv|khu vuc)\s*([1-5])\b/), hour = clean.match(/\b(\d{1,2})(?:h\b|:(?:00|50)\b)/);
   return validateAnalysisScope({ from, to, area: area ? `KV${area[1]}` : "all", hour: hour ? Number(hour[1]) : 23 }, today);
 }
-export const needsOperationsAnalysis = (q: string) => /backlog|\boh\b|on.?hold|qua đêm|qua dem|\bvolume\b|\bfc\b|forecast|\breturn\b|hàng trả|hang tra|trả hàng/i.test(q);
+export const needsOperationsAnalysis = (q: string) =>
+  /backlog|\boh\b|on.?hold|qua đêm|qua dem|\bvolume\b|\bfc\b|forecast|\breturn\b|hàng trả|hang tra|trả hàng|realtime|tiến độ|tien do|giao hàng|giao hang|lấy hàng|lay hang|giao thuc te/i.test(q);
 export const isReturnOnlyAnalysis = (q: string) => /\breturn\b|hàng trả|hang tra|trả hàng/i.test(q) && !needsOperationsAnalysis(q.replace(/\breturn\b|hàng trả|hang tra|trả hàng/ig, ""));
 export function metricChange(value: number | null, previous: number | null, comparable = true) {
   if (!comparable || value === null || previous === null) return null;
@@ -105,6 +177,7 @@ export function buildOperationsAnalysis(input: AnalysisInput) {
   const overnightFocus = latestOvernight ? { date: latestOvernight, ...overnightAt(latestOvernight)! } : null;
   const overnightHotspots=latestOvernight?OPERATING_AREAS.filter(area=>scope.area==="all"||scope.area===area).map(area=>{const rows=overnightRows.filter(row=>row.cutoff_date===latestOvernight&&normalizeOperatingArea(row.area)===area);return {date:latestOvernight,area,total:rows.length,remaining:rows.filter(row=>!["Delivered","Returned"].includes(row.current_status)).length};}).sort((a,b)=>b.remaining-a.remaining):[];
   return {scope,backlogCheckpoint:`${scope.hour}:50`,generatedAt:now,sources,daily,ohFocusDate:focus,ohAreas,ohHotspots,ohReasons:[...reasons].map(([code,orders])=>({code,label:reasonNameVi(code),orders})).sort((a,b)=>b.orders-a.orders).slice(0,8),overnightFocus,overnightHotspots,forecast,returns,returnHistory,
+    deliveryRealtime: input.deliveryRealtime ?? null, pickupRealtime: input.pickupRealtime ?? null,
     definitions:{ohRate:"Số OH / Delivery Volume cùng ngày, cùng KV × 100. Tỷ trọng quận/phường là số OH điểm đó / tổng OH trong phạm vi; không phải tỷ lệ trên Volume quận/phường.",change:"Δ = hiện tại − ngày trước; % thay đổi = Δ/ngày trước ×100. Mẫu số 0 không tính %. Tỷ lệ OH so bằng điểm phần trăm, không nhầm với % thay đổi số OH.",backlog:`So cùng giờ ${scope.hour}:50 theo checkpoint. Chỉ tính biến động khi hai ngày đều có snapshot chính thức. Ngày thiếu/chưa chốt để trống, không chuyển thành 0.`,overnight:"Số giữ tại cutoff 23h của từng ngày là cohort riêng. Remaining là trạng thái hiện tại của cohort, không phải snapshot trạng thái tại ngày cũ; không suy số đã xử lý từ chênh lệch giữa hai cohort.",limits:"Điểm nóng OH/Return giới hạn 15 dòng, lý do OH 8 dòng; tổng được tính trước khi giới hạn. Dữ liệu lịch sử không áp dụng ngưỡng cũ 20 phút của realtime. FC chỉ so cùng loại sản lượng và cùng phạm vi."}};
 }
 export type OperationsAnalysis = ReturnType<typeof buildOperationsAnalysis>;

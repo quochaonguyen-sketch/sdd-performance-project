@@ -15,7 +15,11 @@ function nodes(tree: unknown): Tree[] {
 function text(tree: unknown): string {
   if (typeof tree === "string" || typeof tree === "number") return String(tree);
   if (Array.isArray(tree)) return tree.map(text).join("");
-  return tree && typeof tree === "object" ? text((tree as Tree).props?.children) : "";
+  if (tree && typeof tree === "object") {
+    const props = (tree as Tree).props;
+    return (props?.content ? String(props.content) : "") + text(props?.children);
+  }
+  return "";
 }
 async function fixture() {
   let cursor = 0, serial = 0;
@@ -36,10 +40,15 @@ async function fixture() {
       if (name === "react") return {
         useRef<T>(initial: T) { const i = cursor++; slots[i] ??= { current: initial }; return slots[i]; },
         useState<T>(initial: T) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], (value: T | ((old: T) => T)) => { slots[i] = typeof value === "function" ? (value as (old: T) => T)(slots[i] as T) : value; }]; },
+        useCallback<T extends (...args: unknown[]) => unknown>(fn: T) { return fn; },
         useEffect(effect: () => unknown, deps: unknown[]) { const i = cursor++, before = slots[i] as unknown[] | undefined; if (!before || deps.some((dep, j) => !Object.is(dep, before[j]))) effects.push(effect); slots[i] = deps; },
       };
       if (name === "lucide-react") return new Proxy({}, { get: () => () => null });
       if (name === "@/lib/ai/browser-config") return { useBrowserAiConfig: () => ({}) };
+      if (name === "next/dynamic") return () => () => null;
+      if (name === "./nova-markdown") return { NovaMarkdown: ({ content }: { content: string }) => content };
+      if (name === "@/lib/ai/ai-chat-store") return { useAiChatOpen: () => true, setAiChatOpen: () => {}, consumeInitialDraft: () => "" };
+      if (name === "@/utils/cn") return { cn: (...classes: unknown[]) => classes.filter(Boolean).join(" ") };
       if (name.endsWith(".css")) return new Proxy({}, { get: (_target, key) => String(key) });
       throw Error(`Unexpected component dependency: ${name}`);
     },

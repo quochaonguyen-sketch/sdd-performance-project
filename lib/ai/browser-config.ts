@@ -12,8 +12,15 @@ export type BrowserAiConfig = {
 
 export const DEFAULT_BROWSER_AI_CONFIG: BrowserAiConfig = {
   baseUrl: "",
-  model: "gpt-4.1-mini",
+  model: "gpt-4o-mini",
 };
+
+function normalizeModel(model: unknown): string {
+  if (typeof model !== "string" || !model.trim()) return DEFAULT_BROWSER_AI_CONFIG.model;
+  const trimmed = model.trim();
+  if (trimmed === "gpt-4.1-mini") return "gpt-4o-mini";
+  return trimmed;
+}
 
 export function readBrowserAiConfig(): BrowserAiConfig {
   if (typeof window === "undefined") return DEFAULT_BROWSER_AI_CONFIG;
@@ -22,7 +29,7 @@ export function readBrowserAiConfig(): BrowserAiConfig {
     const saved = JSON.parse(window.localStorage.getItem(AI_CONFIG_STORAGE_KEY) ?? "null") as Partial<BrowserAiConfig> | null;
     return {
       baseUrl: typeof saved?.baseUrl === "string" ? saved.baseUrl.trim().replace(/\/$/, "") : "",
-      model: typeof saved?.model === "string" && saved.model.trim() ? saved.model.trim() : DEFAULT_BROWSER_AI_CONFIG.model,
+      model: normalizeModel(saved?.model),
     };
   } catch {
     return DEFAULT_BROWSER_AI_CONFIG;
@@ -32,7 +39,7 @@ export function readBrowserAiConfig(): BrowserAiConfig {
 export function saveBrowserAiConfig(config: BrowserAiConfig) {
   const normalized = {
     baseUrl: config.baseUrl.trim().replace(/\/$/, ""),
-    model: config.model.trim() || DEFAULT_BROWSER_AI_CONFIG.model,
+    model: normalizeModel(config.model),
   };
   window.localStorage.setItem(AI_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new CustomEvent(AI_CONFIG_CHANGED_EVENT, { detail: normalized }));
@@ -63,7 +70,7 @@ function parseSnapshot(snapshot: string) {
     const saved = JSON.parse(snapshot) as Partial<BrowserAiConfig>;
     return {
       baseUrl: typeof saved.baseUrl === "string" ? saved.baseUrl.trim().replace(/\/$/, "") : "",
-      model: typeof saved.model === "string" && saved.model.trim() ? saved.model.trim() : DEFAULT_BROWSER_AI_CONFIG.model,
+      model: normalizeModel(saved.model),
     };
   } catch {
     return DEFAULT_BROWSER_AI_CONFIG;

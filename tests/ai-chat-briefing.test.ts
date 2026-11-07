@@ -32,6 +32,8 @@ function fixture() {
       if (name === "@/lib/ai/operations-context") return { loadAiOperationsContext: async () => { legacyReads++; throw Error("legacy read must be gated"); } };
       if (name === "@/lib/ai/work-date") return { todayInVietnam: () => "2026-11-02", resolveWorkDateScope: () => resolveWorkDateScope("2026-11-02") };
       if (name === "@/lib/ai/briefing-server") return { loadOperationsBriefing: async () => { briefingReads++; return { generatedAt: "2026-11-02T03:00:00Z", day: "2026-11-02", sources: [{ id: "team", state: "ready" }, { id: "pickup", state: "forbidden" }], summary: { fteTomorrow: { date: "2026-11-03", working: 27 } } }; } };
+      if (name === "@/lib/ai/wh-context") return { isWhTrackingQuery: () => false, loadWhOperationsContext: async () => null };
+      if (name === "@/lib/ai/rider-lookup") return { lookupRidersContext: async () => [] };
       throw Error(name);
     },
   });
