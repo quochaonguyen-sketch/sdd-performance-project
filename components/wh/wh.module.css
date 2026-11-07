@@ -339,6 +339,15 @@
   color: var(--color-ink, #0f172a) !important;
 }
 
+.filterDayNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-ink-2, #64748b);
+  padding: 2px 4px;
+}
+
 .summarySlaHeader {
   width: 100%;
   display: flex;

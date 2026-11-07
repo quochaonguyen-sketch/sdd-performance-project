@@ -548,14 +548,16 @@ export function WhDashboard() {
 
   // Active filter label
   const rangeLabel =
-    filterMode === "day"
-      ? selectedDate === currentDay
-        ? `Hôm nay (${formatVnDate(currentDay)})`
-        : `Ngày ${formatVnDate(selectedDate)}`
-      : filterMode === "week"
+    filterMode === "week"
       ? `Tuần ${formatVnDate(getMondayOfWeek(selectedWeekDate))} – ${formatVnDate(getSundayOfWeek(selectedWeekDate))}`
       : filterMode === "month"
       ? `Tháng ${selectedMonth.split("-").reverse().join("/")}`
+      : filterMode === "day"
+      ? `Hôm nay (${formatVnDate(currentDay)})`
+      : customFrom === customTo
+      ? customFrom === currentDay
+        ? `Hôm nay (${formatVnDate(currentDay)})`
+        : `Ngày ${formatVnDate(customFrom)}`
       : `Từ ${formatVnDate(customFrom)} đến ${formatVnDate(customTo)}`;
 
   return (
@@ -594,11 +596,13 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "day" && selectedDate === currentDay}
-              className={`${styles.timeTab} ${filterMode === "day" && selectedDate === currentDay ? styles.timeTabActive : ""}`}
+              aria-selected={filterMode === "day"}
+              className={`${styles.timeTab} ${filterMode === "day" ? styles.timeTabActive : ""}`}
               onClick={() => {
                 setFilterMode("day");
                 setSelectedDate(currentDay);
+                setCustomFrom(currentDay);
+                setCustomTo(currentDay);
                 void load({ mode: "day", date: currentDay });
               }}
             >
@@ -607,14 +611,14 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "day" && selectedDate !== currentDay}
-              className={`${styles.timeTab} ${filterMode === "day" && selectedDate !== currentDay ? styles.timeTabActive : ""}`}
+              aria-selected={filterMode === "range"}
+              className={`${styles.timeTab} ${filterMode === "range" ? styles.timeTabActive : ""}`}
               onClick={() => {
-                setFilterMode("day");
-                void load({ mode: "day" });
+                setFilterMode("range");
+                void load({ mode: "range", from: customFrom, to: customTo });
               }}
             >
-              Theo ngày
+              Theo ngày / Khoảng ngày
             </button>
             <button
               type="button"
@@ -640,18 +644,6 @@ export function WhDashboard() {
             >
               Theo tháng
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === "range"}
-              className={`${styles.timeTab} ${filterMode === "range" ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("range");
-                void load({ mode: "range" });
-              }}
-            >
-              Từ ngày tới ngày
-            </button>
           </div>
 
           <div className={styles.activeRangeBadge}>
@@ -665,45 +657,11 @@ export function WhDashboard() {
         {/* Dynamic Controls based on selected tab */}
         <div className={styles.timeControls}>
           {filterMode === "day" && (
-            <>
-              <label>
-                <span>Chọn ngày:</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={currentDay}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val) {
-                      setSelectedDate(val);
-                      void load({ mode: "day", date: val });
-                    }
-                  }}
-                  className={styles.dateInput}
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  const yesterday = new Date(Date.now() + 7 * 3600000 - 86400000).toISOString().slice(0, 10);
-                  setSelectedDate(yesterday);
-                  void load({ mode: "day", date: yesterday });
-                }}
-              >
-                Hôm qua
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  setSelectedDate(currentDay);
-                  void load({ mode: "day", date: currentDay });
-                }}
-              >
-                Hôm nay
-              </button>
-            </>
+            <div className={styles.filterDayNote}>
+              <span>
+                Đang xem ngày hôm nay ({formatVnDate(currentDay)}). Bạn có thể chọn tab <strong>&quot;Theo ngày / Khoảng ngày&quot;</strong> để tra cứu bất kỳ ngày nào hoặc khoảng ngày.
+              </span>
+            </div>
           )}
 
           {filterMode === "week" && (
@@ -786,8 +744,15 @@ export function WhDashboard() {
                 <input
                   type="date"
                   value={customFrom}
-                  max={customTo}
-                  onChange={(e) => setCustomFrom(e.target.value)}
+                  max={currentDay}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    setCustomFrom(val);
+                    if (customFrom === customTo || customTo < val) {
+                      setCustomTo(val);
+                    }
+                  }}
                   className={styles.dateInput}
                 />
               </label>
@@ -798,7 +763,12 @@ export function WhDashboard() {
                   value={customTo}
                   min={customFrom}
                   max={currentDay}
-                  onChange={(e) => setCustomTo(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    setCustomTo(val);
+                    if (customFrom > val) setCustomFrom(val);
+                  }}
                   className={styles.dateInput}
                 />
               </label>
@@ -808,6 +778,40 @@ export function WhDashboard() {
                 onClick={() => void load({ mode: "range", from: customFrom, to: customTo })}
               >
                 Áp dụng
+              </button>
+              <button
+                type="button"
+                className={styles.quickBtn}
+                onClick={() => {
+                  setCustomTo(customFrom);
+                  void load({ mode: "range", from: customFrom, to: customFrom });
+                }}
+                title="Chỉ xem đúng 1 ngày ở ô Từ ngày"
+              >
+                Chỉ 1 ngày này
+              </button>
+              <button
+                type="button"
+                className={styles.quickBtn}
+                onClick={() => {
+                  const yesterday = new Date(Date.now() + 7 * 3600000 - 86400000).toISOString().slice(0, 10);
+                  setCustomFrom(yesterday);
+                  setCustomTo(yesterday);
+                  void load({ mode: "range", from: yesterday, to: yesterday });
+                }}
+              >
+                Hôm qua
+              </button>
+              <button
+                type="button"
+                className={styles.quickBtn}
+                onClick={() => {
+                  setCustomFrom(currentDay);
+                  setCustomTo(currentDay);
+                  void load({ mode: "range", from: currentDay, to: currentDay });
+                }}
+              >
+                Hôm nay
               </button>
               <button
                 type="button"

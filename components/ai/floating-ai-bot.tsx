@@ -76,10 +76,12 @@ export function FloatingAiBot() {
 
   function handleDismiss(e: React.MouseEvent) {
     e.stopPropagation();
+    e.preventDefault();
+    setHovered(false);
     setBubbleDismissed(true);
   }
 
-  const showBubble = !isOpen && bubbleVisible && (!bubbleDismissed || hovered);
+  const showBubble = !isOpen && bubbleVisible && !bubbleDismissed;
 
   return (
     <aside
@@ -92,10 +94,10 @@ export function FloatingAiBot() {
           "absolute right-full top-1/2 mr-3 sm:mr-4 -translate-y-1/2 w-64 sm:w-72 max-w-[calc(100vw-6rem)]",
           "rounded-2xl border border-cyan-400/50 bg-white/95 dark:bg-slate-900/95 dark:border-cyan-600/50 p-3.5",
           "shadow-[0_12px_36px_rgba(6,182,212,0.22)] backdrop-blur-md",
-          "transition-all duration-300 transform",
+          "transition-all duration-150 ease-out transform",
           showBubble
             ? "translate-x-0 opacity-100 scale-100 pointer-events-auto cursor-pointer"
-            : "translate-x-3 opacity-0 scale-95 pointer-events-none"
+            : "translate-x-2 opacity-0 scale-95 pointer-events-none"
         )}
         onClick={handleBubbleClick}
         title="Bấm để hỏi Nova ngay"
@@ -124,9 +126,9 @@ export function FloatingAiBot() {
             onClick={handleDismiss}
             aria-label="Thu gọn gợi ý"
             title="Đóng gợi ý"
-            className="rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
           >
-            <X size={13} />
+            <X size={14} />
           </button>
         </div>
 
@@ -162,10 +164,7 @@ export function FloatingAiBot() {
         aria-label={isOpen ? "Đóng Nova AI" : "Mở Nova AI - Trợ lý 3D SDD"}
         title={isOpen ? "Đóng Nova AI" : "Nova AI (3D Bot)"}
         onClick={() => toggleAiChatOpen()}
-        onMouseEnter={() => {
-          setHovered(true);
-          setBubbleDismissed(false);
-        }}
+        onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={cn(
           "group relative flex items-center justify-center outline-none transition-all duration-300 focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950",
