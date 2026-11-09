@@ -44,12 +44,11 @@ export async function loadOperationsAnalysis(context: CurrentUserContext, scope:
   await Promise.all([
     readBacklog("delivery"),readBacklog("pickup"),
     source("analysis_oh","OH theo ngày","/onhold",access.oh,async target=>{
-      const results: OHData[] = [];
-      // Day-sized pivots avoid statement timeouts on multi-day OH aggregates.
-      for (const date of dates) {
+      const pivotPromises = dates.map(date => {
         signal?.throwIfAborted();
-        results.push((await ohDayCache.load(`${context.user.id}:${date}`, () => getOHPivot(date,date))).value);
-      }
+        return ohDayCache.load(`${context.user.id}:${date}`, () => getOHPivot(date, date)).then(res => res.value);
+      });
+      const results = await Promise.all(pivotPromises);
       input.oh={reports:results.flatMap(result=>result.reports),cells:results.flatMap(result=>result.cells)};
       target.state=input.oh.reports.length?"ready":"missing";target.at=input.oh.reports.map(row=>row.fetched_at).sort().at(-1)??null;target.note="OH gồm trạng thái 1 và 5 của báo cáo; cache theo tài khoản tối đa 60 giây. Ngày chưa chốt có số tạm tính; không kết luận tăng/giảm so ngày đã chốt.";
     }),
@@ -66,7 +65,11 @@ export async function loadOperationsAnalysis(context: CurrentUserContext, scope:
       input.overnight={snapshots,rows};target.state=snapshots.length?"ready":"missing";target.at=snapshots.map(row=>row.status_synced_at??row.captured_at).sort().at(-1)??null;target.note="Cohort cutoff 23h đã khóa; số remaining theo trạng thái đồng bộ gần nhất, không phải trạng thái chụp lại tại ngày cũ.";
     }),
     source("analysis_fc","Inbound thực tế & FC HCM","/dashboard#fc-overview",access.fc,async target=>{
-      const {GET}=await import("@/app/api/dashboard/hub-sheet/route");const response=await GET(new Request("http://localhost/api/dashboard/hub-sheet"));if(!response.ok)throw Error("Hub unavailable");
+      const {GET}=await import("@/app/api/dashboard/hub-sheet/route");
+      const fcPromise = GET(new Request("http://localhost/api/dashboard/hub-sheet"));
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("FC sheet timeout")), 3500));
+      const response = await Promise.race([fcPromise, timeoutPromise]);
+      if(!response.ok)throw Error("Hub unavailable");
       input.hub=await response.json() as AnalysisHub;
       target.state=input.hub.fc?.data?"ready":"missing";target.at=input.hub.fc?.data?.checkedAt??null;target.note=`Actual Total Inbound ngày ${input.hub.date} so FC HCM Total cùng ngày/phạm vi. FC cache nguồn tối đa 15 phút; chưa có Actual lịch sử cho ngày khác.`;
     }),

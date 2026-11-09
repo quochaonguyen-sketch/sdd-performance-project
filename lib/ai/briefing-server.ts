@@ -7,7 +7,10 @@ import { loadTeam } from "@/lib/team/server";
 import { addDays } from "@/lib/team/model";
 import { todayInVietnam } from "@/lib/ai/work-date";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { TtlCache } from "@/lib/cache/ttl-cache";
 import { buildBriefing, snapshotState, type BriefingInput, type BriefingSource, type BriefingProfile, type DeliveryBriefRow } from "./briefing";
+
+const rosterCache = new TtlCache<BriefingProfile[]>(60_000, 1);
 
 export async function loadOperationsBriefing(context: CurrentUserContext, question = "", signal?: AbortSignal) {
   const access = briefingAccess(context), day = todayInVietnam(), now = new Date().toISOString();
@@ -27,8 +30,8 @@ export async function loadOperationsBriefing(context: CurrentUserContext, questi
     }
   }
   const profiles = attempt(roster, async () => {
-    input.profiles = await readAllPages<BriefingProfile>((from, to) => db!.from("riders")
-      .select("rider_code,full_name,kv,status,delivery_district,delivery_ward").in("kv", OPERATING_AREAS).order("id").range(from, to).abortSignal(signal ?? AbortSignal.timeout(30000)), 1000);
+    input.profiles = (await rosterCache.load("roster", () => readAllPages<BriefingProfile>((from, to) => db!.from("riders")
+      .select("rider_code,full_name,kv,status,delivery_district,delivery_ward").in("kv", OPERATING_AREAS).order("id").range(from, to).abortSignal(signal ?? AbortSignal.timeout(30000)), 1000))).value;
     roster.state = "ready"; roster.at = new Date().toISOString(); roster.note = "Thời điểm đọc danh bạ; chưa phải thời điểm snapshot giao hàng.";
   });
   await Promise.all([

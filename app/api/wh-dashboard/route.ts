@@ -34,6 +34,13 @@ export async function GET(request: Request) {
       } else if (qDate) {
         fromDate = qDate;
         toDate = qDate;
+      } else if (mode === "month") {
+        const [y, m] = today.slice(0, 7).split("-").map(Number);
+        const firstDay = `${y}-${String(m).padStart(2, "0")}-01`;
+        const lastDate = new Date(y, m, 0).getDate();
+        const lastDay = `${y}-${String(m).padStart(2, "0")}-${String(lastDate).padStart(2, "0")}`;
+        fromDate = firstDay;
+        toDate = lastDay;
       }
     } catch {
       // fallback to today

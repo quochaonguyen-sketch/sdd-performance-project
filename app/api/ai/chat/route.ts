@@ -165,15 +165,17 @@ export async function POST(request: Request) {
   if (!apiKey) return NextResponse.json({ success: false, error: "Chưa cấu hình SHOPAIKEY_API_KEY trên máy chủ." }, { status: 503 });
   const baseUrl = (process.env.SHOPAIKEY_BASE_URL ?? "https://api.shopaikey.com/v1").replace(/\/$/, "");
   const rawModel = process.env.SHOPAIKEY_MODEL || parsed.data.aiConfig?.model || "gpt-4o-mini";
-  const primaryModel = rawModel === "gpt-4.1-mini" ? "gpt-4o-mini" : rawModel;
+  const primaryModel = (rawModel === "gpt-4.1-mini" || rawModel === "qwen3:4b-instruct" || rawModel === "gpt-5-mini")
+    ? "gpt-4o-mini"
+    : rawModel;
   const maxTokens = getMaxTokens();
 
   try {
     const admin = createAdminClient();
 
     const isWhQuery = isWhTrackingQuery(userQuestion) || parsed.data.pagePath?.includes("/wh");
-    const riderLookupPromise = lookupRidersContext(admin, userQuestion, todayInVietnam());
-    const whContextPromise = (isWhQuery || parsed.data.includeData)
+    const matchedRiders = await lookupRidersContext(admin, userQuestion, todayInVietnam());
+    const whContextPromise = isWhQuery
       ? loadWhOperationsContext(admin, todayInVietnam())
       : Promise.resolve(null);
 
@@ -183,6 +185,14 @@ export async function POST(request: Request) {
       : Promise.resolve(null);
 
     const dataContextPromise = (async () => {
+      // Fast path: If the query is specifically about a rider or WH, skip heavy 7-day multi-source operations analysis!
+      const isGeneralOverview = /toàn đội|toan doi|toàn bộ|toan bo|tổng quan|tong quan|toàn trạm/i.test(userQuestion);
+      if (matchedRiders && matchedRiders.length > 0 && !isGeneralOverview) {
+        return { analysis: null, briefing: null, dataContext: null };
+      }
+      if (isWhQuery && !needsOperationsAnalysis(userQuestion.replace(/iphone|\bip\b|\bwh\b|4232|4h/gi, "")) && !isGeneralOverview) {
+        return { analysis: null, briefing: null, dataContext: null };
+      }
       if (context && analysisScope) {
         const analysis = await loadOperationsAnalysis(context, analysisScope, request.signal, isReturnOnlyAnalysis(userQuestion));
         return {
@@ -222,11 +232,10 @@ export async function POST(request: Request) {
       return { analysis: null, briefing: null, dataContext: null };
     })();
 
-    const [accountMemory, { analysis, dataContext: rawDataContext }, whContext, matchedRiders] = await Promise.all([
+    const [accountMemory, { analysis, dataContext: rawDataContext }, whContext] = await Promise.all([
       accountMemoryPromise,
       dataContextPromise,
       whContextPromise,
-      riderLookupPromise,
     ]);
 
     let dataContext: {
@@ -314,8 +323,7 @@ export async function POST(request: Request) {
       "gpt-4o-mini",
       "gemini-2.5-flash",
       "gpt-4o",
-      "gpt-4.1-mini",
-    ]));
+    ])).filter(m => m !== "gpt-4.1-mini" && m !== "qwen3:4b-instruct");
 
     let upstream: Response | null = null;
     let lastErrorDetail = "";
@@ -345,7 +353,7 @@ export async function POST(request: Request) {
             max_tokens: maxTokens,
           }),
           cache: "no-store",
-          signal: AbortSignal.timeout(parsed.data.includeData ? 180_000 : 90_000),
+          signal: AbortSignal.timeout(8_000),
         });
 
         if (res.ok && res.body) {

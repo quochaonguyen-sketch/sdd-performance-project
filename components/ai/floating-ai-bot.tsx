@@ -85,7 +85,7 @@ export function FloatingAiBot() {
 
   return (
     <aside
-      className="fixed bottom-40 right-4 z-[85] pointer-events-auto sm:bottom-[5.5rem] sm:right-6"
+      className="fixed bottom-6 right-4 z-[85] pointer-events-auto sm:bottom-6 sm:right-6"
       aria-label="Nova AI - Trợ lý ảo 3D SDD"
     >
       {/* Interactive Cartoon Speech Bubble outside on the website */}

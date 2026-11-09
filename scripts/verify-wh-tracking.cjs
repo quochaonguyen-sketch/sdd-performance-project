@@ -26,7 +26,7 @@ Module._load=function(name,parent,...args){
  assert.equal(sla(row,'sdd').state,'On time');assert.equal(sla({...row,soc_pending_at:new Date(now-3*3600000-1000).toISOString()},'sdd').state,'Late');
  assert.equal(sla(row,'wh').state,'On time');assert.equal(sla({...row,soc_pending_at:new Date(now-3*3600000+31000).toISOString()},'wh').state,'Late');
  assert.equal(sla({...row,attempt:1,onhold_at:at,delivered_at:null},'4h').state,'Pending');
- assert.equal(sla({...row,attempt:2},'4h').state,'Need recheck');assert.equal(sla({...row,attempt:null},'4h').state,'N/A');
+ assert.equal(sla({...row,attempt:2},'4h').state,'On time');assert.equal(sla({...row,attempt:2,created_at:new Date(now-5*3600000).toISOString()},'4h').state,'Late');
  const c=counts(orders,day);assert.equal(c.total,4);assert.equal(c.ready,1);assert.equal(c.unassigned,1);assert.equal(c.late,0);assert.equal(c.ontime,1);assert.equal(c.onhold,1);assert.equal(c.riders,1);
  const {GET,POST}=require('../app/api/wh-dashboard/route.ts');
  assert.equal((await GET()).status,401);assert.equal((await POST()).status,401);assert.equal(reads,0);

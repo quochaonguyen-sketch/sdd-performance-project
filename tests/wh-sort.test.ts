@@ -116,6 +116,24 @@ test("sla 4h marks duration < 4h as On time and > 4h as Late, using delivered_at
   });
   assert.equal(sla(deliveredAttempt1, "4h").state, "On time");
   assert.equal(sla(deliveredAttempt1, "4h").minutes, 165);
+
+  const deliveredAttempt2Late = makeOrder("ATT2_LATE", "Delivered", {
+    created_at: "2026-11-06T06:00:00Z",
+    delivered_at: "2026-11-06T12:00:00Z", // 6h (> 4h)
+    onhold_at: "2026-11-06T08:00:00Z",
+    attempt: 2,
+  });
+  assert.equal(sla(deliveredAttempt2Late, "4h").state, "Late");
+  assert.equal(sla(deliveredAttempt2Late, "4h").minutes, 360);
+
+  const deliveredAttempt2Ontime = makeOrder("ATT2_ONT", "Delivered", {
+    created_at: "2026-11-06T06:00:00Z",
+    delivered_at: "2026-11-06T09:15:00Z", // 3h 15m (< 4h)
+    onhold_at: "2026-11-06T07:30:00Z",
+    attempt: 2,
+  });
+  assert.equal(sla(deliveredAttempt2Ontime, "4h").state, "On time");
+  assert.equal(sla(deliveredAttempt2Ontime, "4h").minutes, 195);
 });
 
 test("sla 4h does not count onhold_at: onhold orders without delivered_at return Pending", () => {

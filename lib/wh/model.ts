@@ -28,7 +28,12 @@ export type WhData = {
 };
 export const AREAS=["KV1","KV2","KV3","KV4","KV5","UNRESOLVED"];
 export const areaName=(area:string)=>area==="UNRESOLVED"?"Chưa rõ KV":area.replace("KV","Khu vực ");
-export const vnDay=(stamp:string)=>new Date(Date.parse(stamp)+7*3600000).toISOString().slice(0,10);
+export const vnDay = (stamp: string | null | undefined) => {
+  if (!stamp) return "";
+  const parsed = Date.parse(stamp);
+  if (!Number.isFinite(parsed)) return "";
+  return new Date(parsed + 7 * 3600000).toISOString().slice(0, 10);
+};
 export const riderOrder=(r:WhOrder)=>["Onhold","Delivering","Delivered"].includes(r.raw_status);
 export const isUnassigned=(r:WhOrder)=>r.raw_status==="LMhub_received"&&!r.delivering_at&&!r.driver_name;
 export const isOnhold=(r:WhOrder)=>r.raw_status==="Onhold"||(r.raw_status==="LMhub_received"&&!!r.delivering_at);
@@ -47,8 +52,6 @@ export function sla(r:WhOrder,kind:"4h"|"wh"|"sdd"):Sla{
   return result.minutes===null?result:{...result,state:result.minutes<=60?"On time":"Late"};
  }
  if(!r.delivered_at)return {state:"Pending",minutes:null};
- if(r.attempt===null)return {state:"N/A",minutes:null};
- if(r.attempt>1)return {state:"Need recheck",minutes:null};
  return elapsed(kind==="4h"?r.created_at:r.soc_pending_at,r.delivered_at,kind==="4h"?240:180);
 }
 export function remaining(r:WhOrder,now:number):number|null{
@@ -87,8 +90,17 @@ export function counts(rows: WhOrder[], day: string, now: number = Date.now()) {
     else if (status === "Delivered") delivered++;
     else if (status === "Delivering") delivering++;
 
-    if (r.received_at && (!day || vnDay(r.received_at) === day)) {
-      received++;
+    if (r.received_at) {
+      const recDay = vnDay(r.received_at);
+      const inDay = !day
+        ? true
+        : day.includes("..")
+        ? (() => {
+            const [from, to] = day.split("..");
+            return recDay >= from && recDay <= to;
+          })()
+        : recDay === day;
+      if (inDay) received++;
     }
 
     if (r.driver_name) {

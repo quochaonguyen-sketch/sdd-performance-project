@@ -247,8 +247,8 @@ export function WhDashboard() {
   const [page, setPage] = useState(1);
   const [now, setNow] = useState(0);
 
-  // Time Filtering State
-  const [filterMode, setFilterMode] = useState<DateFilterMode>("day");
+  // Time Filtering State (mặc định lấy 30 ngày trước: mode="range")
+  const [filterMode, setFilterMode] = useState<DateFilterMode>("range");
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
   );
@@ -259,7 +259,7 @@ export function WhDashboard() {
     new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 7)
   );
   const [customFrom, setCustomFrom] = useState<string>(() =>
-    new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
+    new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10)
   );
   const [customTo, setCustomTo] = useState<string>(() =>
     new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
@@ -329,7 +329,7 @@ export function WhDashboard() {
   useEffect(() => {
     const first = setTimeout(() => void load(), 0);
     const timer = setInterval(() => {
-      if (!document.hidden && filterMode === "day") void load();
+      if (!document.hidden && (filterMode === "day" || filterMode === "month" || filterMode === "range")) void load();
     }, 30000);
     const clock = setInterval(() => setNow(Date.now()), 30000);
     return () => {
@@ -596,6 +596,33 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
+              aria-selected={filterMode === "range"}
+              className={`${styles.timeTab} ${filterMode === "range" ? styles.timeTabActive : ""}`}
+              onClick={() => {
+                setFilterMode("range");
+                const thirtyDaysAgo = new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+                setCustomFrom(thirtyDaysAgo);
+                setCustomTo(currentDay);
+                void load({ mode: "range", from: thirtyDaysAgo, to: currentDay });
+              }}
+            >
+              30 ngày qua
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === "month"}
+              className={`${styles.timeTab} ${filterMode === "month" ? styles.timeTabActive : ""}`}
+              onClick={() => {
+                setFilterMode("month");
+                void load({ mode: "month" });
+              }}
+            >
+              Theo tháng
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={filterMode === "day"}
               className={`${styles.timeTab} ${filterMode === "day" ? styles.timeTabActive : ""}`}
               onClick={() => {
@@ -611,18 +638,6 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "range"}
-              className={`${styles.timeTab} ${filterMode === "range" ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("range");
-                void load({ mode: "range", from: customFrom, to: customTo });
-              }}
-            >
-              Theo ngày / Khoảng ngày
-            </button>
-            <button
-              type="button"
-              role="tab"
               aria-selected={filterMode === "week"}
               className={`${styles.timeTab} ${filterMode === "week" ? styles.timeTabActive : ""}`}
               onClick={() => {
@@ -631,18 +646,6 @@ export function WhDashboard() {
               }}
             >
               Theo tuần
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === "month"}
-              className={`${styles.timeTab} ${filterMode === "month" ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("month");
-                void load({ mode: "month" });
-              }}
-            >
-              Theo tháng
             </button>
           </div>
 
