@@ -12,13 +12,13 @@ export type BrowserAiConfig = {
 
 export const DEFAULT_BROWSER_AI_CONFIG: BrowserAiConfig = {
   baseUrl: "",
-  model: "gpt-4o-mini",
+  model: "gemini-2.5-flash",
 };
 
 function normalizeModel(model: unknown): string {
   if (typeof model !== "string" || !model.trim()) return DEFAULT_BROWSER_AI_CONFIG.model;
   const trimmed = model.trim();
-  if (trimmed === "gpt-4.1-mini") return "gpt-4o-mini";
+  if (trimmed === "gpt-4.1-mini" || trimmed === "qwen3:4b-instruct" || trimmed === "gpt-4o-mini") return "gemini-2.5-flash";
   return trimmed;
 }
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { HcmZoneMap } from "@/components/zones/hcm-zone-map";
 import type { ZoneRider } from "@/components/zones/zone-map-types";
 import type { BinhChanhPlan } from "@/components/zones/zone-model";
+import type { ZoneVolumeData } from "@/app/api/zones/volume/route";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 
 const ZONE_RIDER_COLUMNS = "id,rider_code,full_name,kv,home_district,cot,pickup_district,pickup_ward,delivery_district,delivery_ward,status";
@@ -16,6 +17,7 @@ const ZONE_RIDER_COLUMNS = "id,rider_code,full_name,kv,home_district,cot,pickup_
 export function ZonesView() {
   const [riders, setRiders] = useState<ZoneRider[]>([]);
   const [binhChanhPlan, setBinhChanhPlan] = useState<BinhChanhPlan | null>(null);
+  const [volumeData, setVolumeData] = useState<ZoneVolumeData | null>(null);
   const [loading, setLoading] = useState(true);
   useReportInitialDataLoading("zones", loading);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function ZonesView() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [rows, plan] = await Promise.all([
+      const [rows, plan, volume] = await Promise.all([
         (async () => {
           const client = createClient(), rows: ZoneRider[] = [];
           for (let from = 0; ; from += 1000) {
@@ -40,9 +42,19 @@ export function ZonesView() {
           if (!response.ok) throw new Error(result.error ?? "Không tải được địa bàn từ Plan");
           return result.wardAreas;
         })(),
+        (async () => {
+          try {
+            const response = await fetch("/api/zones/volume", { cache: "no-store" });
+            if (!response.ok) return null;
+            return (await response.json()) as ZoneVolumeData;
+          } catch {
+            return null;
+          }
+        })(),
       ]);
       setRiders(rows);
       setBinhChanhPlan(plan);
+      setVolumeData(volume);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Không tải được dữ liệu Zone");
     } finally { setLoading(false); }
@@ -85,7 +97,7 @@ export function ZonesView() {
       </div>
 
       {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {binhChanhPlan ? <HcmZoneMap riders={riders} binhChanhPlan={binhChanhPlan} /> : loading ? <div className="h-[560px] animate-pulse rounded-xl bg-slate-100" aria-label="Đang tải địa bàn Plan" /> : null}
+      {binhChanhPlan ? <HcmZoneMap riders={riders} binhChanhPlan={binhChanhPlan} volumeData={volumeData} /> : loading ? <div className="h-[560px] animate-pulse rounded-xl bg-slate-100" aria-label="Đang tải địa bàn Plan" /> : null}
     </div>
   );
 }

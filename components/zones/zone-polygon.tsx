@@ -46,7 +46,12 @@ export const ZonePolygon = memo(function ZonePolygon({ feature, zone, selected, 
     >
       <Tooltip permanent direction="center" className={`ward-zone-label${selected ? " ward-zone-label--selected" : ""}`}>
         <strong>{zone.ward.match(/^\d+$/) ? `P.${zone.ward}` : zone.ward}</strong>
-        <span>{zone.districtName.replace(/^Quận |^Huyện /, "")} · {zone.riderCount}</span>
+        <span>{zone.districtName.replace(/^Quận |^Huyện /, "")} · {zone.riderCount}R</span>
+        {((zone.deliveryVolume ?? 0) > 0 || (zone.pickupVolume ?? 0) > 0) ? (
+          <span className="ward-vol text-[10px] text-blue-700 font-semibold leading-tight">
+            {zone.deliveryVolume ?? 0}G · {zone.pickupVolume ?? 0}P
+          </span>
+        ) : null}
       </Tooltip>
     </GeoJSON>
   );

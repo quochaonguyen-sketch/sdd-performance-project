@@ -11,7 +11,7 @@ export function briefingAccess(context: CurrentUserContext) {
 export function canReadLegacyAiContext(context: CurrentUserContext, question: string) {
   const { role, page_access } = context.profile;
   const keys: Parameters<typeof canViewPage>[2][] = ["riders", "delivery_realtime"];
-  if (/volume|pickup|delivery|đơn|don/i.test(question)) keys.push("delivery_volume", "pickup_volume");
+  if (/volume|pickup|delivery|đơn|don|giao|pick|phường|phuong|xa|ward/i.test(question)) keys.push("delivery_volume", "pickup_volume");
   return keys.every(key => canViewPage(role, page_access, key));
 }
 

@@ -28,16 +28,19 @@ import {
   formatVnDate,
   getMondayOfWeek,
   getMonthRange,
+  getOrderEffectiveNow,
   getSundayOfWeek,
   isNearLate,
   isOverdue,
   isOnhold,
   isUnassigned,
+  orderAgeMinutes,
   parseYmd,
   remaining,
   riderOrder,
   sla,
   toYmd,
+  vnDay,
   type DateFilterMode,
   type Sla,
   type WhData,
@@ -45,6 +48,7 @@ import {
   type WhSortOption,
 } from "@/lib/wh/model";
 import styles from "./wh.module.css";
+import { WhDateRangePicker } from "./wh-date-picker";
 
 const fmt = (v: number) => v.toLocaleString("vi-VN");
 const vnDateFormatter = new Intl.DateTimeFormat("vi-VN", {
@@ -64,8 +68,8 @@ const stamp = (v: string | null) => {
 };
 const duration = (v: number | null) =>
   v === null ? "—" : `${Math.floor(v / 60)}h ${String(v % 60).padStart(2, "0")}p`;
-const age = (r: WhOrder, now: number) =>
-  r.created_at ? Math.max(0, Math.floor((now - Date.parse(r.created_at)) / 60000)) : null;
+const age = (r: WhOrder, now: number, snapshotAt?: string | null) =>
+  orderAgeMinutes(r, now, snapshotAt);
 
 function SlaCell({ value }: { value: Sla }) {
   return (
@@ -76,9 +80,18 @@ function SlaCell({ value }: { value: Sla }) {
   );
 }
 
-const OrderItem = memo(function OrderItem({ r, now }: { r: WhOrder; now: number }) {
+const OrderItem = memo(function OrderItem({
+  r,
+  now,
+  snapshotAt,
+}: {
+  r: WhOrder;
+  now: number;
+  snapshotAt?: string | null;
+}) {
+  const effNow = getOrderEffectiveNow(r, now, snapshotAt);
   const fourHour = sla(r, "4h");
-  const left = remaining(r, now);
+  const left = remaining(r, effNow);
   const isOver = r.raw_status !== "Delivered" && left !== null && left <= 0;
   const isWarning = r.raw_status !== "Delivered" && left !== null && left > 0 && left <= 60;
   const statusLabel =
@@ -212,7 +225,15 @@ const OrderItem = memo(function OrderItem({ r, now }: { r: WhOrder; now: number 
   );
 });
 
-function OrderList({ orders, now }: { orders: WhOrder[]; now: number }) {
+function OrderList({
+  orders,
+  now,
+  snapshotAt,
+}: {
+  orders: WhOrder[];
+  now: number;
+  snapshotAt?: string | null;
+}) {
   return (
     <div className={styles.orderScroll} role="region" aria-label="Danh sách đơn WH" tabIndex={0}>
       <div className={styles.orderHeading} aria-hidden="true">
@@ -226,7 +247,7 @@ function OrderList({ orders, now }: { orders: WhOrder[]; now: number }) {
       </div>
       <ul className={styles.orderList}>
         {orders.map((r) => (
-          <OrderItem key={r.shipment_id} r={r} now={now} />
+          <OrderItem key={r.shipment_id} r={r} now={now} snapshotAt={snapshotAt} />
         ))}
       </ul>
       {!orders.length && <p className={styles.orderEmpty}>Không có đơn phù hợp bộ lọc.</p>}
@@ -265,7 +286,6 @@ export function WhDashboard() {
     new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
   );
 
-  const rangeDropdownRef = useRef<HTMLDetailsElement>(null);
   const inFlight = useRef(false);
   const request = useRef<AbortController | null>(null);
   useReportInitialDataLoading("wh-dashboard", loading && !data);
@@ -340,16 +360,6 @@ export function WhDashboard() {
       request.current?.abort();
     };
   }, [load, filterMode]);
-
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (rangeDropdownRef.current && !rangeDropdownRef.current.contains(e.target as Node)) {
-        rangeDropdownRef.current.open = false;
-      }
-    };
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
 
   async function sync() {
     if (syncing) return;
@@ -436,15 +446,16 @@ export function WhDashboard() {
       const r = scope[i];
       if (riderOrder(r)) {
         riderTotal++;
-        if (isNearLate(r, now)) nearLate++;
-        if (sla(r, "4h").state === "Late" || isOverdue(r, now)) late++;
+        const effNow = getOrderEffectiveNow(r, now, data?.snapshotAt);
+        if (isNearLate(r, effNow)) nearLate++;
+        if (sla(r, "4h").state === "Late" || isOverdue(r, effNow)) late++;
         if (r.raw_status === "Delivering") delivering++;
         if (isOnhold(r)) onhold++;
         if (r.raw_status === "Delivered") delivered++;
       }
     }
     return { riderTotal, nearLate, late, delivering, onhold, delivered };
-  }, [scope, now]);
+  }, [scope, now, data?.snapshotAt]);
 
   // Fast string search without allocating arrays per order
   const matchesOrder = useCallback((r: WhOrder, t: string) => {
@@ -457,19 +468,23 @@ export function WhDashboard() {
     return scope
       .filter((r) => {
         if (!riderOrder(r)) return false;
+        const effNow = getOrderEffectiveNow(r, now, data?.snapshotAt);
         if (status === "near_late") {
-          if (!isNearLate(r, now)) return false;
+          if (!isNearLate(r, effNow)) return false;
         } else if (status === "onhold") {
           if (!isOnhold(r)) return false;
         } else if (status === "late") {
-          if (sla(r, "4h").state !== "Late" && !isOverdue(r, now)) return false;
+          if (sla(r, "4h").state !== "Late" && !isOverdue(r, effNow)) return false;
         } else if (status !== "all" && r.raw_status !== status) {
           return false;
         }
         return matchesOrder(r, term);
       })
-      .sort((a, b) => compareWhOrders(a, b, sort, now));
-  }, [scope, status, term, sort, now, matchesOrder]);
+      .sort((a, b) => {
+        const effNowA = getOrderEffectiveNow(a, now, data?.snapshotAt);
+        return compareWhOrders(a, b, sort, effNowA);
+      });
+  }, [scope, status, term, sort, now, data?.snapshotAt, matchesOrder]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / 50));
   const activePage = Math.min(page, pages);
@@ -479,25 +494,42 @@ export function WhDashboard() {
   );
 
   const waiting = useMemo(() => {
-    return scope
-      .filter(
-        (r) =>
-          ["LMhub_received", "Created", "SOC_pendingReceive"].includes(r.raw_status) &&
-          matchesOrder(r, term)
-      )
-      .sort(
-        (a, b) =>
-          (a.attempt ?? -1) - (b.attempt ?? -1) || ((a.created_at ?? "") > (b.created_at ?? "") ? 1 : -1)
-      );
-  }, [scope, term, matchesOrder]);
+    const list = scope.filter(
+      (r) =>
+        ["LMhub_received", "Created", "SOC_pendingReceive"].includes(r.raw_status) &&
+        matchesOrder(r, term)
+    );
 
-  const pending = useMemo(
-    () =>
-      scope.filter(
-        (r) => r.raw_status === "SOC_pendingReceive" && matchesOrder(r, term)
-      ),
-    [scope, term, matchesOrder]
-  );
+    // If viewing multi-day range and not searching for a specific order,
+    // only show active orders for today (or the latest available active date) so dispatcher is not overwhelmed by 30-day historical unassigned items
+    if (filterMode !== "day" && !term) {
+      const latestDay = data?.availableDates?.[0] || currentDay;
+      const recentList = list.filter((r) => vnDay(r.created_at) >= latestDay);
+      return recentList.sort(
+        (a, b) =>
+          (a.attempt ?? -1) - (b.attempt ?? -1) ||
+          ((b.created_at ?? "") > (a.created_at ?? "") ? 1 : -1)
+      );
+    }
+
+    return list.sort(
+      (a, b) =>
+        (a.attempt ?? -1) - (b.attempt ?? -1) ||
+        ((b.created_at ?? "") > (a.created_at ?? "") ? 1 : -1)
+    );
+  }, [scope, term, matchesOrder, filterMode, data?.availableDates, currentDay]);
+
+  const pending = useMemo(() => {
+    const list = scope.filter(
+      (r) => r.raw_status === "SOC_pendingReceive" && matchesOrder(r, term)
+    );
+    if (filterMode !== "day" && !term) {
+      const latestDay = data?.availableDates?.[0] || currentDay;
+      const recentList = list.filter((r) => vnDay(r.created_at) >= latestDay);
+      return recentList;
+    }
+    return list;
+  }, [scope, term, matchesOrder, filterMode, data?.availableDates, currentDay]);
 
   function download() {
     const cell = (v: unknown) => {
@@ -622,193 +654,94 @@ export function WhDashboard() {
         </div>
       </header>
 
-      {/* Modern Time Filter Toolbar (1 Phần chọn duy nhất - Gọn gàng & Tiện dụng) */}
-      <section className={styles.timeFilterBar} aria-label="Bộ lọc thời gian">
-        <div className={styles.timeFilterHead}>
-          {/* Quick Preset Tabs */}
-          <div className={styles.timeFilterTabs} role="tablist" aria-label="Chế độ xem thời gian">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isThirtyDays}
-              className={`${styles.timeTab} ${isThirtyDays ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("range");
-                setCustomFrom(thirtyDaysAgo);
-                setCustomTo(currentDay);
-                void load({ mode: "range", from: thirtyDaysAgo, to: currentDay });
-              }}
-            >
-              30 ngày qua
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isSevenDays}
-              className={`${styles.timeTab} ${isSevenDays ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("range");
-                setCustomFrom(sevenDaysAgo);
-                setCustomTo(currentDay);
-                void load({ mode: "range", from: sevenDaysAgo, to: currentDay });
-              }}
-            >
-              7 ngày qua
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isToday}
-              className={`${styles.timeTab} ${isToday ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("day");
-                setSelectedDate(currentDay);
-                setCustomFrom(currentDay);
-                setCustomTo(currentDay);
-                void load({ mode: "day", date: currentDay });
-              }}
-            >
-              Hôm nay
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isYesterday}
-              className={`${styles.timeTab} ${isYesterday ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("day");
-                setSelectedDate(yesterday);
-                setCustomFrom(yesterday);
-                setCustomTo(yesterday);
-                void load({ mode: "day", date: yesterday });
-              }}
-            >
-              Hôm qua
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filterMode === "month"}
-              className={`${styles.timeTab} ${filterMode === "month" ? styles.timeTabActive : ""}`}
-              onClick={() => {
-                setFilterMode("month");
-                void load({ mode: "month" });
-              }}
-            >
-              Theo tháng
-            </button>
-          </div>
+      {/* UI/UX Pro Max Time Filter Toolbar (Ponytail Minimalist) */}
+      <section className={styles.timeFilterBarPro} aria-label="Bộ lọc thời gian">
+        {/* Segmented Control Pills - Apple Pro Style */}
+        <div className={styles.segmentedControl} role="tablist" aria-label="Khoảng thời gian">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isThirtyDays}
+            className={`${styles.segmentedBtn} ${isThirtyDays ? styles.segmentedActive : ""}`}
+            onClick={() => {
+              setFilterMode("range");
+              setCustomFrom(thirtyDaysAgo);
+              setCustomTo(currentDay);
+              void load({ mode: "range", from: thirtyDaysAgo, to: currentDay });
+            }}
+          >
+            30 ngày qua
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isSevenDays}
+            className={`${styles.segmentedBtn} ${isSevenDays ? styles.segmentedActive : ""}`}
+            onClick={() => {
+              setFilterMode("range");
+              setCustomFrom(sevenDaysAgo);
+              setCustomTo(currentDay);
+              void load({ mode: "range", from: sevenDaysAgo, to: currentDay });
+            }}
+          >
+            7 ngày qua
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isYesterday}
+            className={`${styles.segmentedBtn} ${isYesterday ? styles.segmentedActive : ""}`}
+            onClick={() => {
+              setFilterMode("day");
+              setSelectedDate(yesterday);
+              setCustomFrom(yesterday);
+              setCustomTo(yesterday);
+              void load({ mode: "day", date: yesterday });
+            }}
+          >
+            Hôm qua
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isToday}
+            className={`${styles.segmentedBtn} ${isToday ? styles.segmentedActive : ""}`}
+            onClick={() => {
+              setFilterMode("day");
+              setSelectedDate(currentDay);
+              setCustomFrom(currentDay);
+              setCustomTo(currentDay);
+              void load({ mode: "day", date: currentDay });
+            }}
+          >
+            Hôm nay
+          </button>
+        </div>
 
-          {/* 1 PHẦN CHỌN DUY NHẤT: Ô chọn ngày / khoảng ngày kết hợp */}
-          <div className={styles.singleDateControl}>
-            {filterMode === "month" ? (
-              <div className={styles.monthSelector}>
-                <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(-1)} aria-label="Tháng trước">
-                  <ChevronLeft size={13} aria-hidden="true" />
-                </button>
-                <label className={styles.singleDateLabel}>
-                  <span>Tháng:</span>
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val) {
-                        setSelectedMonth(val);
-                        void load({ mode: "month", month: val });
-                      }
-                    }}
-                    className={styles.dateInput}
-                  />
-                </label>
-                <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(1)} aria-label="Tháng sau">
-                  <ChevronRight size={13} aria-hidden="true" />
-                </button>
-              </div>
-            ) : (
-              <div className={styles.singleDateWrapper}>
-                <label className={styles.singleDateLabel} title="Chọn 1 ngày cụ thể">
-                  <Calendar size={13} aria-hidden="true" />
-                  <span>Chọn ngày:</span>
-                  <input
-                    type="date"
-                    value={filterMode === "day" ? selectedDate : (customFrom === customTo ? customFrom : "")}
-                    max={currentDay}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (!val) return;
-                      setSelectedDate(val);
-                      setCustomFrom(val);
-                      setCustomTo(val);
-                      setFilterMode("day");
-                      void load({ mode: "day", date: val });
-                    }}
-                    className={styles.dateInput}
-                  />
-                </label>
+        {/* Lịch chọn từ ngày đến ngày trong 1 cái (Interactive Date Range Calendar Picker) */}
+        <WhDateRangePicker
+          from={customFrom}
+          to={customTo}
+          maxDate={currentDay}
+          onApply={(newFrom, newTo) => {
+            setCustomFrom(newFrom);
+            setCustomTo(newTo);
+            if (newFrom === newTo) {
+              setSelectedDate(newFrom);
+              setFilterMode("day");
+              void load({ mode: "day", date: newFrom });
+            } else {
+              setFilterMode("range");
+              void load({ mode: "range", from: newFrom, to: newTo });
+            }
+          }}
+        />
 
-                {/* Dropdown tuỳ chọn khoảng ngày khác nếu cần */}
-                <details ref={rangeDropdownRef} className={styles.rangeDropdown}>
-                  <summary className={styles.rangeDropdownSummary} title="Tuỳ chọn khoảng ngày khác">
-                    <span>Khoảng ngày khác</span>
-                    <ChevronDown size={12} aria-hidden="true" />
-                  </summary>
-                  <div className={styles.rangeDropdownPanel}>
-                    <p className={styles.rangeDropdownTitle}>Chọn khoảng ngày tùy chỉnh</p>
-                    <div className={styles.rangeInputs}>
-                      <label>
-                        <span>Từ:</span>
-                        <input
-                          type="date"
-                          value={customFrom}
-                          max={currentDay}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val) setCustomFrom(val);
-                          }}
-                          className={styles.dateInput}
-                        />
-                      </label>
-                      <label>
-                        <span>Đến:</span>
-                        <input
-                          type="date"
-                          value={customTo}
-                          min={customFrom}
-                          max={currentDay}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val) setCustomTo(val);
-                          }}
-                          className={styles.dateInput}
-                        />
-                      </label>
-                    </div>
-                    <div className={styles.rangeDropdownActions}>
-                      <button
-                        type="button"
-                        className={styles.primary}
-                        onClick={() => {
-                          setFilterMode("range");
-                          if (rangeDropdownRef.current) rangeDropdownRef.current.open = false;
-                          void load({ mode: "range", from: customFrom, to: customTo });
-                        }}
-                      >
-                        Áp dụng
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            )}
-          </div>
-
-          <div className={styles.activeRangeBadge}>
-            <Calendar size={13} aria-hidden="true" />
-            <span>
-              {rangeLabel} · <strong>{fmt(rows.length)} đơn</strong>
-            </span>
-          </div>
+        {/* Pro Max Live Badge */}
+        <div className={styles.proLiveBadge}>
+          <span className={styles.proLivePulse} aria-hidden="true" />
+          <span className={styles.proLiveText}>{rangeLabel}</span>
+          <span className={styles.proLiveCount}>{fmt(rows.length)} đơn</span>
         </div>
       </section>
 
@@ -1338,12 +1271,24 @@ export function WhDashboard() {
               </thead>
               <tbody>
                 {waiting.slice(0, 50).map((r) => {
-                  const orderAge = age(r, now);
-                  const rem = remaining(r, now);
+                  const effNow = getOrderEffectiveNow(r, now, data?.snapshotAt);
+                  const orderAge = age(r, now, data?.snapshotAt);
+                  const rem = remaining(r, effNow);
+                  const orderDay = vnDay(r.created_at);
+                  const isPast = orderDay && orderDay < currentDay;
                   return (
                     <tr key={r.shipment_id}>
                       <th scope="row">
                         <span className={styles.shipmentCode}>{r.shipment_id}</span>
+                        {isPast && (
+                          <span
+                            className={styles.areaMiniPill}
+                            style={{ marginLeft: 6, fontSize: "0.68rem", userSelect: "none" }}
+                            title={`Đơn từ snapshot ngày ${orderDay}`}
+                          >
+                            {orderDay.split("-").reverse().slice(0, 2).join("/")}
+                          </span>
+                        )}
                       </th>
                       <td>
                         <div className={styles.areaDistrictCol}>
@@ -1362,6 +1307,7 @@ export function WhDashboard() {
                               ? styles.agingWarning
                               : styles.agingNormal
                           }
+                          title={isPast ? `Aging chốt tại snapshot ngày ${orderDay}` : undefined}
                         >
                           {duration(orderAge)}
                         </span>
@@ -1458,12 +1404,23 @@ export function WhDashboard() {
               </thead>
               <tbody>
                 {pending.slice(0, 50).map((r) => {
-                  const orderAge = age(r, now) ?? 0;
+                  const orderAge = age(r, now, data?.snapshotAt) ?? 0;
                   const isOverdue = orderAge >= 60;
+                  const orderDay = vnDay(r.created_at);
+                  const isPast = orderDay && orderDay < currentDay;
                   return (
                     <tr key={r.shipment_id}>
                       <th scope="row">
                         <span className={styles.shipmentCode}>{r.shipment_id}</span>
+                        {isPast && (
+                          <span
+                            className={styles.areaMiniPill}
+                            style={{ marginLeft: 6, fontSize: "0.68rem", userSelect: "none" }}
+                            title={`Đơn từ snapshot ngày ${orderDay}`}
+                          >
+                            {orderDay.split("-").reverse().slice(0, 2).join("/")}
+                          </span>
+                        )}
                       </th>
                       <td>
                         <span className={styles.areaMiniPill} data-area={r.area}>
@@ -1644,7 +1601,7 @@ export function WhDashboard() {
             </div>
           </div>
         </div>
-        <OrderList orders={visible} now={now} />
+        <OrderList orders={visible} now={now} snapshotAt={data?.snapshotAt} />
         <div className={styles.pagination}>
           <span>
             Trang {activePage} / {pages} · {filtered.length} đơn thuộc bảng SLA rider

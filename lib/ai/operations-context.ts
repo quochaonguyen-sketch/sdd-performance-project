@@ -40,6 +40,9 @@ type RealtimeRow = {
 
 type VolumeRow = {
   district: string | null;
+  ward?: string | null;
+  old_ward?: string | null;
+  new_ward?: string | null;
   area: string | null;
   total_orders: number | null;
 };
@@ -69,7 +72,7 @@ export async function loadAiOperationsContext({
 }): Promise<AiOperationsContext> {
   const dateScope = resolveWorkDateScope(question);
   const workDate = dateScope.referenceDate;
-  const includeVolume = /volume|pickup|delivery|đơn|don/i.test(question);
+  const includeVolume = /volume|pickup|delivery|đơn|don|giao|pick|phường|phuong|xa|ward/i.test(question);
 
   const [riderResult, attendanceResult, latestRealtimeResult, deliveryVolumeResult, pickupVolumeResult, sheetOffResult] = await Promise.all([
     admin
@@ -91,10 +94,10 @@ export async function loadAiOperationsContext({
       .limit(1)
       .maybeSingle(),
     includeVolume
-      ? admin.from("delivery_order").select("district,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
+      ? admin.from("delivery_order").select("district,old_ward,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
       : Promise.resolve({ data: [], error: null }),
     includeVolume
-      ? admin.from("pickup_volume").select("district,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
+      ? admin.from("pickup_volume").select("district,new_ward,area,total_orders").in("area", OPERATING_AREAS).gte("report_date", dateScope.start).lte("report_date", dateScope.end).limit(5000)
       : Promise.resolve({ data: [], error: null }),
     fetchOffScheduleFromSheet(dateScope.start, dateScope.end),
   ]);
@@ -283,8 +286,8 @@ export async function loadAiOperationsContext({
   ];
   if (includeVolume) {
     data.volume = {
-      delivery: summarizeVolume((deliveryVolumeResult.data ?? []) as VolumeRow[]),
-      pickup: summarizeVolume((pickupVolumeResult.data ?? []) as VolumeRow[]),
+      delivery: summarizeVolume((deliveryVolumeResult.data ?? []) as VolumeRow[], question),
+      pickup: summarizeVolume((pickupVolumeResult.data ?? []) as VolumeRow[], question),
     };
     sources.push("delivery_order", "pickup_volume");
   }
@@ -466,16 +469,45 @@ function countBy<T>(rows: T[], getLabel: (row: T) => string | null | undefined) 
     .slice(0, 20);
 }
 
-function summarizeVolume(rows: VolumeRow[]) {
+function summarizeVolume(rows: VolumeRow[], question?: string) {
   const scoped = rows.filter((row) => /(?:^|\D)[1-5](?:\D|$)/.test(normalizeSearch(row.area)));
   const byDistrict = new Map<string, number>();
+  const byWard = new Map<string, { district: string; ward: string; total_orders: number }>();
+
   for (const row of scoped) {
     const district = row.district?.trim() || "Chưa xác định";
-    byDistrict.set(district, (byDistrict.get(district) ?? 0) + Number(row.total_orders ?? 0));
+    const ward = (row.ward || row.old_ward || row.new_ward)?.trim();
+    const orders = Number(row.total_orders ?? 0);
+
+    byDistrict.set(district, (byDistrict.get(district) ?? 0) + orders);
+
+    if (ward) {
+      const wardKey = `${district}::${ward}`;
+      const existing = byWard.get(wardKey);
+      if (existing) {
+        existing.total_orders += orders;
+      } else {
+        byWard.set(wardKey, { district, ward, total_orders: orders });
+      }
+    }
   }
+
+  const allWards = Array.from(byWard.values()).sort((a, b) => b.total_orders - a.total_orders);
+
+  const qNorm = question ? normalizeSearch(question) : "";
+  const matchedWards = qNorm
+    ? allWards.filter((w) => {
+        const wNorm = normalizeSearch(w.ward);
+        const dNorm = normalizeSearch(w.district);
+        return (wNorm.length >= 2 && qNorm.includes(wNorm)) || (dNorm.length >= 4 && qNorm.includes(dNorm));
+      }).slice(0, 10)
+    : [];
+
   return {
     total_orders: scoped.reduce((sum, row) => sum + Number(row.total_orders ?? 0), 0),
     row_count: scoped.length,
     by_district: Array.from(byDistrict, ([district, total_orders]) => ({ district, total_orders })).sort((a, b) => b.total_orders - a.total_orders).slice(0, 20),
+    top_wards: allWards.slice(0, 15),
+    ...(matchedWards.length > 0 ? { matched_wards: matchedWards } : {}),
   };
 }

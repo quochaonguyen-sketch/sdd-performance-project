@@ -32,8 +32,19 @@ function fixture() {
       if (name === "@/lib/ai/operations-context") return { loadAiOperationsContext: async () => { legacyReads++; throw Error("legacy read must be gated"); } };
       if (name === "@/lib/ai/work-date") return { todayInVietnam: () => "2026-11-02", resolveWorkDateScope: () => resolveWorkDateScope("2026-11-02") };
       if (name === "@/lib/ai/briefing-server") return { loadOperationsBriefing: async () => { briefingReads++; return { generatedAt: "2026-11-02T03:00:00Z", day: "2026-11-02", sources: [{ id: "team", state: "ready" }, { id: "pickup", state: "forbidden" }], summary: { fteTomorrow: { date: "2026-11-03", working: 27 } } }; } };
-      if (name === "@/lib/ai/wh-context") return { isWhTrackingQuery: () => false, loadWhOperationsContext: async () => null };
+      if (name === "@/lib/ai/wh-context") return { isWhTrackingQuery: (q: string) => /iphone/i.test(q), loadWhOperationsContext: async () => ({ report_date: "2026-11-02", total_orders: 10, snapshot_at: "2026-11-02T03:00:00Z" }) };
       if (name === "@/lib/ai/rider-lookup") return { lookupRidersContext: async () => [] };
+      if (name === "@/lib/ai/ward-volume-lookup") return {
+        isVolumeQuery: (q: string) => /volume|giao/i.test(q),
+        lookupWardVolumeContext: async () => ({
+          is_target_ward: true,
+          district: "Quận Gò Vấp",
+          ward: "Phường 5",
+          date_range: { start: "2026-11-01", end: "2026-11-08", label: "2026-11-01..2026-11-08" },
+          totals: { delivery: 4788, pickup: 0 },
+          daily_breakdown: [{ date: "2026-11-08", delivery: 372, pickup: 0 }],
+        }),
+      };
       throw Error(name);
     },
   });
@@ -87,4 +98,53 @@ test("follow-up accepts a long prior assistant report while user input stays lim
   const response = await f.run({ ...body, messages: [{ role: "assistant", content: "x".repeat(6000) }, ...body.messages] });
   assert.equal(response.status, 200); await response.text();
   assert.equal((await f.run({ ...body, messages: [{ role: "user", content: "x".repeat(4001) }] })).status, 400);
+});
+
+test("casual greetings like 'hi' on /wh-dashboard do not inject wh_tracking or ops data context", async () => {
+  const f = fixture();
+  const response = await f.run({
+    messages: [{ role: "user", content: "hi" }],
+    includeData: true,
+    pagePath: "/wh-dashboard",
+    contextMode: "operations",
+  });
+  assert.equal(response.status, 200);
+  await response.text();
+  const messages = f.provider()!.messages;
+  assert.ok(!messages.some(m => m.content.startsWith("RIDER_OPS_DATA_CONTEXT")));
+  assert.equal(response.headers.get("x-rider-ops-data-sources"), "none");
+  assert.equal(f.reads().briefingReads, 0);
+  assert.equal(f.analysisReads(), 0);
+});
+
+test("actual iPhone questions on /wh-dashboard do inject wh_tracking context", async () => {
+  const f = fixture();
+  const response = await f.run({
+    messages: [{ role: "user", content: "hôm nay có bao nhiêu đơn iphone" }],
+    includeData: true,
+    pagePath: "/wh-dashboard",
+    contextMode: "operations",
+  });
+  assert.equal(response.status, 200);
+  await response.text();
+  const messages = f.provider()!.messages;
+  const context = messages.find(m => m.content.startsWith("RIDER_OPS_DATA_CONTEXT"));
+  assert.ok(context?.content.includes("wh_tracking"));
+});
+
+test("volume questions for a specific ward inject ward_volume context with daily breakdown", async () => {
+  const f = fixture();
+  const response = await f.run({
+    messages: [{ role: "user", content: "Volume Giao Phường 5, Quận Gò Vấp" }],
+    includeData: true,
+    pagePath: "/dashboard",
+    contextMode: "operations",
+  });
+  assert.equal(response.status, 200);
+  await response.text();
+  const messages = f.provider()!.messages;
+  const context = messages.find(m => m.content.startsWith("RIDER_OPS_DATA_CONTEXT"));
+  assert.ok(context?.content.includes("ward_volume"));
+  assert.ok(context?.content.includes("Phường 5"));
+  assert.ok(context?.content.includes("4788"));
 });

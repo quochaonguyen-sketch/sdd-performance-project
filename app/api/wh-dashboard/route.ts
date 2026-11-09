@@ -89,7 +89,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const orders = (data?.orders ?? []) as WhOrder[];
+    const rawOrders = (data?.orders ?? []) as WhOrder[];
+    const isHistorical = fromDate < today;
+    // Historical snapshots strictly retain Delivered orders; active in-flight orders are fetched fresh today
+    const orders = isHistorical ? rawOrders.filter((o) => o.raw_status === "Delivered") : rawOrders;
     const dayC = counts(orders, fromDate);
 
     return Response.json(
@@ -144,7 +147,13 @@ export async function GET(request: Request) {
       const dailyBreakdown: WhDailySummary[] = [];
 
       for (const snapshot of snapshots ?? []) {
-        const snapOrders = (snapshot.orders ?? []) as WhOrder[];
+        const isHistorical = snapshot.report_date < today;
+        const snapRawOrders = (snapshot.orders ?? []) as WhOrder[];
+        // For historical snapshots: only keep Delivered orders. Non-delivered active orders are fetched fresh in today's active run.
+        const snapOrders = isHistorical
+          ? snapRawOrders.filter((o) => o.raw_status === "Delivered")
+          : snapRawOrders;
+
         for (const order of snapOrders) {
           if (!orderMap.has(order.shipment_id)) {
             orderMap.set(order.shipment_id, order);

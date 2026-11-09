@@ -53,6 +53,9 @@ export type OperationalZone = {
   riderCount: number;
   activeRiderCount: number;
   capacity: number | null;
+  deliveryVolume?: number;
+  pickupVolume?: number;
+  totalVolume?: number;
 };
 
 export type MapDistrict = {

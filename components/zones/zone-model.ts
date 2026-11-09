@@ -48,7 +48,13 @@ export function zoneDistrictForLocation(rawDistrict: string | null, ward: string
   return MAP_DISTRICTS.find((candidate) => candidate.id === "thu-duc");
 }
 
-export function buildZoneModel(riders: ZoneRider[], mode: LocationMode, area: ZoneFilters["area"], binhChanhPlan?: BinhChanhPlan) {
+export function buildZoneModel(
+  riders: ZoneRider[],
+  mode: LocationMode,
+  area: ZoneFilters["area"],
+  binhChanhPlan?: BinhChanhPlan,
+  volumeByZone?: { deliveryByZone?: Record<string, number>; pickupByZone?: Record<string, number> } | null,
+) {
   const scopedRiders = riders.filter((rider) => {
     const kv = normalizeOperatingArea(rider.kv);
     return kv && (area === "all" || kv === area);
@@ -100,6 +106,9 @@ export function buildZoneModel(riders: ZoneRider[], mode: LocationMode, area: Zo
         color: district.id === "binh-chanh" && coverage.length === 1 ? AREA_COLORS[coverage[0]] : ZONE_COLORS[MAP_DISTRICTS.findIndex((item) => item.id === district.id) % ZONE_COLORS.length],
         status: activeRiderCount > 0 ? "active" : "inactive",
         riderCount: assigned.length, activeRiderCount, capacity: null,
+        deliveryVolume: volumeByZone?.deliveryByZone?.[id] ?? 0,
+        pickupVolume: volumeByZone?.pickupByZone?.[id] ?? 0,
+        totalVolume: (volumeByZone?.deliveryByZone?.[id] ?? 0) + (volumeByZone?.pickupByZone?.[id] ?? 0),
       } satisfies OperationalZone;
     });
   }).filter((zone) => zone.activeRiderCount > 0);

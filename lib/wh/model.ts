@@ -58,6 +58,55 @@ export function remaining(r:WhOrder,now:number):number|null{
  if(!r.created_at)return null;
  return Math.floor((Date.parse(r.created_at)+4*3600000-now)/60000);
 }
+
+/**
+ * Resolves the effective reference timestamp for an order's SLA and aging evaluation.
+ * - If the order was already delivered, its aging and SLA stopped at `delivered_at`.
+ * - If the order was created on a past date (prior to current day), its operational timeline
+ *   is capped to that day's shift end (18:00 VN = 11:00 UTC) or snapshot time,
+ *   preventing historical mock/past orders from accumulating hundreds of hours of phantom aging.
+ * - For active orders on today's date, it returns the real-time `wallClockNow`.
+ */
+export function getOrderEffectiveNow(
+  r: WhOrder,
+  wallClockNow: number,
+  snapshotAt?: string | null
+): number {
+  if (!r.created_at) return wallClockNow;
+
+  if (r.delivered_at) {
+    const deliveredMs = Date.parse(r.delivered_at);
+    if (Number.isFinite(deliveredMs)) return deliveredMs;
+  }
+
+  const orderDate = vnDay(r.created_at);
+  const currentVnDay = new Date(wallClockNow + 7 * 3600000).toISOString().slice(0, 10);
+
+  if (orderDate && orderDate < currentVnDay) {
+    if (snapshotAt && vnDay(snapshotAt) === orderDate) {
+      const snapMs = Date.parse(snapshotAt);
+      if (Number.isFinite(snapMs)) return snapMs;
+    }
+    const shiftEnd = Date.parse(`${orderDate}T18:00:00+07:00`);
+    if (Number.isFinite(shiftEnd)) return shiftEnd;
+    return Date.parse(`${orderDate}T23:59:59+07:00`);
+  }
+
+  return wallClockNow;
+}
+
+export function orderAgeMinutes(
+  r: WhOrder,
+  wallClockNow: number,
+  snapshotAt?: string | null
+): number | null {
+  if (!r.created_at) return null;
+  const createdMs = Date.parse(r.created_at);
+  if (!Number.isFinite(createdMs)) return null;
+
+  const effNow = getOrderEffectiveNow(r, wallClockNow, snapshotAt);
+  return Math.max(0, Math.floor((effNow - createdMs) / 60000));
+}
 export function isNearLate(r:WhOrder,now:number,thresholdMinutes=60):boolean{
  if(r.raw_status==="Delivered"||!r.created_at)return false;
  const rem=Math.floor((Date.parse(r.created_at)+4*3600000-now)/60000);
@@ -114,7 +163,8 @@ export function counts(rows: WhOrder[], day: string, now: number = Date.now()) {
       const fourH = sla(r, "4h");
       if (fourH.state === "Late") late++;
       else if (fourH.state === "On time") ontime++;
-      if (isNearLate(r, now)) nearLate++;
+      const effNow = getOrderEffectiveNow(r, now);
+      if (isNearLate(r, effNow)) nearLate++;
     }
   }
 

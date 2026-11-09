@@ -575,6 +575,15 @@ pre {
   font-size: 10px;
 }
 
+.ward-zone-label .ward-vol {
+  color: #1d4ed8 !important;
+  font-weight: 600 !important;
+}
+
+.ward-zone-label--selected .ward-vol {
+  color: #93c5fd !important;
+}
+
 .zone-opacity-slider {
   accent-color: #2563eb;
   cursor: pointer;

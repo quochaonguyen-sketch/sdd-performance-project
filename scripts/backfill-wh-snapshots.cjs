@@ -88,34 +88,14 @@ function generateOrdersForDate(dateStr) {
     let onholdReason = '0';
     let attempt = 1;
 
-    if (isDelivered) {
-      rawStatus = 'Delivered';
-      attempt = isAttempt2 ? 2 : 1;
-      let durationMinutes;
-      if (isLate) {
-        // Late: 245 to 380 minutes (> 4h)
-        durationMinutes = 245 + Math.floor(Math.random() * 135);
-      } else {
-        // Ontime: 80 to 225 minutes (<= 4h)
-        durationMinutes = 80 + Math.floor(Math.random() * 145);
-      }
-      const delDate = new Date(createdAtDate.getTime() + durationMinutes * 60000);
-      deliveredStr = delDate.toISOString();
-
-      if (isAttempt2) {
-        const ohDate = new Date(deliveringDate.getTime() + 45 * 60000);
-        onholdStr = ohDate.toISOString();
-        onholdReason = ONHOLD_REASONS[Math.floor(Math.random() * 2)];
-      }
-    } else if (isOnhold) {
-      rawStatus = 'Onhold';
-      attempt = isAttempt2 ? 2 : 1;
-      const ohDate = new Date(deliveringDate.getTime() + 60 * 60000);
+    // For past historical snapshots, only Delivered orders are stored
+    const delDate = new Date(createdAtDate.getTime() + (isLate ? (245 + Math.floor(Math.random() * 135)) : (80 + Math.floor(Math.random() * 145))) * 60000);
+    deliveredStr = delDate.toISOString();
+    attempt = isAttempt2 ? 2 : 1;
+    if (isAttempt2) {
+      const ohDate = new Date(deliveringDate.getTime() + 45 * 60000);
       onholdStr = ohDate.toISOString();
-      onholdReason = ONHOLD_REASONS[Math.floor(Math.random() * 4)];
-    } else {
-      rawStatus = 'LMhub_received';
-      attempt = 0;
+      onholdReason = ONHOLD_REASONS[Math.floor(Math.random() * 2)];
     }
 
     orders.push({
