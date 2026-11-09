@@ -348,6 +348,118 @@
   padding: 2px 4px;
 }
 
+.singleDateControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.singleDateWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.singleDateLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-2, #64748b);
+}
+
+.monthSelector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rangeDropdown {
+  position: relative;
+}
+
+.rangeDropdownSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--color-rule, #e2e8f0);
+  border-radius: 6px;
+  background: var(--color-paper, #fff);
+  color: var(--color-ink-2, #475569);
+  cursor: pointer;
+  list-style: none;
+  transition: all 120ms ease;
+}
+
+.rangeDropdownSummary::-webkit-details-marker {
+  display: none;
+}
+
+.rangeDropdownSummary:hover {
+  background: var(--color-paper-2, #f8fafc);
+  color: var(--color-ink, #0f172a);
+}
+
+.rangeDropdownPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 280px;
+  padding: 14px;
+  background: var(--color-paper, #fff);
+  border: 1px solid var(--color-rule, #cbd5e1);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rangeDropdownTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-ink, #0f172a);
+}
+
+.rangeInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rangeInputs label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--color-ink-2, #64748b);
+}
+
+.rangeInputs .dateInput {
+  flex: 1;
+}
+
+.rangeDropdownActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rangeDropdownActions button {
+  padding: 4px 14px;
+  font-size: 12px;
+}
+
 .summarySlaHeader {
   width: 100%;
   display: flex;

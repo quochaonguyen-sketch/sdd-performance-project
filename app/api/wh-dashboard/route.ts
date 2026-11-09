@@ -3,6 +3,21 @@ import { canViewPage } from "@/lib/auth/page-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sourceAllowed, vietnamDay } from "@/lib/data-sources/catalog";
 import { counts, type WhDailySummary, type WhOrder } from "@/lib/wh/model";
+import { TtlCache } from "@/lib/cache/ttl-cache";
+
+interface WhRangePayload {
+  day: string;
+  from: string;
+  to: string;
+  mode: string;
+  snapshotAt: string | null;
+  orders: WhOrder[];
+  canRefresh: boolean;
+  availableDates: string[];
+  dailyBreakdown: WhDailySummary[];
+}
+
+const whRangeCache = new TtlCache<WhRangePayload>(30_000, 10);
 
 export async function GET(request: Request) {
   const context = await getCurrentUserContext();
@@ -109,54 +124,52 @@ export async function GET(request: Request) {
     );
   }
 
-  // Multi-date range query
+  // Multi-date range query with high-speed in-memory TTL caching (30s)
   try {
-    const { data: snapshots, error } = await admin
-      .from("wh_tracking_snapshots")
-      .select("report_date, snapshot_at, orders")
-      .eq("station_id", "4232")
-      .gte("report_date", fromDate)
-      .lte("report_date", toDate)
-      .order("report_date", { ascending: false });
+    const cacheKey = `${fromDate}:${toDate}:${mode}`;
+    const result = await whRangeCache.load(cacheKey, async () => {
+      const { data: snapshots, error } = await admin
+        .from("wh_tracking_snapshots")
+        .select("report_date, snapshot_at, orders")
+        .eq("station_id", "4232")
+        .gte("report_date", fromDate)
+        .lte("report_date", toDate)
+        .order("report_date", { ascending: false });
 
-    if (error) {
-      return Response.json(
-        { error: "Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker." },
-        { status: 503 }
-      );
-    }
-
-    const orderMap = new Map<string, WhOrder>();
-    const dailyBreakdown: WhDailySummary[] = [];
-
-    for (const snapshot of snapshots ?? []) {
-      const snapOrders = (snapshot.orders ?? []) as WhOrder[];
-      for (const order of snapOrders) {
-        if (!orderMap.has(order.shipment_id)) {
-          orderMap.set(order.shipment_id, order);
-        }
+      if (error) {
+        throw new Error("Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker.");
       }
-      const dayC = counts(snapOrders, snapshot.report_date);
-      dailyBreakdown.push({
-        date: snapshot.report_date,
-        total: dayC.total,
-        delivered: dayC.delivered,
-        delivering: dayC.delivering,
-        onhold: dayC.onhold,
-        unassigned: dayC.unassigned,
-        ontime: dayC.ontime,
-        late: dayC.late,
-        ontimeRate: dayC.ontimeRate,
-        lateRate: dayC.lateRate,
-        rate: dayC.rate,
-      });
-    }
 
-    const orders = Array.from(orderMap.values());
-    const latestSnapshotAt = snapshots?.[0]?.snapshot_at ?? null;
+      const orderMap = new Map<string, WhOrder>();
+      const dailyBreakdown: WhDailySummary[] = [];
 
-    return Response.json(
-      {
+      for (const snapshot of snapshots ?? []) {
+        const snapOrders = (snapshot.orders ?? []) as WhOrder[];
+        for (const order of snapOrders) {
+          if (!orderMap.has(order.shipment_id)) {
+            orderMap.set(order.shipment_id, order);
+          }
+        }
+        const dayC = counts(snapOrders, snapshot.report_date);
+        dailyBreakdown.push({
+          date: snapshot.report_date,
+          total: dayC.total,
+          delivered: dayC.delivered,
+          delivering: dayC.delivering,
+          onhold: dayC.onhold,
+          unassigned: dayC.unassigned,
+          ontime: dayC.ontime,
+          late: dayC.late,
+          ontimeRate: dayC.ontimeRate,
+          lateRate: dayC.lateRate,
+          rate: dayC.rate,
+        });
+      }
+
+      const orders = Array.from(orderMap.values());
+      const latestSnapshotAt = snapshots?.[0]?.snapshot_at ?? null;
+
+      return {
         day: `${fromDate}..${toDate}`,
         from: fromDate,
         to: toDate,
@@ -166,14 +179,18 @@ export async function GET(request: Request) {
         canRefresh: sourceAllowed(context.profile.role, context.profile.permissions, "wh_tracking"),
         availableDates: dailyBreakdown.map((d) => d.date),
         dailyBreakdown,
+      };
+    });
+
+    return Response.json(result.value, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "X-Cache": result.hit ? "HIT" : "MISS",
       },
-      { headers: { "Cache-Control": "private, no-store" } }
-    );
-  } catch {
-    return Response.json(
-      { error: "Chưa đọc được dữ liệu WH theo khoảng ngày." },
-      { status: 503 }
-    );
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Chưa đọc được dữ liệu WH theo khoảng ngày.";
+    return Response.json({ error: msg }, { status: 503 });
   }
 }
 
@@ -195,5 +212,6 @@ export async function POST() {
   });
 
   if (error) return Response.json({ error: "Chưa gửi được lệnh đồng bộ WH." }, { status: 503 });
+  whRangeCache.clear();
   return Response.json(data, { headers: { "Cache-Control": "private, no-store" } });
 }

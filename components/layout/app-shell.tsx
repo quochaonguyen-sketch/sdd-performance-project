@@ -17,7 +17,6 @@ import { NavigationGroup } from "@/components/layout/navigation-group";
 import { ProductUpdateNotifications } from "@/components/feedback/product-update-notifications";
 import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
-import { FloatingAiBot } from "@/components/ai/floating-ai-bot";
 import { AiLauncher } from "@/components/ai/ai-launcher";
 import {pageForPath,canViewPage,type PageAccess} from "@/lib/auth/page-access";
 
@@ -268,7 +267,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           </aside> : null}
         </main>
         <footer className="app-footer"><AppCopyright /><p>Rider Ops Console · {currentPage?.label ?? "Operations"}</p></footer>
-        <FloatingAiBot />
       </div>
 
       {moreOpen ? <button type="button" aria-label="Đóng menu" className="app-mobile-scrim" onClick={() => setMoreOpen(false)} /> : null}

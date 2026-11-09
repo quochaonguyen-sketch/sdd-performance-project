@@ -265,6 +265,7 @@ export function WhDashboard() {
     new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
   );
 
+  const rangeDropdownRef = useRef<HTMLDetailsElement>(null);
   const inFlight = useRef(false);
   const request = useRef<AbortController | null>(null);
   useReportInitialDataLoading("wh-dashboard", loading && !data);
@@ -329,7 +330,7 @@ export function WhDashboard() {
   useEffect(() => {
     const first = setTimeout(() => void load(), 0);
     const timer = setInterval(() => {
-      if (!document.hidden && (filterMode === "day" || filterMode === "month" || filterMode === "range")) void load();
+      if (!document.hidden && filterMode === "day") void load();
     }, 30000);
     const clock = setInterval(() => setNow(Date.now()), 30000);
     return () => {
@@ -339,6 +340,16 @@ export function WhDashboard() {
       request.current?.abort();
     };
   }, [load, filterMode]);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (rangeDropdownRef.current && !rangeDropdownRef.current.contains(e.target as Node)) {
+        rangeDropdownRef.current.open = false;
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
 
   async function sync() {
     if (syncing) return;
@@ -546,6 +557,22 @@ export function WhDashboard() {
     URL.revokeObjectURL(url);
   }
 
+  // Active filter reference dates
+  const yesterday = new Date(Date.now() + 7 * 3600000 - 86400000).toISOString().slice(0, 10);
+  const sevenDaysAgo = new Date(Date.now() + 7 * 3600000 - 6 * 86400000).toISOString().slice(0, 10);
+  const thirtyDaysAgo = new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+
+  const isThirtyDays =
+    filterMode === "range" && customFrom === thirtyDaysAgo && customTo === currentDay;
+  const isSevenDays =
+    filterMode === "range" && customFrom === sevenDaysAgo && customTo === currentDay;
+  const isToday =
+    (filterMode === "day" && selectedDate === currentDay) ||
+    (filterMode === "range" && customFrom === currentDay && customTo === currentDay);
+  const isYesterday =
+    (filterMode === "day" && selectedDate === yesterday) ||
+    (filterMode === "range" && customFrom === yesterday && customTo === yesterday);
+
   // Active filter label
   const rangeLabel =
     filterMode === "week"
@@ -553,7 +580,13 @@ export function WhDashboard() {
       : filterMode === "month"
       ? `Tháng ${selectedMonth.split("-").reverse().join("/")}`
       : filterMode === "day"
-      ? `Hôm nay (${formatVnDate(currentDay)})`
+      ? selectedDate === currentDay
+        ? `Hôm nay (${formatVnDate(currentDay)})`
+        : `Ngày ${formatVnDate(selectedDate)}`
+      : isThirtyDays
+      ? `30 ngày qua (${formatVnDate(customFrom)} – ${formatVnDate(customTo)})`
+      : isSevenDays
+      ? `7 ngày qua (${formatVnDate(customFrom)} – ${formatVnDate(customTo)})`
       : customFrom === customTo
       ? customFrom === currentDay
         ? `Hôm nay (${formatVnDate(currentDay)})`
@@ -589,18 +622,18 @@ export function WhDashboard() {
         </div>
       </header>
 
-      {/* Modern Time Filter Toolbar (Ngày / Tuần / Tháng / Khoảng ngày) */}
+      {/* Modern Time Filter Toolbar (1 Phần chọn duy nhất - Gọn gàng & Tiện dụng) */}
       <section className={styles.timeFilterBar} aria-label="Bộ lọc thời gian">
         <div className={styles.timeFilterHead}>
+          {/* Quick Preset Tabs */}
           <div className={styles.timeFilterTabs} role="tablist" aria-label="Chế độ xem thời gian">
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "range"}
-              className={`${styles.timeTab} ${filterMode === "range" ? styles.timeTabActive : ""}`}
+              aria-selected={isThirtyDays}
+              className={`${styles.timeTab} ${isThirtyDays ? styles.timeTabActive : ""}`}
               onClick={() => {
                 setFilterMode("range");
-                const thirtyDaysAgo = new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
                 setCustomFrom(thirtyDaysAgo);
                 setCustomTo(currentDay);
                 void load({ mode: "range", from: thirtyDaysAgo, to: currentDay });
@@ -611,20 +644,22 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "month"}
-              className={`${styles.timeTab} ${filterMode === "month" ? styles.timeTabActive : ""}`}
+              aria-selected={isSevenDays}
+              className={`${styles.timeTab} ${isSevenDays ? styles.timeTabActive : ""}`}
               onClick={() => {
-                setFilterMode("month");
-                void load({ mode: "month" });
+                setFilterMode("range");
+                setCustomFrom(sevenDaysAgo);
+                setCustomTo(currentDay);
+                void load({ mode: "range", from: sevenDaysAgo, to: currentDay });
               }}
             >
-              Theo tháng
+              7 ngày qua
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "day"}
-              className={`${styles.timeTab} ${filterMode === "day" ? styles.timeTabActive : ""}`}
+              aria-selected={isToday}
+              className={`${styles.timeTab} ${isToday ? styles.timeTabActive : ""}`}
               onClick={() => {
                 setFilterMode("day");
                 setSelectedDate(currentDay);
@@ -638,15 +673,134 @@ export function WhDashboard() {
             <button
               type="button"
               role="tab"
-              aria-selected={filterMode === "week"}
-              className={`${styles.timeTab} ${filterMode === "week" ? styles.timeTabActive : ""}`}
+              aria-selected={isYesterday}
+              className={`${styles.timeTab} ${isYesterday ? styles.timeTabActive : ""}`}
               onClick={() => {
-                setFilterMode("week");
-                void load({ mode: "week" });
+                setFilterMode("day");
+                setSelectedDate(yesterday);
+                setCustomFrom(yesterday);
+                setCustomTo(yesterday);
+                void load({ mode: "day", date: yesterday });
               }}
             >
-              Theo tuần
+              Hôm qua
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === "month"}
+              className={`${styles.timeTab} ${filterMode === "month" ? styles.timeTabActive : ""}`}
+              onClick={() => {
+                setFilterMode("month");
+                void load({ mode: "month" });
+              }}
+            >
+              Theo tháng
+            </button>
+          </div>
+
+          {/* 1 PHẦN CHỌN DUY NHẤT: Ô chọn ngày / khoảng ngày kết hợp */}
+          <div className={styles.singleDateControl}>
+            {filterMode === "month" ? (
+              <div className={styles.monthSelector}>
+                <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(-1)} aria-label="Tháng trước">
+                  <ChevronLeft size={13} aria-hidden="true" />
+                </button>
+                <label className={styles.singleDateLabel}>
+                  <span>Tháng:</span>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setSelectedMonth(val);
+                        void load({ mode: "month", month: val });
+                      }
+                    }}
+                    className={styles.dateInput}
+                  />
+                </label>
+                <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(1)} aria-label="Tháng sau">
+                  <ChevronRight size={13} aria-hidden="true" />
+                </button>
+              </div>
+            ) : (
+              <div className={styles.singleDateWrapper}>
+                <label className={styles.singleDateLabel} title="Chọn 1 ngày cụ thể">
+                  <Calendar size={13} aria-hidden="true" />
+                  <span>Chọn ngày:</span>
+                  <input
+                    type="date"
+                    value={filterMode === "day" ? selectedDate : (customFrom === customTo ? customFrom : "")}
+                    max={currentDay}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) return;
+                      setSelectedDate(val);
+                      setCustomFrom(val);
+                      setCustomTo(val);
+                      setFilterMode("day");
+                      void load({ mode: "day", date: val });
+                    }}
+                    className={styles.dateInput}
+                  />
+                </label>
+
+                {/* Dropdown tuỳ chọn khoảng ngày khác nếu cần */}
+                <details ref={rangeDropdownRef} className={styles.rangeDropdown}>
+                  <summary className={styles.rangeDropdownSummary} title="Tuỳ chọn khoảng ngày khác">
+                    <span>Khoảng ngày khác</span>
+                    <ChevronDown size={12} aria-hidden="true" />
+                  </summary>
+                  <div className={styles.rangeDropdownPanel}>
+                    <p className={styles.rangeDropdownTitle}>Chọn khoảng ngày tùy chỉnh</p>
+                    <div className={styles.rangeInputs}>
+                      <label>
+                        <span>Từ:</span>
+                        <input
+                          type="date"
+                          value={customFrom}
+                          max={currentDay}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) setCustomFrom(val);
+                          }}
+                          className={styles.dateInput}
+                        />
+                      </label>
+                      <label>
+                        <span>Đến:</span>
+                        <input
+                          type="date"
+                          value={customTo}
+                          min={customFrom}
+                          max={currentDay}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) setCustomTo(val);
+                          }}
+                          className={styles.dateInput}
+                        />
+                      </label>
+                    </div>
+                    <div className={styles.rangeDropdownActions}>
+                      <button
+                        type="button"
+                        className={styles.primary}
+                        onClick={() => {
+                          setFilterMode("range");
+                          if (rangeDropdownRef.current) rangeDropdownRef.current.open = false;
+                          void load({ mode: "range", from: customFrom, to: customTo });
+                        }}
+                      >
+                        Áp dụng
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
 
           <div className={styles.activeRangeBadge}>
@@ -655,197 +809,6 @@ export function WhDashboard() {
               {rangeLabel} · <strong>{fmt(rows.length)} đơn</strong>
             </span>
           </div>
-        </div>
-
-        {/* Dynamic Controls based on selected tab */}
-        <div className={styles.timeControls}>
-          {filterMode === "day" && (
-            <div className={styles.filterDayNote}>
-              <span>
-                Đang xem ngày hôm nay ({formatVnDate(currentDay)}). Bạn có thể chọn tab <strong>&quot;Theo ngày / Khoảng ngày&quot;</strong> để tra cứu bất kỳ ngày nào hoặc khoảng ngày.
-              </span>
-            </div>
-          )}
-
-          {filterMode === "week" && (
-            <>
-              <button type="button" className={styles.quickBtn} onClick={() => shiftWeek(-1)}>
-                <ChevronLeft size={13} aria-hidden="true" /> Tuần trước
-              </button>
-              <label>
-                <span>Tuần chứa ngày:</span>
-                <input
-                  type="date"
-                  value={selectedWeekDate}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val) {
-                      setSelectedWeekDate(val);
-                      void load({ mode: "week", weekDate: val });
-                    }
-                  }}
-                  className={styles.dateInput}
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  setSelectedWeekDate(currentDay);
-                  void load({ mode: "week", weekDate: currentDay });
-                }}
-              >
-                Tuần này
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => shiftWeek(1)}>
-                Tuần sau <ChevronRight size={13} aria-hidden="true" />
-              </button>
-            </>
-          )}
-
-          {filterMode === "month" && (
-            <>
-              <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(-1)}>
-                <ChevronLeft size={13} aria-hidden="true" /> Tháng trước
-              </button>
-              <label>
-                <span>Chọn tháng:</span>
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val) {
-                      setSelectedMonth(val);
-                      void load({ mode: "month", month: val });
-                    }
-                  }}
-                  className={styles.dateInput}
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  const m = currentDay.slice(0, 7);
-                  setSelectedMonth(m);
-                  void load({ mode: "month", month: m });
-                }}
-              >
-                Tháng này
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => shiftMonth(1)}>
-                Tháng sau <ChevronRight size={13} aria-hidden="true" />
-              </button>
-            </>
-          )}
-
-          {filterMode === "range" && (
-            <>
-              <label>
-                <span>Từ ngày:</span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  max={currentDay}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) return;
-                    setCustomFrom(val);
-                    if (customFrom === customTo || customTo < val) {
-                      setCustomTo(val);
-                    }
-                  }}
-                  className={styles.dateInput}
-                />
-              </label>
-              <label>
-                <span>Đến ngày:</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  min={customFrom}
-                  max={currentDay}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) return;
-                    setCustomTo(val);
-                    if (customFrom > val) setCustomFrom(val);
-                  }}
-                  className={styles.dateInput}
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.primary}
-                onClick={() => void load({ mode: "range", from: customFrom, to: customTo })}
-              >
-                Áp dụng
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  setCustomTo(customFrom);
-                  void load({ mode: "range", from: customFrom, to: customFrom });
-                }}
-                title="Chỉ xem đúng 1 ngày ở ô Từ ngày"
-              >
-                Chỉ 1 ngày này
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  const yesterday = new Date(Date.now() + 7 * 3600000 - 86400000).toISOString().slice(0, 10);
-                  setCustomFrom(yesterday);
-                  setCustomTo(yesterday);
-                  void load({ mode: "range", from: yesterday, to: yesterday });
-                }}
-              >
-                Hôm qua
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  setCustomFrom(currentDay);
-                  setCustomTo(currentDay);
-                  void load({ mode: "range", from: currentDay, to: currentDay });
-                }}
-              >
-                Hôm nay
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  const sevenDaysAgo = new Date(Date.now() + 7 * 3600000 - 6 * 86400000)
-                    .toISOString()
-                    .slice(0, 10);
-                  setCustomFrom(sevenDaysAgo);
-                  setCustomTo(currentDay);
-                  void load({ mode: "range", from: sevenDaysAgo, to: currentDay });
-                }}
-              >
-                7 ngày qua
-              </button>
-              <button
-                type="button"
-                className={styles.quickBtn}
-                onClick={() => {
-                  const thirtyDaysAgo = new Date(Date.now() + 7 * 3600000 - 29 * 86400000)
-                    .toISOString()
-                    .slice(0, 10);
-                  setCustomFrom(thirtyDaysAgo);
-                  setCustomTo(currentDay);
-                  void load({ mode: "range", from: thirtyDaysAgo, to: currentDay });
-                }}
-              >
-                30 ngày qua
-              </button>
-            </>
-          )}
         </div>
       </section>
 
