@@ -155,11 +155,15 @@ export async function upsertVolumeMask(input: {
 }
 
 /**
- * Delete a volume mask by ID.
+ * Delete a volume mask by ID or rider_code.
  */
-export async function deleteVolumeMask(id: string): Promise<boolean> {
+export async function deleteVolumeMask(idOrCode: string): Promise<boolean> {
   const admin = createAdminClient();
-  const { error } = await admin.from("rider_volume_masks").delete().eq("id", id);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrCode.trim());
+  const query = isUuid
+    ? admin.from("rider_volume_masks").delete().eq("id", idOrCode.trim())
+    : admin.from("rider_volume_masks").delete().ilike("rider_code", idOrCode.trim());
+  const { error } = await query;
   if (error) {
     throw new Error(`Không xóa được cấu hình: ${error.message}`);
   }

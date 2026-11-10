@@ -56,24 +56,27 @@ async function readPerformance(request: Request, context: { params: Promise<{ id
     if ((data?.length ?? 0) < 500) break;
   }
 
-  // If not super admin, apply volume mask
-  if (!session.profile.is_super_admin) {
-    const masks = await getActiveVolumeMaskMap();
-    const mask = masks.get(rider.rider_code.toLowerCase());
-    if (mask) {
-      for (const row of performance) {
-        if (mask.scope === "all" || mask.scope === "delivery") {
-          for (const key of ["delivery_assigned", "delivery_delivered", "delivery_assigned_cot1", "delivery_delivered_cot1", "delivery_assigned_cot2", "delivery_delivered_cot2"] as const) {
-            if (row[key] !== undefined && row[key] !== null) {
-              row[key] = Math.round(Number(row[key]) * mask.factor);
-            }
+  const previewAsUser = query.get("preview_as_user") === "1";
+  const isSuperAdmin = session.profile.is_super_admin === true;
+  const shouldMask = !isSuperAdmin || previewAsUser;
+
+  const masks = await getActiveVolumeMaskMap();
+  const mask = masks.get(rider.rider_code.toLowerCase());
+
+  // If not super admin or previewing as user, apply volume mask
+  if (shouldMask && mask) {
+    for (const row of performance) {
+      if (mask.scope === "all" || mask.scope === "delivery") {
+        for (const key of ["delivery_assigned", "delivery_delivered", "delivery_assigned_cot1", "delivery_delivered_cot1", "delivery_assigned_cot2", "delivery_delivered_cot2"] as const) {
+          if (row[key] !== undefined && row[key] !== null) {
+            row[key] = Math.round(Number(row[key]) * mask.factor);
           }
         }
-        if (mask.scope === "all" || mask.scope === "pickup") {
-          for (const key of ["pickup_assigned", "pickup_picked", "pickup_assigned_cot1", "pickup_picked_cot1", "pickup_assigned_cot2", "pickup_picked_cot2"] as const) {
-            if (row[key] !== undefined && row[key] !== null) {
-              row[key] = Math.round(Number(row[key]) * mask.factor);
-            }
+      }
+      if (mask.scope === "all" || mask.scope === "pickup") {
+        for (const key of ["pickup_assigned", "pickup_picked", "pickup_assigned_cot1", "pickup_picked_cot1", "pickup_assigned_cot2", "pickup_picked_cot2"] as const) {
+          if (row[key] !== undefined && row[key] !== null) {
+            row[key] = Math.round(Number(row[key]) * mask.factor);
           }
         }
       }
@@ -96,5 +99,15 @@ async function readPerformance(request: Request, context: { params: Promise<{ id
       },
     });
   }
-  return NextResponse.json({ success: true, rider, range, performance, daily, summary: summarizeRiderDaily(daily) }, { headers });
+  return NextResponse.json({
+    success: true,
+    rider,
+    range,
+    performance,
+    daily,
+    summary: summarizeRiderDaily(daily),
+    isSuperAdmin,
+    previewingAsUser: previewAsUser,
+    activeMask: isSuperAdmin && mask ? mask : null,
+  }, { headers });
 }

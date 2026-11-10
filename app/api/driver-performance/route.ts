@@ -23,6 +23,9 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const filters = parsePerformanceFilters(params);
+    const previewAsUser = params.get("preview_as_user") === "1";
+    const shouldMask = !isSuperAdmin || previewAsUser;
+    const masks = await getActiveVolumeMaskMap();
 
     if (params.get("export") === "xlsx") {
       const mode = params.get("exportMode") ?? "summary";
@@ -34,12 +37,9 @@ export async function GET(request: Request) {
         mode !== "summary" ? getDriverPerformanceExport(filters, "daily") : null,
       ]);
 
-      if (!isSuperAdmin) {
-        const masks = await getActiveVolumeMaskMap();
-        if (masks.size > 0) {
-          if (summary?.rows) summary.rows = summary.rows.map(r => maskPerformanceRow(r, masks));
-          if (daily?.rows) daily.rows = daily.rows.map(r => maskPerformanceRow(r, masks));
-        }
+      if (shouldMask && masks.size > 0) {
+        if (summary?.rows) summary.rows = summary.rows.map(r => maskPerformanceRow(r, masks));
+        if (daily?.rows) daily.rows = daily.rows.map(r => maskPerformanceRow(r, masks));
       }
 
       const { performanceListWorkbook } = await import("@/lib/performance/list-export");
@@ -63,21 +63,24 @@ export async function GET(request: Request) {
     }
 
     if (params.get("dashboard") === "1") {
-      const key = JSON.stringify([user.id, filters, isSuperAdmin]);
+      const key = JSON.stringify([user.id, filters, isSuperAdmin, previewAsUser]);
       const force = request.headers.get("x-dashboard-refresh") === "1";
       if (force) dashboardCache.delete(key);
       const cached = await dashboardCache.load(key, async () => {
         const res = await getDriverPerformance(filters, force ? String(Date.now()) : "");
-        if (!isSuperAdmin) {
-          const masks = await getActiveVolumeMaskMap();
-          if (masks.size > 0) {
-            res.rows = res.rows.map(r => maskPerformanceRow(r, masks));
-          }
+        if (shouldMask && masks.size > 0) {
+          res.rows = res.rows.map(r => maskPerformanceRow(r, masks));
         }
         return res;
       });
       return NextResponse.json(
-        { success: true, ...cached.value },
+        {
+          success: true,
+          ...cached.value,
+          isSuperAdmin,
+          previewingAsUser: previewAsUser,
+          activeMasks: isSuperAdmin ? Object.fromEntries(masks.entries()) : undefined,
+        },
         {
           headers: {
             "Cache-Control": "private, no-store",
@@ -89,15 +92,18 @@ export async function GET(request: Request) {
     }
 
     const result = await getDriverPerformance(filters, params.get("_r") ?? "");
-    if (!isSuperAdmin) {
-      const masks = await getActiveVolumeMaskMap();
-      if (masks.size > 0) {
-        result.rows = result.rows.map(r => maskPerformanceRow(r, masks));
-      }
+    if (shouldMask && masks.size > 0) {
+      result.rows = result.rows.map(r => maskPerformanceRow(r, masks));
     }
 
     return NextResponse.json(
-      { success: true, ...result },
+      {
+        success: true,
+        ...result,
+        isSuperAdmin,
+        previewingAsUser: previewAsUser,
+        activeMasks: isSuperAdmin ? Object.fromEntries(masks.entries()) : undefined,
+      },
       { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {

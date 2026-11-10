@@ -153,9 +153,9 @@ export async function DELETE(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const id = searchParams.get("id") ?? searchParams.get("rider_code");
     if (!id) {
-      return NextResponse.json({ success: false, error: "Thiếu ID cấu hình cần xóa" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Thiếu ID hoặc mã rider cần xóa" }, { status: 400 });
     }
 
     await deleteVolumeMask(id);
