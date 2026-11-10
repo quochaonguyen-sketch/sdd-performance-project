@@ -93,15 +93,17 @@ export function RiderPerformanceView({riderId,initialRange,fromPerformance=false
                 {previewAsUser ? "🎭 Người khác thấy (Masked)" : "🛡️ Số thực tế 100%"}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => setMaskDialogOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 shadow-xs hover:bg-amber-100 transition-all cursor-pointer"
-              title="Cấu hình mask sản lượng cho rider này"
-            >
-              <ShieldAlert size={13} />
-              <span>{data.activeMask ? `Mask ${Math.round(data.activeMask.factor * 100)}%` : "Cài Mask"}</span>
-            </button>
+            {!previewAsUser && (
+              <button
+                type="button"
+                onClick={() => setMaskDialogOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 shadow-xs hover:bg-amber-100 transition-all cursor-pointer"
+                title="Cấu hình mask sản lượng cho rider này"
+              >
+                <ShieldAlert size={13} />
+                <span>{data.activeMask ? `Mask ${Math.round(data.activeMask.factor * 100)}%` : "Cài Mask"}</span>
+              </button>
+            )}
           </>
         )}
         <Button className={styles.exportButton} type="button" disabled={loading||exporting||!rows.length||Boolean(error)} aria-busy={exporting} onClick={download}>

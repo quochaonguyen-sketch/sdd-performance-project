@@ -134,7 +134,16 @@ const OrderItem = memo(function OrderItem({
           </span>
           <span className={styles.orderRider}>
             <span className={styles.orderCellLabel}>Rider / Địa bàn</span>
-            <strong>{r.driver_name || "Chưa gán rider"}</strong>
+            <strong>
+              {r.driver_name ? (
+                <>
+                  {r.driver_name}
+                  {r.driver_id && <span style={{ opacity: 0.75, fontWeight: 400, marginLeft: 4 }}>({r.driver_id})</span>}
+                </>
+              ) : (
+                "Chưa gán rider"
+              )}
+            </strong>
             <small>
               <span className={styles.orderArea}>
                 {r.area === "UNRESOLVED" ? "Chưa rõ KV" : r.area}
@@ -226,6 +235,12 @@ const OrderItem = memo(function OrderItem({
               <dt>Tracking</dt>
               <dd>{r.tracking_number || r.shipment_id}</dd>
             </div>
+            {r.driver_id && (
+              <div>
+                <dt>ID Rider</dt>
+                <dd>{r.driver_id}</dd>
+              </div>
+            )}
             <div>
               <dt>Lý do On-Hold</dt>
               <dd>{r.onhold_reason || "Chưa có lý do từ SPX"}</dd>
@@ -469,10 +484,10 @@ export function WhDashboard() {
     return { riderTotal, nearLate, late, delivering, onhold, delivered };
   }, [scope, now, data?.snapshotAt]);
 
-  // Fast string search without allocating arrays per order
+  // Fast string search without allocating arrays per order (supports tracking, rider name, rider ID, address, zone)
   const matchesOrder = useCallback((r: WhOrder, t: string) => {
     if (!t) return true;
-    const haystack = `${r.shipment_id} ${r.tracking_number} ${r.driver_name} ${r.district} ${r.ward} ${r.zone}`.toLowerCase();
+    const haystack = `${r.shipment_id} ${r.tracking_number} ${r.driver_id || ""} ${r.driver_name} ${r.district} ${r.ward} ${r.zone}`.toLowerCase();
     return haystack.includes(t);
   }, []);
 
@@ -557,6 +572,7 @@ export function WhDashboard() {
         "District",
         "Ward",
         "Rider",
+        "Rider ID",
         "Status",
         "Attempt",
         "Created",
@@ -576,6 +592,7 @@ export function WhDashboard() {
         r.district,
         r.ward,
         r.driver_name,
+        r.driver_id || "",
         r.raw_status,
         r.attempt,
         stamp(r.created_at),
@@ -1549,7 +1566,7 @@ export function WhDashboard() {
                     setQuery(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Mã đơn, tên rider, quận, phường…"
+                  placeholder="Mã đơn, tên/ID rider, quận, phường…"
                 />
               </div>
             </label>

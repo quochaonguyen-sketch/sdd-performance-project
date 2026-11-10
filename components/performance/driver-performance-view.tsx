@@ -237,6 +237,7 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         onExport={()=>{setExportError(null);setExportOpen(true);}}
         exporting={exporting}
         isSuperAdmin={isSuperAdmin}
+        previewAsUser={previewAsUser}
         activeMasks={activeMasks}
         onOpenMaskDialog={setMaskDialogTarget}
       />
@@ -475,6 +476,7 @@ function RiderPerformanceTable({
   onExport,
   exporting,
   isSuperAdmin,
+  previewAsUser,
   activeMasks,
   onOpenMaskDialog,
 }: {
@@ -489,6 +491,7 @@ function RiderPerformanceTable({
   onExport:()=>void;
   exporting:boolean;
   isSuperAdmin?: boolean;
+  previewAsUser?: boolean;
   activeMasks?: Record<string, { factor: number; scope: string }>;
   onOpenMaskDialog?: (rider: { code: string; name?: string | null; factor: number; scope: any; isMasked: boolean }) => void;
 }) {
@@ -570,6 +573,7 @@ function RiderPerformanceTable({
                   key={`${row.report_date}-${row.driver_id}`}
                   row={row}
                   isSuperAdmin={isSuperAdmin}
+                  previewAsUser={previewAsUser}
                   activeMask={activeMasks?.[row.driver_id.toLowerCase()]}
                   onOpenMaskDialog={onOpenMaskDialog}
                 />
@@ -596,11 +600,13 @@ const StablePerformanceRow=memo(PerformanceTableRow);
 function PerformanceTableRow({
   row,
   isSuperAdmin,
+  previewAsUser,
   activeMask,
   onOpenMaskDialog,
 }: {
   row: PerformanceRow;
   isSuperAdmin?: boolean;
+  previewAsUser?: boolean;
   activeMask?: { factor: number; scope: string };
   onOpenMaskDialog?: (rider: { code: string; name?: string | null; factor: number; scope: any; isMasked: boolean }) => void;
 }) {
@@ -611,6 +617,7 @@ function PerformanceTableRow({
   const cot = (row.cot??"").replace(/\s/g,"").toLowerCase();
   const pickupWarning = pickupCotWarning(row);
   const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
+  const showMaskControls = isSuperAdmin && !previewAsUser;
   return <tr className={tableStyles.row}>
     <th scope="row" className={tableStyles.identity}>
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -618,7 +625,7 @@ function PerformanceTableRow({
           {row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}
           {pickupWarning&&<span className={tableStyles.pickupWarning} role="img" aria-label={pickupWarning} title={pickupWarning}><TriangleAlert size={13} aria-hidden="true"/></span>}
         </strong>
-        {isSuperAdmin && (
+        {showMaskControls && (
           <button
             type="button"
             onClick={() => onOpenMaskDialog?.({
