@@ -114,26 +114,36 @@ export async function lookupWardVolumeContext(
     for (const row of deliveryRows) {
       const orders = Number(row.total_orders ?? 0);
       totalDelivery += orders;
-      const date = row.report_date;
-      const entry = byDate.get(date) ?? { date, delivery: 0, pickup: 0, delivery_cots: {}, pickup_cots: {} };
+      const date = String(row.report_date);
+      let entry = byDate.get(date);
+      if (!entry) {
+        entry = { date, delivery: 0, pickup: 0, delivery_cots: {}, pickup_cots: {} };
+        byDate.set(date, entry);
+      }
       entry.delivery += orders;
       if (row.cot) {
-        entry.delivery_cots![row.cot] = (entry.delivery_cots![row.cot] ?? 0) + orders;
+        const cotKey = String(row.cot);
+        const cots: Record<string, number> = entry.delivery_cots || (entry.delivery_cots = {});
+        cots[cotKey] = (cots[cotKey] ?? 0) + orders;
       }
-      byDate.set(date, entry);
     }
 
     let totalPickup = 0;
     for (const row of pickupRows) {
       const orders = Number(row.total_orders ?? 0);
       totalPickup += orders;
-      const date = row.report_date;
-      const entry = byDate.get(date) ?? { date, delivery: 0, pickup: 0, delivery_cots: {}, pickup_cots: {} };
+      const date = String(row.report_date);
+      let entry = byDate.get(date);
+      if (!entry) {
+        entry = { date, delivery: 0, pickup: 0, delivery_cots: {}, pickup_cots: {} };
+        byDate.set(date, entry);
+      }
       entry.pickup += orders;
       if (row.cot) {
-        entry.pickup_cots![row.cot] = (entry.pickup_cots![row.cot] ?? 0) + orders;
+        const cotKey = String(row.cot);
+        const cots: Record<string, number> = entry.pickup_cots || (entry.pickup_cots = {});
+        cots[cotKey] = (cots[cotKey] ?? 0) + orders;
       }
-      byDate.set(date, entry);
     }
 
     const dailyBreakdown = Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
