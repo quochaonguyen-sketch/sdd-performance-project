@@ -9,3 +9,8 @@ export function isSuperAdminEmail(email?: string | null) {
   const normalized = email?.trim().toLowerCase() ?? "";
   return normalized !== "" && getSuperAdminEmails().includes(normalized);
 }
+
+export function isSuperAdmin(context?: { profile?: { is_super_admin?: boolean } } | null): boolean {
+  if (!context) return false;
+  return context.profile?.is_super_admin === true;
+}

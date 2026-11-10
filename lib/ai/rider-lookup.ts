@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { getActiveVolumeMaskMap } from "@/lib/rider-volume-mask/service";
 
 export type RiderDetailResult = {
   profile: {
@@ -63,7 +64,8 @@ export { fold, findMatchingRiders };
 export async function lookupRidersContext(
   admin: SupabaseClient,
   question: string,
-  day: string
+  day: string,
+  isSuperAdmin: boolean = false
 ): Promise<RiderDetailResult[] | null> {
   const now = Date.now();
   if (!cachedRosters || now - cachedRosterTime > ROSTER_TTL) {
@@ -144,6 +146,8 @@ export async function lookupRidersContext(
       created_at: string | null;
     }>) || [];
 
+  const masks = !isSuperAdmin ? await getActiveVolumeMaskMap().catch(() => new Map()) : new Map();
+
   return matches.map((profile) => {
     const d = delMap.get(profile.rider_code);
     const p = pickupMap.get(profile.rider_code);
@@ -165,6 +169,20 @@ export async function lookupRidersContext(
         rate_percent:
           d.total_assigned > 0 ? Math.round((d.delivered / d.total_assigned) * 1000) / 10 : 0,
       };
+      const mask = masks.get(profile.rider_code.toLowerCase());
+      if (mask && (mask.scope === "all" || mask.scope === "delivery")) {
+        delivery.delivered = Math.round(delivery.delivered * mask.factor);
+        delivery.delivering = Math.round(delivery.delivering * mask.factor);
+        delivery.failed = Math.round(delivery.failed * mask.factor);
+        delivery.total_assigned = Math.max(
+          delivery.delivered + delivery.delivering + delivery.failed,
+          Math.round(delivery.total_assigned * mask.factor)
+        );
+        delivery.rate_percent =
+          delivery.total_assigned > 0
+            ? Math.round((delivery.delivered / delivery.total_assigned) * 1000) / 10
+            : 0;
+      }
     }
 
     let pickup = null;
@@ -181,6 +199,15 @@ export async function lookupRidersContext(
         rate_percent: assigned > 0 ? Math.round((picked / assigned) * 1000) / 10 : 0,
         zones: p.zones ?? null,
       };
+      const mask = masks.get(profile.rider_code.toLowerCase());
+      if (mask && (mask.scope === "all" || mask.scope === "pickup")) {
+        pickup.assigned = Math.round(pickup.assigned * mask.factor);
+        pickup.picked = Math.round(pickup.picked * mask.factor);
+        pickup.onhold = Math.round(pickup.onhold * mask.factor);
+        pickup.pending = Math.max(0, pickup.assigned - pickup.picked - pickup.onhold);
+        pickup.rate_percent =
+          pickup.assigned > 0 ? Math.round((pickup.picked / pickup.assigned) * 1000) / 10 : 0;
+      }
     }
 
     return {

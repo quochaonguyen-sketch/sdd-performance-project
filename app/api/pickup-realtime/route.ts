@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { buildPickupRealtime, readAllPages, type SourceRow } from "@/lib/pickup/realtime";
+import { getActiveVolumeMaskMap, maskPickupMetrics } from "@/lib/rider-volume-mask/service";
 
 export async function GET() {
   const context = await getCurrentUserContext().catch(() => null);
@@ -55,7 +56,18 @@ export async function GET() {
     if (assigned.error || onhold.error) throw assigned.error ?? onhold.error;
     const inventory = [...(assigned.data?.rows ?? []), ...(onhold.data?.rows ?? [])] as SourceRow[];
     const routeSnapshotAt = [assigned.data?.snapshotAt, onhold.data?.snapshotAt].filter(Boolean).sort().at(-1) ?? null;
-    return NextResponse.json({ success: true, ...buildPickupRealtime(profiles, realtime, groups, summary, inventory),
+    const built = buildPickupRealtime(profiles, realtime, groups, summary, inventory);
+    if (!context.profile.is_super_admin) {
+      const masks = await getActiveVolumeMaskMap();
+      if (masks.size > 0) {
+        for (const rider of built.riders) {
+          if (rider.metrics) {
+            rider.metrics = maskPickupMetrics(rider.id, rider.metrics, masks) as any;
+          }
+        }
+      }
+    }
+    return NextResponse.json({ success: true, ...built,
       snapshotAt: summaryHead?.snapshot_at ?? null, riderSnapshotAt: current?.snapshot_at ?? riderHead?.snapshot_at ?? null,
       riderSource: current ? "sdd-web-data" : "legacy", taskCount: current?.task_count ?? null,
       riderStale,

@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     const isVolQuery = !isCasual && (isVolumeQuery(userQuestion) || parsed.data.pagePath?.includes("/volume") || parsed.data.pagePath?.includes("/zones"));
     const matchedRidersPromise = isCasual
       ? Promise.resolve(null)
-      : lookupRidersContext(admin, userQuestion, todayInVietnam());
+      : lookupRidersContext(admin, userQuestion, todayInVietnam(), context?.profile.is_super_admin === true);
     const whContextPromise = isWhQuery
       ? loadWhOperationsContext(admin, todayInVietnam())
       : Promise.resolve(null);

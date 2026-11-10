@@ -78,9 +78,20 @@ export function RealtimeDashboardView() {
   }, []);
 
   const loadRealtime = useCallback(async () => {
-    const supabase = createClient();
     setLoading(true); setError(null);
     try {
+      const res = await fetch("/api/realtime-delivery", { cache: "no-store" });
+      if (res.ok) {
+        const payload = await res.json();
+        if (payload.success) {
+          setRows(payload.rows ?? []);
+          setSnapshotAt(payload.snapshotAt);
+          setWorkDate(payload.workDate);
+          return;
+        }
+      }
+      // Fallback if API returns unsuccessful
+      const supabase = createClient();
       const latest = await supabase.from("realtime_delivery_riders").select("work_date,snapshot_id,snapshot_at").order("snapshot_at", { ascending:false }).limit(1).maybeSingle();
       if (latest.error) throw latest.error;
       if (!latest.data) {setRows([]);setSnapshotAt(null);setWorkDate(null);return;}
@@ -88,9 +99,6 @@ export function RealtimeDashboardView() {
       const rows = await readAllPages<RealtimeRider>((from,to) => supabase.from("realtime_delivery_riders")
         .select("id,driver_id,driver_name,total_assigned,delivered,delivering,failed,zone_id,first_delivery_at,idle_delivery_seconds,snapshot_id,snapshot_at")
         .eq("work_date",head.work_date).eq("snapshot_id",head.snapshot_id).order("driver_id").range(from,to));
-      const check = await supabase.from("realtime_delivery_riders").select("snapshot_id").order("snapshot_at",{ascending:false}).limit(1).maybeSingle();
-      if (check.error) throw check.error;
-      if (check.data?.snapshot_id !== head.snapshot_id) throw Error("Snapshot Delivery vừa thay đổi; đang giữ dữ liệu đã tải. Hãy làm mới.");
       setRows(rows);setSnapshotAt(head.snapshot_at);setWorkDate(head.work_date);
     } catch (e) {
       const sourceError=e as {code?:string;message?:string};

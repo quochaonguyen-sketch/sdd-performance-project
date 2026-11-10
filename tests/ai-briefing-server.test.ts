@@ -26,6 +26,7 @@ function fixture(allowed?: "team" | "riders") {
     if (name === "@/lib/locations/operating-areas") return { OPERATING_AREAS: ["KV1", "KV2", "KV3", "KV4", "KV5"] };
     if (name === "@/lib/team/model") return { addDays: () => "2026-11-03" };
     if (name === "@/lib/team/server") return { loadTeam: async () => { calls.push("team"); return { staff: [], shifts: [] }; } };
+    if (name === "@/lib/cache/ttl-cache") return { TtlCache: class { load(_k: any, fn: any) { return fn().then((v: any) => ({ value: v })); } } };
     if (name === "@/lib/pickup/realtime") return { readAllPages: async (read: (from: number, to: number) => unknown) => read(0, 999) };
     if (name === "@/lib/supabase/server") return { createClient: async () => { calls.push("session"); return { from(table: string) { calls.push(table); throw Error("offline"); } }; } };
     throw Error(`Forbidden or unexpected dependency: ${name}`);

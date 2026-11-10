@@ -4,8 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizePermissions, type MemberPermissions } from "@/lib/auth/permissions";
 import { normalizeRiderEditAreas } from "@/lib/auth/rider-scope";
-import {loadRoleAccess} from "@/lib/auth/role-access-server";
-import {viewPermissions,type PageAccess} from "@/lib/auth/page-access";
+import { loadRoleAccess } from "@/lib/auth/role-access-server";
+import { viewPermissions, type PageAccess } from "@/lib/auth/page-access";
+import { isSuperAdminEmail } from "@/lib/auth/super-admin";
 
 export type CurrentUserContext = {
   user: {
@@ -18,6 +19,7 @@ export type CurrentUserContext = {
     permissions: MemberPermissions;
     rider_edit_areas: string[];
     page_access?: PageAccess;
+    is_super_admin?: boolean;
   };
 };
 
@@ -50,9 +52,10 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
   if (!byEmail) return null;
 
   if (authError || !authUser.user) throw new Error("Không tải được quyền hiện tại của tài khoản.");
-  const page_access=await loadRoleAccess(byEmail.role);
-  const storedPermissions=normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
-  const permissions = ["member","leader"].includes(byEmail.role)?viewPermissions(storedPermissions,page_access):storedPermissions;
+  const page_access = await loadRoleAccess(byEmail.role);
+  const storedPermissions = normalizePermissions(authUser.user?.app_metadata?.permissions, byEmail.role);
+  const permissions = ["member", "leader"].includes(byEmail.role) ? viewPermissions(storedPermissions, page_access) : storedPermissions;
+  const is_super_admin = isSuperAdminEmail(email) || authUser.user.app_metadata?.super_admin === true;
 
   return {
     user: { id: userId, email },
@@ -62,6 +65,7 @@ export const getCurrentUserContext = cache(async (): Promise<CurrentUserContext 
       permissions,
       page_access,
       rider_edit_areas: normalizeRiderEditAreas(authUser.user.app_metadata?.rider_edit_areas),
+      is_super_admin,
     },
   };
 });
