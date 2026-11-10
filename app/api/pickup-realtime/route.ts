@@ -5,7 +5,7 @@ import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { buildPickupRealtime, readAllPages, type SourceRow } from "@/lib/pickup/realtime";
 import { getActiveVolumeMaskMap, maskPickupMetrics } from "@/lib/rider-volume-mask/service";
 
-export async function GET() {
+export async function GET(request: Request) {
   const context = await getCurrentUserContext().catch(() => null);
   if (!context) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
   if (!canAccessPickupManagement(context.profile.role, context.profile.permissions)) return NextResponse.json({ success: false, error: "Bạn không có quyền xem pickup" }, { status: 403 });
@@ -56,18 +56,34 @@ export async function GET() {
     if (assigned.error || onhold.error) throw assigned.error ?? onhold.error;
     const inventory = [...(assigned.data?.rows ?? []), ...(onhold.data?.rows ?? [])] as SourceRow[];
     const routeSnapshotAt = [assigned.data?.snapshotAt, onhold.data?.snapshotAt].filter(Boolean).sort().at(-1) ?? null;
+    const previewAsUser = request ? new URL(request.url).searchParams.get("preview_as_user") === "1" : false;
+    const isSuperAdmin = context.profile.is_super_admin === true;
+    const shouldMask = !isSuperAdmin || previewAsUser;
+
     const built = buildPickupRealtime(profiles, realtime, groups, summary, inventory);
-    if (!context.profile.is_super_admin) {
+    if (shouldMask) {
       const masks = await getActiveVolumeMaskMap();
       if (masks.size > 0) {
         for (const rider of built.riders) {
           if (rider.metrics) {
             rider.metrics = maskPickupMetrics(rider.id, rider.metrics, masks) as any;
           }
+          if (rider.groups && masks.has(rider.id.toLowerCase())) {
+            const m = masks.get(rider.id.toLowerCase())!;
+            if (m.scope === "all" || m.scope === "pickup") {
+              for (const g of rider.groups) {
+                if (g.assigned !== undefined) g.assigned = Math.round(g.assigned * m.factor);
+                if (g.picked !== undefined) g.picked = Math.round(g.picked * m.factor);
+                if (g.onhold !== undefined) g.onhold = Math.round(g.onhold * m.factor);
+              }
+            }
+          }
         }
       }
     }
     return NextResponse.json({ success: true, ...built,
+      isSuperAdmin,
+      previewingAsUser: previewAsUser,
       snapshotAt: summaryHead?.snapshot_at ?? null, riderSnapshotAt: current?.snapshot_at ?? riderHead?.snapshot_at ?? null,
       riderSource: current ? "sdd-web-data" : "legacy", taskCount: current?.task_count ?? null,
       riderStale,

@@ -7,7 +7,7 @@ import type { RealtimeRider } from "@/lib/dashboard/live-delivery-riders";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getCurrentUserContext().catch(() => null);
   if (!session) {
     return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
@@ -45,9 +45,11 @@ export async function GET() {
     );
 
     const isSuperAdmin = session.profile.is_super_admin === true;
+    const previewAsUser = request ? new URL(request.url).searchParams.get("preview_as_user") === "1" : false;
+    const shouldMask = !isSuperAdmin || previewAsUser;
 
-    // If Super Admin, return genuine raw 100% data
-    if (isSuperAdmin) {
+    // If Super Admin not previewing as user, return genuine raw 100% data
+    if (!shouldMask) {
       return NextResponse.json({
         success: true,
         workDate: head.work_date,
@@ -55,10 +57,11 @@ export async function GET() {
         snapshotAt: head.snapshot_at,
         rows: rawRows,
         isSuperAdmin: true,
+        previewingAsUser: false,
       });
     }
 
-    // For all other users (Admin, Leader, Viewer), apply volume mask
+    // For all other users (Admin, Leader, Viewer), or Super Admin in preview mode, apply volume mask
     const masks = await getActiveVolumeMaskMap();
     if (masks.size === 0) {
       return NextResponse.json({
@@ -67,7 +70,8 @@ export async function GET() {
         snapshotId: head.snapshot_id,
         snapshotAt: head.snapshot_at,
         rows: rawRows,
-        isSuperAdmin: false,
+        isSuperAdmin,
+        previewingAsUser: previewAsUser,
       });
     }
 
@@ -79,7 +83,8 @@ export async function GET() {
       snapshotId: head.snapshot_id,
       snapshotAt: head.snapshot_at,
       rows: maskedRows,
-      isSuperAdmin: false,
+      isSuperAdmin,
+      previewingAsUser: previewAsUser,
     });
   } catch (err) {
     console.error("[RealtimeDelivery API Error]:", err);

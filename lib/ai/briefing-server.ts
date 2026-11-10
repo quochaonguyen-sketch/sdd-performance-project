@@ -50,7 +50,7 @@ export async function loadOperationsBriefing(context: CurrentUserContext, questi
     attempt(pickup, async () => {
       // Compose the existing authenticated read endpoint to keep its full-fleet/fallback rules.
       const { GET } = await import("@/app/api/pickup-realtime/route");
-      const response = await GET();
+      const response = await GET(new Request("http://localhost/api/pickup-realtime"));
       if (!response.ok) throw Error("Pickup unavailable");
       const payload = await response.json() as { riders: PickupRider[]; riderSnapshotAt: string | null; riderStale?: boolean };
       input.pickup = payload.riders; pickup.at = payload.riderSnapshotAt;

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { assistantScope } from "@/lib/filters/assistant-scope";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Bike, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Layers3, RefreshCcw, Search, UsersRound } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Bike, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Layers3, RefreshCcw, Search, ShieldAlert, UsersRound } from "lucide-react";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
@@ -28,11 +28,12 @@ const rate = (m: Metrics) => m.assigned > 0 ? m.picked / m.assigned * 100 : 0;
 const rateLabel = (m: Metrics) => m.assigned > 0 ? `${rate(m).toLocaleString("vi-VN",{maximumFractionDigits:1})}%` : "—";
 const unique = (values: string[]) => [...new Set(values)].sort((a,b) => a.localeCompare(b,"vi",{ numeric:true }));
 const RIDER_COLUMNS: {label:string; key?:PickupSort}[] = [{label:"Rider",key:"name"},{label:"KV / COT"},{label:"Mã zone"},{label:"Tổng gán",key:"assigned"},{label:"Đã lấy",key:"picked"},{label:"Chờ lấy",key:"pending"},{label:"Onhold",key:"onhold"},{label:"Tiến độ",key:"rate"}];
-type Payload = { riders: PickupRider[]; summary: Summary[]; snapshotAt: string | null; riderSnapshotAt: string | null; routeSnapshotAt: string | null; snapshotsAligned: boolean; riderSource?: string; riderStale?: boolean; taskCount?: number | null };
+type Payload = { riders: PickupRider[]; summary: Summary[]; snapshotAt: string | null; riderSnapshotAt: string | null; routeSnapshotAt: string | null; snapshotsAligned: boolean; riderSource?: string; riderStale?: boolean; taskCount?: number | null; isSuperAdmin?: boolean; previewingAsUser?: boolean };
 
 export function PickupRealtimeView() {
   const [data, setData] = useState<Payload>({ riders: [], summary: [], snapshotAt: null, riderSnapshotAt: null, routeSnapshotAt: null, snapshotsAligned: true });
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [previewAsUser, setPreviewAsUser] = useState(false);
   const [filters, setFilters] = useRememberedState("pickup-realtime-view:filters", INITIAL), [tab, setTab] = useState<"riders" | "zones">("riders"), [page, setPage] = useState(0);
   const [focus, setFocus] = useState<PickupFocus>("all"), [sort, setSort] = useState<PickupSort>("assigned");
   const [direction,setDirection] = useState<"asc"|"desc">("desc");
@@ -49,14 +50,15 @@ export function PickupRealtimeView() {
   const load = useCallback(async (signal: AbortSignal) => {
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/pickup-realtime", { cache: "no-store", signal });
+      const url = `/api/pickup-realtime${previewAsUser ? "?preview_as_user=1" : ""}`;
+      const res = await fetch(url, { cache: "no-store", signal });
       if(!res.headers.get("content-type")?.includes("application/json"))throw new Error(`Chưa tải được Pickup Realtime (HTTP ${res.status}). Bấm Làm mới để thử lại.`);
       const payload = await res.json();
       if (!res.ok || !payload.success) throw new Error(payload.error ?? "Không tải được pickup realtime");
       if (!signal.aborted) setData(payload);
     } catch (e) { if (!signal.aborted) setError(e instanceof Error ? e.message : "Không tải được dữ liệu"); }
     finally { if (!signal.aborted) setLoading(false); }
-  }, []);
+  }, [previewAsUser]);
   const refresh = useVisiblePolling(load);
   useSupabaseRealtime({ table: ["pickup_48h_summary_groups", "pickup_48h_realtime_riders", "pickup_48h_rider_groups", "pickup_48h_no_api2", "riders"], onChange: refresh, debounceMs: 1500 });
   function change(patch: Partial<typeof INITIAL>) { setFilters(current => ({ ...current, ...patch })); setPage(0); }
@@ -85,7 +87,28 @@ export function PickupRealtimeView() {
   return <div className={s.page}>
     <header className={`ops-page-header ${s.header}`}>
       <div><h1>Pickup Realtime</h1></div>
-      <div className={`ops-page-actions ${s.headerActions}`}><span className={s.liveStatus} data-stale={data.riderStale || undefined}><i/>{loading ? "Đang cập nhật" : data.riderStale ? "Dữ liệu cần cập nhật" : "Tự cập nhật mỗi phút"}</span><Button onClick={() => void refresh()} disabled={loading} variant="secondary"><RefreshCcw size={15} className={loading ? "animate-spin" : ""}/>{loading ? "Đang tải…" : "Làm mới"}</Button></div>
+      <div className={`ops-page-actions ${s.headerActions}`}>
+        {data.isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setPreviewAsUser((prev) => !prev)}
+            className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+            style={{
+              borderColor: previewAsUser ? "#e11d48" : "#f59e0b",
+              backgroundColor: previewAsUser ? "#fff1f2" : "#fffbeb",
+              color: previewAsUser ? "#be123c" : "#b45309",
+            }}
+            title="Bấm để chuyển đổi giữa Số thực tế (Super Admin) và Xem như người khác (Masked)"
+          >
+            <ShieldAlert size={13} />
+            <span>
+              {previewAsUser ? "🎭 Đang xem: Người khác thấy (Đã mask 50%)" : "🛡️ Đang xem: Số thực tế 100% (Super Admin)"}
+            </span>
+          </button>
+        )}
+        <span className={s.liveStatus} data-stale={data.riderStale || undefined}><i/>{loading ? "Đang cập nhật" : data.riderStale ? "Dữ liệu cần cập nhật" : "Tự cập nhật mỗi phút"}</span>
+        <Button onClick={() => void refresh()} disabled={loading} variant="secondary"><RefreshCcw size={15} className={loading ? "animate-spin" : ""}/>{loading ? "Đang tải…" : "Làm mới"}</Button>
+      </div>
     </header>
     <div className={s.sourceLine}><span><Clock3 size={14} aria-hidden="true"/>Rider: <strong>{formatDateTime(data.riderSnapshotAt)}</strong></span><span>{fmt(data.riders.length)} rider · KV1–KV5</span><details><summary>Nguồn &amp; thời điểm cập nhật</summary><div><p>Địa bàn: {formatDateTime(data.snapshotAt)}</p><p>Tuyến gán: {formatDateTime(data.routeSnapshotAt)}</p><p>{data.riderSource === "sdd-web-data" ? `SPX · SDD Web Data · ${fmt(data.taskCount ?? 0)} task` : "Theo snapshot hiện có"}</p></div></details></div>
     {error && <div role="alert" className={s.error}>{error}</div>}

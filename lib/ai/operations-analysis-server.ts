@@ -136,7 +136,7 @@ export async function loadOperationsAnalysis(context: CurrentUserContext, scope:
     }),
     source("analysis_pickup_realtime","Pickup Realtime","/pickup-realtime",access.pickupRealtime,async target=>{
       const {GET}=await import("@/app/api/pickup-realtime/route");
-      const response=await GET();
+      const response=await GET(new Request("http://localhost/api/pickup-realtime"));
       if(!response.ok)throw Error("Pickup unavailable");
       const payload=await response.json() as {
         success:boolean;

@@ -19,6 +19,7 @@ import {
   MapPin,
   RefreshCcw,
   Search,
+  ShieldAlert,
   TrendingUp,
   UsersRound,
   X,
@@ -51,6 +52,8 @@ export function RealtimeDashboardView() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<DisplayRider | null>(null);
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [previewAsUser, setPreviewAsUser] = useState(false);
   const [realtimeLoading, setLoading] = useState(true);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const loading = realtimeLoading || profilesLoading;
@@ -80,13 +83,15 @@ export function RealtimeDashboardView() {
   const loadRealtime = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch("/api/realtime-delivery", { cache: "no-store" });
+      const url = `/api/realtime-delivery${previewAsUser ? "?preview_as_user=1" : ""}`;
+      const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const payload = await res.json();
         if (payload.success) {
           setRows(payload.rows ?? []);
           setSnapshotAt(payload.snapshotAt);
           setWorkDate(payload.workDate);
+          if (payload.isSuperAdmin !== undefined) setIsSuperAdmin(payload.isSuperAdmin);
           return;
         }
       }
@@ -104,7 +109,7 @@ export function RealtimeDashboardView() {
       const sourceError=e as {code?:string;message?:string};
       if (!isMissingTableError(sourceError)) setError(sourceError.message || "Không tải được dữ liệu Delivery.");
     } finally {setLoading(false);}
-  }, []);
+  }, [previewAsUser]);
 
   const load = useCallback(() => {
     void Promise.all([loadProfiles(), loadRealtime()]);
@@ -184,6 +189,24 @@ export function RealtimeDashboardView() {
           <div className="rt-command-meta"><RealtimeIndicator snapshotAt={snapshotAt} loading={loading} /><span>Tất cả rider nguồn Delivery</span>{workDate ? <span>Ngày {workDate.split("-").reverse().join("/")}</span> : null}</div>
         </div>
         <div className="rt-command-side ops-page-actions">
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => setPreviewAsUser((prev) => !prev)}
+              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              style={{
+                borderColor: previewAsUser ? "#e11d48" : "#f59e0b",
+                backgroundColor: previewAsUser ? "#fff1f2" : "#fffbeb",
+                color: previewAsUser ? "#be123c" : "#b45309",
+              }}
+              title="Bấm để chuyển đổi giữa Số thực tế (Super Admin) và Xem như người khác (Masked)"
+            >
+              <ShieldAlert size={13} />
+              <span>
+                {previewAsUser ? "🎭 Đang xem: Người khác thấy (Đã mask 50%)" : "🛡️ Đang xem: Số thực tế 100% (Super Admin)"}
+              </span>
+            </button>
+          )}
           <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCcw size={15} className={loading ? "animate-spin" : undefined} />Làm mới dữ liệu</Button>
           <div className="rt-hero-progress"><div><span>Tiến độ toàn đội</span><strong>{loading ? "—" : `${totals.assigned ? Math.round(totals.delivered / totals.assigned * 100) : 0}%`}</strong></div><p>{loading ? "Đang tải dữ liệu" : `${totals.delivered.toLocaleString("vi-VN")} / ${totals.assigned.toLocaleString("vi-VN")} đơn đã giao`}</p></div>
         </div>
