@@ -145,15 +145,16 @@ export async function loadWhOperationsContext(
       const areaKey = areasSummary[order.area] ? order.area : "UNRESOLVED";
       areasSummary[areaKey].total++;
 
-      // Accurate 4H SLA remaining calculation
-      const deadline = order.created_at ? Date.parse(order.created_at) + 4 * 3600000 : null;
+      // Accurate SDD 3H SLA remaining calculation (soc_pending_at -> delivered_at <= 180 min)
+      const sddStart = order.soc_pending_at || order.created_at;
+      const deadline = sddStart ? Date.parse(sddStart) + 3 * 3600000 : null;
       const remMinutes = deadline ? Math.floor((deadline - now) / 60000) : null;
       const isOverdue = remMinutes !== null && remMinutes < 0;
 
       if (order.raw_status === "Delivered") {
         areasSummary[areaKey].delivered++;
-        const s4h = sla(order, "4h");
-        if (s4h.state === "Late") {
+        const sddSla = sla(order, "sdd");
+        if (sddSla.state === "Late") {
           issues.push({
             type: "delivered_late",
             severity: "info",
@@ -165,7 +166,7 @@ export async function loadWhOperationsContext(
             ward: order.ward,
             status: order.raw_status,
             created_at: order.created_at,
-            detail: `Giao trễ SLA 4H (${s4h.minutes ?? 0} phút, quy chuẩn ≤240 phút)`,
+            detail: `Giao trễ SLA SDD (${sddSla.minutes ?? 0} phút, quy chuẩn ≤180 phút từ lúc SOC nhận hàng)`,
             remaining_minutes: null,
           });
         }
@@ -224,7 +225,7 @@ export async function loadWhOperationsContext(
             ward: order.ward,
             status: order.raw_status,
             created_at: order.created_at,
-            detail: `Đang giao nhưng đã trễ SLA 4H (quá hạn ${Math.abs(remMinutes!)} phút)`,
+            detail: `Đang giao nhưng đã trễ SLA SDD 3H (quá hạn ${Math.abs(remMinutes!)} phút từ lúc SOC nhận)`,
             remaining_minutes: remMinutes,
           });
         } else if (remMinutes !== null && remMinutes <= 45) {
@@ -239,7 +240,7 @@ export async function loadWhOperationsContext(
             ward: order.ward,
             status: order.raw_status,
             created_at: order.created_at,
-            detail: `Sắp chạm mốc SLA 4H (chỉ còn ${remMinutes} phút)`,
+            detail: `Sắp chạm mốc SLA SDD 3H (chỉ còn ${remMinutes} phút)`,
             remaining_minutes: remMinutes,
           });
         }

@@ -52,11 +52,17 @@ export function sla(r:WhOrder,kind:"4h"|"wh"|"sdd"):Sla{
   return result.minutes===null?result:{...result,state:result.minutes<=60?"On time":"Late"};
  }
  if(!r.delivered_at)return {state:"Pending",minutes:null};
- return elapsed(kind==="4h"?r.created_at:r.soc_pending_at,r.delivered_at,kind==="4h"?240:180);
+ const start = kind === "4h" ? r.created_at : (r.soc_pending_at || r.created_at);
+ return elapsed(start, r.delivered_at, kind === "4h" ? 240 : 180);
 }
-export function remaining(r:WhOrder,now:number):number|null{
- if(!r.created_at)return null;
- return Math.floor((Date.parse(r.created_at)+4*3600000-now)/60000);
+export function remaining(r:WhOrder,now:number,kind:"4h"|"sdd"="sdd"):number|null{
+ if (kind === "4h") {
+  if (!r.created_at) return null;
+  return Math.floor((Date.parse(r.created_at) + 4 * 3600000 - now) / 60000);
+ }
+ const start = r.soc_pending_at || r.created_at;
+ if (!start) return null;
+ return Math.floor((Date.parse(start) + 3 * 3600000 - now) / 60000);
 }
 
 /**
@@ -108,13 +114,17 @@ export function orderAgeMinutes(
   return Math.max(0, Math.floor((effNow - createdMs) / 60000));
 }
 export function isNearLate(r:WhOrder,now:number,thresholdMinutes=60):boolean{
- if(r.raw_status==="Delivered"||!r.created_at)return false;
- const rem=Math.floor((Date.parse(r.created_at)+4*3600000-now)/60000);
+ if(r.raw_status==="Delivered")return false;
+ const start = r.soc_pending_at || r.created_at;
+ if(!start)return false;
+ const rem = Math.floor((Date.parse(start)+3*3600000-now)/60000);
  return rem>0&&rem<=thresholdMinutes;
 }
 export function isOverdue(r:WhOrder,now:number):boolean{
- if(r.raw_status==="Delivered"||!r.created_at)return false;
- const rem=Math.floor((Date.parse(r.created_at)+4*3600000-now)/60000);
+ if(r.raw_status==="Delivered")return false;
+ const start = r.soc_pending_at || r.created_at;
+ if(!start)return false;
+ const rem = Math.floor((Date.parse(start)+3*3600000-now)/60000);
  return rem<=0;
 }
 export function counts(rows: WhOrder[], day: string, now: number = Date.now()) {
@@ -160,9 +170,9 @@ export function counts(rows: WhOrder[], day: string, now: number = Date.now()) {
     if (isOnhold(r)) onhold++;
 
     if (riderOrder(r)) {
-      const fourH = sla(r, "4h");
-      if (fourH.state === "Late") late++;
-      else if (fourH.state === "On time") ontime++;
+      const sddSla = sla(r, "sdd");
+      if (sddSla.state === "Late") late++;
+      else if (sddSla.state === "On time") ontime++;
       const effNow = getOrderEffectiveNow(r, now);
       if (isNearLate(r, effNow)) nearLate++;
     }

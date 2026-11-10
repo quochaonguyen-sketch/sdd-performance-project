@@ -51,6 +51,9 @@ Với câu hỏi yêu cầu danh sách (ví dụ ai OFF theo quận/COT), phải
 Khi trả lời ai OFF, phải tính đủ OFF_WEEKLY, OFF_APPROVED và OFF_UNEXPECTED, nêu breakdown từ attendance.scoped_off_status_counts, và tôn trọng attendance.requested_scope.area_mode (delivery là giao; pickup là lấy hàng).
 Nếu câu hỏi nhắc tên rider và hỏi theo tuần/ngày nào, phải dùng attendance.date_scope cùng attendance.matched_rider_off_schedule; không được suy kết luận cho cả tuần từ một work_date đơn lẻ.
 Khi người dùng hỏi về một rider cụ thể (theo tên hoặc mã rider, ví dụ "nguyễn văn a", "132420"):
+- BẮT BUỘC dùng chính xác 100% các trường profile: mã rider (rider_code), họ tên (full_name), khu vực (KV), ca (COT), địa bàn giao (delivery_district, delivery_ward) và địa bàn lấy (pickup_district, pickup_ward) từ khối matched_riders.
+- TUYỆT ĐỐI KHÔNG tự bịa mã rider, không đoán mò thông tin nhân sự và không thay đổi địa bàn của rider.
+- Nếu không có khối matched_riders hoặc danh sách matched_riders rỗng (không tìm thấy rider): PHẢI thông báo rõ ràng là không tìm thấy rider này trong danh bạ vận hành LMS, TUYỆT ĐỐI KHÔNG tự bịa hồ sơ giả lập hay gán ghép số liệu từ khu vực khác.
 - Ưu tiên sử dụng dữ liệu chi tiết trong khối matched_riders (chứa đầy đủ thông tin Delivery Realtime, Pickup Realtime, Onhold và WH).
 - Báo cáo rõ ràng:
   + Danh tính rider: Họ tên đầy đủ (**in đậm**), mã rider, khu vực (**KV**), COT, địa bàn giao (**quận/phường**) và trạng thái làm việc.
@@ -105,9 +108,9 @@ const WH_RULES = `Nếu dữ liệu chứa wh_tracking hoặc câu hỏi nhắc 
 - Khi người dùng hỏi "Iphone hôm nay có vấn đề gì không":
   + Phân tích toàn diện tình hình vận hành:
     1. **Đơn Onhold (giữ hàng/hoãn)**: Nêu rõ mã đơn, rider, khu vực và lý do Onhold (ví dụ: khách hẹn lại ngày/giờ giao).
-    2. **Đơn đang giao có nguy cơ trễ hoặc đã vượt mốc SLA 4H**: Nêu rõ mã đơn, rider phụ trách, thời điểm tạo đơn và số phút đã quá hạn / còn lại.
+    2. **Đơn đang giao có nguy cơ trễ hoặc đã vượt mốc SLA SDD 3H**: Nêu rõ mã đơn, rider phụ trách, thời điểm SOC nhận và số phút đã quá hạn / còn lại (quy chuẩn SLA SDD: SOC nhận hàng → Delivered ≤ 3 giờ).
     3. **Đơn chờ nhận từ SOC hoặc tồn Hub chưa gán**: Cảnh báo nếu có đơn tắc nghẽn chưa đến tay rider.
-    4. **Tỷ lệ giao và SLA 4H chung**: Nêu số đơn giao đúng giờ vs giao trễ (và giải thích nếu đơn được tạo từ chiều/tối hôm trước nên sang hôm nay bị tính quá 4H).
+    4. **Tỷ lệ giao và SLA SDD 3H chung**: Nêu số đơn giao đúng giờ vs giao trễ (chuẩn SDD tính từ lúc SOC pendingReceive đến Delivered trong vòng 3 tiếng/180 phút).
   + Đưa ra hành động khuyến nghị ngắn gọn, thiết thực cho điều phối viên.
 - Trình bày dạng bảng hoặc gạch đầu dòng rõ ràng, bôi đậm (**in đậm**) tên rider, khu vực và mã đơn.`;
 
@@ -429,7 +432,7 @@ export async function POST(request: Request) {
             max_tokens: maxTokens,
           }),
           cache: "no-store",
-          signal: AbortSignal.timeout(3_500),
+          signal: AbortSignal.timeout(6_000),
         });
 
         if (res.ok && res.body) {
@@ -490,7 +493,10 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    console.error("[AI Chat Route Error]:", error);
+    const timedOut =
+      (error instanceof DOMException && error.name === "TimeoutError") ||
+      (error instanceof Error && (error.name === "TimeoutError" || error.message.includes("timeout")));
     return NextResponse.json(
       {
         success: false,

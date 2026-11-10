@@ -194,3 +194,23 @@ test("getOrderEffectiveNow uses live now for today orders and delivered_at for d
   });
   assert.equal(orderAgeMinutes(deliveredOrder, todayNow), 150);
 });
+
+test("sla sdd marks duration <= 3h (180m) from soc_pending_at to delivered_at as On time, > 3h as Late", () => {
+  const ontimeOrder = makeOrder("SDD_ONT", "Delivered", {
+    created_at: "2026-11-06T05:00:00Z",
+    soc_pending_at: "2026-11-06T06:00:00Z",
+    delivered_at: "2026-11-06T08:50:00Z", // 2h 50m from soc_pending_at (<= 3h)
+    attempt: 0,
+  });
+  assert.equal(sla(ontimeOrder, "sdd").state, "On time");
+  assert.equal(sla(ontimeOrder, "sdd").minutes, 170);
+
+  const lateOrder = makeOrder("SDD_LATE", "Delivered", {
+    created_at: "2026-11-06T05:00:00Z",
+    soc_pending_at: "2026-11-06T06:00:00Z",
+    delivered_at: "2026-11-06T09:15:00Z", // 3h 15m from soc_pending_at (> 3h)
+    attempt: 0,
+  });
+  assert.equal(sla(lateOrder, "sdd").state, "Late");
+  assert.equal(sla(lateOrder, "sdd").minutes, 195);
+});

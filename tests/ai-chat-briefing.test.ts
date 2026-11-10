@@ -6,6 +6,7 @@ import ts from "typescript";
 import { z } from "zod";
 import { resolveWorkDateScope } from "../lib/ai/work-date.ts";
 import { analysisScopeForQuestion, isReturnOnlyAnalysis, needsOperationsAnalysis } from "../lib/ai/operations-analysis.ts";
+import { findMatchingRiders } from "../lib/ai/rider-matcher.ts";
 
 function fixture() {
   let verified = true, legacyAllowed = false, briefingReads = 0, legacyReads = 0, analysisReads = 0;
@@ -147,4 +148,31 @@ test("volume questions for a specific ward inject ward_volume context with daily
   assert.ok(context?.content.includes("ward_volume"));
   assert.ok(context?.content.includes("Phường 5"));
   assert.ok(context?.content.includes("4788"));
+});
+
+test("findMatchingRiders matches full name, 2-word names, numeric codes, and ignores punctuation", () => {
+  const riders = [
+    { rider_code: "122667", full_name: "ĐỖ ANH DŨNG" },
+    { rider_code: "113502", full_name: "TRƯƠNG THẾ THANH TOÀN" },
+    { rider_code: "132420", full_name: "NGUYỄN THỊ HẢI TRẦM" },
+  ];
+
+  // 1. Exact full name
+  const m1 = findMatchingRiders("Tiến độ Giao hàng - ĐỖ ANH DŨNG", riders);
+  assert.equal(m1.length, 1);
+  assert.equal(m1[0].rider_code, "122667");
+
+  // 2. Trailing punctuation like question mark
+  const m2 = findMatchingRiders("tiến độ anh dũng?", riders);
+  assert.equal(m2.length, 1);
+  assert.equal(m2[0].rider_code, "122667");
+
+  // 3. Code match
+  const m3 = findMatchingRiders("kiểm tra 113502", riders);
+  assert.equal(m3.length, 1);
+  assert.equal(m3[0].rider_code, "113502");
+
+  // 4. Non-existent name returns empty
+  const m4 = findMatchingRiders("ai đó không có thật", riders);
+  assert.equal(m4.length, 0);
 });

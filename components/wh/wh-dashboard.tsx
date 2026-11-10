@@ -90,10 +90,12 @@ const OrderItem = memo(function OrderItem({
   snapshotAt?: string | null;
 }) {
   const effNow = getOrderEffectiveNow(r, now, snapshotAt);
+  const sddSla = sla(r, "sdd");
   const fourHour = sla(r, "4h");
-  const left = remaining(r, effNow);
-  const isOver = r.raw_status !== "Delivered" && left !== null && left <= 0;
-  const isWarning = r.raw_status !== "Delivered" && left !== null && left > 0 && left <= 60;
+  const left = remaining(r, effNow, "4h");
+  const leftSdd = remaining(r, effNow, "sdd");
+  const isOver = r.raw_status !== "Delivered" && leftSdd !== null && leftSdd <= 0;
+  const isWarning = r.raw_status !== "Delivered" && leftSdd !== null && leftSdd > 0 && leftSdd <= 60;
   const statusLabel =
     r.raw_status === "LMhub_received"
       ? "Received"
@@ -108,9 +110,9 @@ const OrderItem = memo(function OrderItem({
         <summary
           className={styles.orderRow}
           data-ontime={
-            fourHour.state === "On time"
+            sddSla.state === "On time"
               ? "On time"
-              : fourHour.state === "Late" || isOver
+              : sddSla.state === "Late" || isOver
               ? "Late"
               : isWarning
               ? "Warning"
@@ -150,35 +152,45 @@ const OrderItem = memo(function OrderItem({
               Attempt <strong>{r.attempt ?? "—"}</strong>
             </small>
           </span>
-          <span className={styles.orderSla} data-kind="4h">
-            <span className={styles.orderCellLabel}>Ontime 4H</span>
-            {fourHour.state === "Pending" && left !== null ? (
+          <span className={styles.orderSla} data-kind="sdd">
+            <span className={styles.orderCellLabel}>SDD · 3H</span>
+            {sddSla.state === "Pending" && leftSdd !== null ? (
               <span
                 className={styles.orderCountdown}
                 data-overdue={isOver}
                 data-warning={isWarning}
                 title={
                   isOver
-                    ? `Đã quá hạn 4H (${Math.abs(left)} phút)`
+                    ? `Đã quá hạn SDD 3H (${Math.abs(leftSdd)} phút từ lúc SOC pending)`
                     : isWarning
-                    ? `Chuẩn bị trễ! Còn ${left} phút để giao đơn`
-                    : `Còn ${duration(left)}`
+                    ? `Chuẩn bị trễ! Còn ${leftSdd} phút để giao đơn`
+                    : `Còn ${duration(leftSdd)}`
                 }
               >
                 {isWarning ? <AlertTriangle size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}
-                {isOver ? `Quá hạn ${duration(Math.abs(left))}` : isWarning ? `Sắp trễ: còn ${duration(left)}` : `Còn ${duration(left)}`}
+                {isOver ? `Quá hạn ${duration(Math.abs(leftSdd))}` : isWarning ? `Sắp trễ: còn ${duration(leftSdd)}` : `Còn ${duration(leftSdd)}`}
               </span>
             ) : (
-              <SlaCell value={fourHour} />
+              <SlaCell value={sddSla} />
             )}
           </span>
           <span className={styles.orderSla}>
             <span className={styles.orderCellLabel}>WH · 1H</span>
             <SlaCell value={sla(r, "wh")} />
           </span>
-          <span className={styles.orderSla}>
-            <span className={styles.orderCellLabel}>SDD · 3H</span>
-            <SlaCell value={sla(r, "sdd")} />
+          <span className={styles.orderSla} data-kind="4h">
+            <span className={styles.orderCellLabel}>Tổng · 4H</span>
+            {fourHour.state === "Pending" && left !== null ? (
+              <span
+                className={styles.orderCountdown}
+                title={left <= 0 ? `Đã quá hạn 4H (${Math.abs(left)} phút)` : `Còn ${duration(left)}`}
+              >
+                <Clock3 size={13} aria-hidden="true" />
+                {left <= 0 ? `Quá hạn ${duration(Math.abs(left))}` : `Còn ${duration(left)}`}
+              </span>
+            ) : (
+              <SlaCell value={fourHour} />
+            )}
           </span>
           <span className={styles.orderChevron}>
             <ChevronDown size={16} aria-hidden="true" />
@@ -240,9 +252,9 @@ function OrderList({
         <span>Mã đơn</span>
         <span>Rider / Địa bàn</span>
         <span>Trạng thái</span>
-        <span>Ontime 4H</span>
-        <span>WH · 1H</span>
         <span>SDD · 3H</span>
+        <span>WH · 1H</span>
+        <span>Tổng · 4H</span>
         <span />
       </div>
       <ul className={styles.orderList}>
@@ -448,7 +460,7 @@ export function WhDashboard() {
         riderTotal++;
         const effNow = getOrderEffectiveNow(r, now, data?.snapshotAt);
         if (isNearLate(r, effNow)) nearLate++;
-        if (sla(r, "4h").state === "Late" || isOverdue(r, effNow)) late++;
+        if (sla(r, "sdd").state === "Late" || isOverdue(r, effNow)) late++;
         if (r.raw_status === "Delivering") delivering++;
         if (isOnhold(r)) onhold++;
         if (r.raw_status === "Delivered") delivered++;
@@ -474,7 +486,7 @@ export function WhDashboard() {
         } else if (status === "onhold") {
           if (!isOnhold(r)) return false;
         } else if (status === "late") {
-          if (sla(r, "4h").state !== "Late" && !isOverdue(r, effNow)) return false;
+          if (sla(r, "sdd").state !== "Late" && !isOverdue(r, effNow)) return false;
         } else if (status !== "all" && r.raw_status !== status) {
           return false;
         }
@@ -821,7 +833,7 @@ export function WhDashboard() {
             </div>
           </article>
 
-          {/* Attention & SLA 4H (Created -> Delivered) Card with exact Ontime / Late rates */}
+          {/* Attention & SLA SDD 3H (SOC Pending -> Delivered) Card with exact Ontime / Late rates */}
           <article className={styles.summaryCard} aria-labelledby="wh-attention-title">
             <h2 id="wh-attention-title">
               <CircleAlert size={16} aria-hidden="true" />
@@ -840,7 +852,7 @@ export function WhDashboard() {
 
             <div className={styles.summarySla}>
               <div className={styles.summarySlaHeader}>
-                <span className={styles.slaTitle}>SLA 4H (Created → Delivered)</span>
+                <span className={styles.slaTitle}>SLA SDD (SOC Pending → Delivered)</span>
                 <span className={styles.slaRatioText}>
                   {c.slaTotal > 0 ? `${fmt(c.slaTotal)} đơn đã giao` : "Chưa có đơn giao"}
                 </span>
@@ -848,9 +860,9 @@ export function WhDashboard() {
               <dl>
                 <div
                   className={styles.summaryOntime}
-                  title="Đơn giao đúng hạn trong 4 giờ từ lúc tạo đơn (Created → Delivered)"
+                  title="Đơn giao đúng hạn trong 3 giờ từ lúc SOC nhận hàng (SOC Pending → Delivered)"
                 >
-                  <dt>On time</dt>
+                  <dt>On time (3H)</dt>
                   <dd>
                     {fmt(c.ontime)}{" "}
                     <span className={styles.slaPercent}>({c.ontimeRate.toFixed(1)}%)</span>
@@ -858,9 +870,9 @@ export function WhDashboard() {
                 </div>
                 <div
                   className={styles.summaryLate}
-                  title="Đơn giao trễ hơn 4 giờ từ lúc tạo đơn (Created → Delivered)"
+                  title="Đơn giao trễ hơn 3 giờ từ lúc SOC nhận hàng (SOC Pending → Delivered)"
                 >
-                  <dt>Late</dt>
+                  <dt>Late (3H)</dt>
                   <dd>
                     {fmt(c.late)}{" "}
                     <span className={styles.slaPercent}>({c.lateRate.toFixed(1)}%)</span>
@@ -897,7 +909,7 @@ export function WhDashboard() {
                 </span>
               </div>
               <p className={styles.panelSubtitle}>
-                Thống kê tiến độ giao, tồn đọng và SLA 4H (Created → Delivered) theo từng khu vực quản lý
+                Thống kê tiến độ giao, tồn đọng và SLA SDD 3H (SOC Pending → Delivered) theo từng khu vực quản lý
               </p>
             </div>
           </div>
@@ -917,8 +929,8 @@ export function WhDashboard() {
                 <th scope="col" className={styles.colRight}>Unassigned</th>
                 <th scope="col" className={styles.colRight}>On-Hold</th>
                 <th scope="col" className={styles.colRight}>Riders</th>
-                <th scope="col" className={styles.colRight}>Late 4H (Tỉ lệ %)</th>
-                <th scope="col" className={styles.colRight}>On time 4H (Tỉ lệ %)</th>
+                <th scope="col" className={styles.colRight}>Late 3H (Tỉ lệ %)</th>
+                <th scope="col" className={styles.colRight}>On time 3H (Tỉ lệ %)</th>
               </tr>
             </thead>
             <tbody>
@@ -1099,7 +1111,7 @@ export function WhDashboard() {
           <Info size={14} aria-hidden="true" className={styles.footnoteIcon} />
           <div className={styles.footnoteText}>
             <span>
-              <strong>Quy tắc tính SLA 4H:</strong> Đánh giá từ lúc tạo đơn (Created) đến lúc giao thành công (Delivered). Tỉ lệ On-time và Late tính trên tổng số đơn đã Delivered.
+              <strong>Quy tắc tính SLA SDD 3H:</strong> Đánh giá từ lúc SOC nhận hàng (SOC_pendingReceive) đến lúc giao thành công (Delivered) với quy chuẩn 3 giờ (180 phút). Tỉ lệ On-time và Late tính trên tổng số đơn đã Delivered.
             </span>
             <span className={styles.footnoteMuted}>
               Bộ lọc thời gian phía trên tự động tổng hợp số liệu cho toàn bộ bảng và file CSV xuất ra.
@@ -1124,7 +1136,7 @@ export function WhDashboard() {
                   </span>
                 </div>
                 <p className={styles.panelSubtitle}>
-                  Diễn biến đơn hàng, tiến độ giao và tỉ lệ SLA 4H (Created → Delivered) theo từng ngày
+                  Diễn biến đơn hàng, tiến độ giao và tỉ lệ SLA SDD 3H (SOC Pending → Delivered) theo từng ngày
                 </p>
               </div>
             </div>
@@ -1139,8 +1151,8 @@ export function WhDashboard() {
                   <th scope="col" className={styles.colRight}>Đang giao</th>
                   <th scope="col" className={styles.colRight}>On-Hold</th>
                   <th scope="col" className={styles.colRight}>Chưa gán</th>
-                  <th scope="col" className={styles.colRight}>On time 4H</th>
-                  <th scope="col" className={styles.colRight}>Late 4H</th>
+                  <th scope="col" className={styles.colRight}>On time 3H</th>
+                  <th scope="col" className={styles.colRight}>Late 3H</th>
                   <th scope="col" className={styles.colRight}>Tỉ lệ On time</th>
                   <th scope="col" className={styles.colRight}>Tỉ lệ Late</th>
                   <th scope="col" className={styles.colCenter}>Tỷ lệ giao</th>
@@ -1502,7 +1514,7 @@ export function WhDashboard() {
               className={`${styles.statusFilterBtn} ${status === "late" ? styles.statusFilterBtnActive : ""}`}
               onClick={() => { setStatus("late"); setPage(1); }}
             >
-              🚨 Late 4H ({fmt(pillCounts.late)})
+              🚨 Late SDD 3H ({fmt(pillCounts.late)})
             </button>
             <button
               type="button"
@@ -1571,7 +1583,7 @@ export function WhDashboard() {
                   {[
                     ["all", "Tất cả trạng thái"],
                     ["near_late", "⏳ Chuẩn bị trễ (còn ≤ 60p)"],
-                    ["late", "🚨 Late 4H (Đã trễ)"],
+                    ["late", "🚨 Late SDD 3H (Đã trễ)"],
                     ["Delivering", "Delivering (Đang giao)"],
                     ["onhold", "On-Hold (Tạm hoãn)"],
                     ["Delivered", "Delivered (Đã giao)"],
@@ -1592,7 +1604,7 @@ export function WhDashboard() {
                   }}
                 >
                   <option value="status">Trạng thái (Delivering / On-Hold trước)</option>
-                  <option value="remaining_asc">Hạn 4H: Gấp nhất trước</option>
+                  <option value="remaining_asc">Hạn SLA: Gấp nhất trước</option>
                   <option value="created_desc">Tạo đơn: Mới nhất trước</option>
                   <option value="created_asc">Tạo đơn: Cũ nhất trước</option>
                   <option value="attempt_desc">Attempt: Nhiều nhất trước</option>
@@ -1618,7 +1630,7 @@ export function WhDashboard() {
       <details className={styles.rules}>
         <summary>Quy tắc tính từ Google Sheet</summary>
         <p>
-          WH Ready = SOC_pendingReceive. On-Hold gồm Onhold và LMhub_received đã có delivering_time. SLA 4H đánh giá đơn giao từ lúc tạo đơn (Created) đến lúc giao thành công (Delivered) với ngưỡng SLA 240 phút (4 giờ). Attempt 0 lấy delivered_time, Attempt 1 lấy onhold_time, lớn hơn 1 cần kiểm tra lại; thiếu Attempt hiển thị N/A. Tỉ lệ On-time (%) và Late (%) được tính trên tổng các đơn hàng đã Delivered. Còn lại 4H tính từ tạo đơn, chỉ khi Attempt = 0. Múi giờ Việt Nam.
+          WH Ready = SOC_pendingReceive. On-Hold gồm Onhold và LMhub_received đã có delivering_time. SLA SDD đánh giá từ lúc SOC nhận hàng (SOC_pendingReceive) đến lúc giao thành công (Delivered) với quy chuẩn 3 giờ (180 phút). WH SLA đánh giá Created → SOC_pendingReceive trong 60 phút (1 giờ). Tổng SLA đánh giá Created → Delivered trong 240 phút (4 giờ). Attempt 0 lấy delivered_time, Attempt 1 lấy onhold_time, lớn hơn 1 cần kiểm tra lại; thiếu Attempt hiển thị N/A. Tỉ lệ On-time (%) và Late (%) được tính trên tổng các đơn hàng đã Delivered. Còn lại tính theo hạn chót giao hàng. Múi giờ Việt Nam.
         </p>
       </details>
     </div>

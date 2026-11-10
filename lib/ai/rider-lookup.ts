@@ -57,67 +57,8 @@ let cachedRosters: Array<{
 let cachedRosterTime = 0;
 const ROSTER_TTL = 300_000; // 5 minutes
 
-export function fold(s: string): string {
-  return (s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .toLowerCase()
-    .trim();
-}
-
-export function findMatchingRiders<T extends { rider_code: string; full_name: string }>(
-  question: string,
-  riders: T[]
-): T[] {
-  const qFolded = fold(question);
-  const qClean = ` ${qFolded} `;
-
-  // 1. Check for numeric codes in question (e.g. 132420)
-  const codeMatches = question.match(/\b\d{5,7}\b/g) || [];
-  const codeSet = new Set(codeMatches);
-
-  const matched: Array<{ rider: T; score: number }> = [];
-
-  for (const r of riders) {
-    if (codeSet.has(r.rider_code)) {
-      matched.push({ rider: r, score: 100 });
-      continue;
-    }
-    const nameFolded = fold(r.full_name);
-    if (!nameFolded) continue;
-
-    // Full name match
-    if (qFolded.includes(nameFolded)) {
-      matched.push({ rider: r, score: 90 });
-      continue;
-    }
-
-    // Last 2 words (e.g. "hai tram", "thanh son", "tuan kiet")
-    const words = nameFolded.split(/\s+/);
-    if (words.length >= 2) {
-      const last2 = `${words[words.length - 2]} ${words[words.length - 1]}`;
-      if (last2.length >= 4 && qClean.includes(` ${last2} `)) {
-        matched.push({ rider: r, score: 80 });
-        continue;
-      }
-    }
-
-    // Last 3 words if available
-    if (words.length >= 3) {
-      const last3 = `${words[words.length - 3]} ${words[words.length - 2]} ${words[words.length - 1]}`;
-      if (qClean.includes(` ${last3} `)) {
-        matched.push({ rider: r, score: 85 });
-        continue;
-      }
-    }
-  }
-
-  return matched
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map((m) => m.rider);
-}
+import { fold, findMatchingRiders } from "./rider-matcher";
+export { fold, findMatchingRiders };
 
 export async function lookupRidersContext(
   admin: SupabaseClient,
@@ -129,7 +70,8 @@ export async function lookupRidersContext(
     const { data: rosterData } = await admin
       .from("riders")
       .select("rider_code, full_name, kv, cot, status, delivery_district, delivery_ward, pickup_district, pickup_ward")
-      .in("kv", OPERATING_AREAS);
+      .in("kv", OPERATING_AREAS)
+      .range(0, 2500);
     if (rosterData) {
       cachedRosters = rosterData;
       cachedRosterTime = now;
