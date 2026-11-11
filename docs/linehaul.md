@@ -43,4 +43,4 @@ Arrived chỉ xác nhận đã đến và chờ xả; Unseal xác nhận đang x
 
 Triển khai sửa phân loại: chạy `scripts/admin-audit-db.cjs prisma/linehaul-unseal-status.sql` bằng env DB đã cấu hình, rồi khởi động lại worker để công bố capability mới. Bản cũ không còn nhận/ghi LH. Collector lưu ánh xạ mã LT → trip ID đã xác minh trong cache ngày; khi chuyến biến mất khỏi active, đọc `trip/detail` bằng ID này để lấy mở seal/xả xong thực tế, không suy từ dashboard hoặc giờ ATA. Dashboard không còn trong API đầu tiên được tính đã xả dù chưa biết ID; nếu API không trả giờ xả, vẫn cộng tổng đơn nhưng không tự gán giờ xả lên biểu đồ.
 
-Dự đoán ETA theo giao thông TomTom: xem [cấu hình, cách dùng và giới hạn](linehaul-traffic-eta.md). Nút trong chi tiết chuyến chỉ tra cứu khi người dùng bấm; không thay ETA SPX hoặc tự dựng dự đoán khi thiếu khóa/GPS.
+Giờ đến dự kiến hiển thị trong danh sách và chi tiết chuyến, lấy từ SPX hoặc tính bằng thời gian tuyến OSRM. Xem [cách tính và giới hạn ETA](linehaul-traffic-eta.md).

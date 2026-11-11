@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { canViewPage } from "../lib/auth/page-access.ts";
-import { assertEtaSnapshot, TrafficEtaError } from "../lib/linehaul/traffic-eta.ts";
+import { assertEtaSnapshot, LinehaulEtaError } from "../lib/linehaul/traffic-eta.ts";
 
 function fixture() {
   let signedIn = true, pageAllowed = true, permission = true, missing = false, stale = false, reads = 0, providerCalls = 0;
@@ -14,8 +14,8 @@ function fixture() {
     if (name === "@/lib/auth/current-user") return { getCurrentUserContext: async () => signedIn ? { profile: { role: "member", page_access: { linehaul: pageAllowed }, permissions: { manage_dashboard: permission } } } : null };
     if (name === "@/lib/auth/page-access") return { canViewPage };
     if (name === "@/lib/data-sources/catalog") return { vietnamDay: () => "2026-11-02" };
-    if (name === "@/lib/linehaul/traffic-eta") return { assertEtaSnapshot, TrafficEtaError };
-    if (name === "@/lib/linehaul/traffic-server") return { getTrafficEta: async (trip: { lat: number }) => { providerCalls++; assert.equal(trip.lat, 10.9); return { arrivalAt: "2026-11-02T16:00:00+07:00" }; } };
+    if (name === "@/lib/linehaul/traffic-eta") return { assertEtaSnapshot, LinehaulEtaError };
+    if (name === "@/lib/linehaul/traffic-server") return { getLinehaulEta: async (trip: { lat: number }) => { providerCalls++; assert.equal(trip.lat, 10.9); return { arrivalAt: "2026-11-02T16:00:00+07:00" }; } };
     if (name === "@/lib/supabase/admin") return { createAdminClient: () => ({ from: (table: string) => { assert.equal(table, "linehaul_snapshots"); reads++; return { select() { return this; }, eq(key: string, value: string) { assert.ok(key === "station_id" && value === "4232" || key === "report_date" && value === "2026-11-02"); return this; }, maybeSingle: async () => ({ data: { snapshot_at: new Date(Date.now() - (stale ? 11 * 60_000 : 1000)).toISOString(), trips: missing ? [] : [{ trip_id: "123", lat: 10.9 }] }, error: null }) }; } }) };
     throw Error(name);
   } });
@@ -27,7 +27,7 @@ test("ETA verifies authentication, page and business permissions before any snap
     const f = fixture(); f[deny](); assert.equal((await f.run()).status, deny === "signedOut" ? 401 : 403); assert.equal(f.reads(), 0); assert.equal(f.calls(), 0);
   }
 });
-test("malformed IDs, absent trips and stale source never call the traffic service", async () => {
+test("malformed IDs, absent trips and stale source never call the ETA service", async () => {
   const bad = fixture(); assert.equal((await bad.run("trip_id=../x")).status, 400); assert.equal(bad.reads(), 0);
   const missing = fixture(); missing.missing(); assert.equal((await missing.run()).status, 404); assert.equal(missing.calls(), 0);
   const stale = fixture(); stale.stale(); assert.equal((await stale.run()).status, 409); assert.equal(stale.calls(), 0);

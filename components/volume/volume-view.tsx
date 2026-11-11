@@ -1,6 +1,8 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
 
+import { VolumeComparison } from "./volume-comparison";
+import { Button } from "@/components/ui/button";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -51,6 +53,15 @@ type CotSummary = {
 const PAGE_SIZE = 1000;
 
 export function VolumeView({ kind }: { kind: VolumeKind }) {
+  const [details, setDetails] = useState(false);
+  if (!details) return <VolumeComparison kind={kind} onDetails={() => setDetails(true)} />;
+  return <div className="space-y-4">
+    <Button type="button" variant="secondary" onClick={() => setDetails(false)}>Quay lại so sánh địa bàn</Button>
+    <DetailedVolumeView kind={kind} />
+  </div>;
+}
+
+function DetailedVolumeView({ kind }: { kind: VolumeKind }) {
   const table = kind === "delivery" ? "delivery_order" : "pickup_volume";
   const [date, setDate] = useRememberedState("volume-view:date", todayInVietnam());
   const [rows, setRows] = useState<VolumeRow[]>([]);

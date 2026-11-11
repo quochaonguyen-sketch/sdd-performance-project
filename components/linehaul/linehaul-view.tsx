@@ -6,7 +6,7 @@ import { useReportInitialDataLoading } from "@/components/layout/app-loading-sto
 import { gpsIsStale, inTodayHistory, LH_PHASES, sortTrips, type LinehaulData, type LinehaulTrip } from "@/lib/linehaul/model";
 import styles from "./linehaul.module.css";
 import { TripRoadDistance } from "./trip-road-distance";
-import { TripTrafficEta } from "./trip-traffic-eta";
+import { TripEta } from "./trip-traffic-eta";
 import {LinehaulSummary} from "./linehaul-summary";
 import {fullyUnloaded,isTripUnloaded} from "@/lib/linehaul/summary";
 
@@ -27,9 +27,9 @@ export function LinehaulView(){
   try{
    const response=await fetch("/api/linehaul",{cache:"no-store",signal:controller.signal}),body=await response.json();
    if(!response.ok)throw new Error(body.error||"Chưa tải được LH.");
-   if(!controller.signal.aborted){setData(body);setError("");setNow(Date.now());}
+   if(!controller.signal.aborted){setData(body);setError("");}
   }catch(caught){if(!controller.signal.aborted)setError(caught instanceof Error?caught.message:"Chưa tải được LH.");}
-  finally{inFlight.current=false;if(!controller.signal.aborted)setLoading(false);}
+  finally{inFlight.current=false;if(!controller.signal.aborted){setNow(Date.now());setLoading(false);}}
  },[]);
  useEffect(()=>{
   const first=setTimeout(()=>void load(),0),timer=setInterval(()=>{if(!document.hidden)void load();},30000);
@@ -111,7 +111,7 @@ function TripDetail({trip,now}:{trip:LinehaulTrip;now:number}){
  ].filter(item=>item.value);
  const cargo=[{label:"Đơn hàng",value:trip.orders},{label:"Bao",value:trip.bags},{label:"Hàng xá",value:trip.loose}].filter(item=>item.value!==null);
  return <><header className={styles.detailHeader}><span className={styles.eyebrow}>CHI TIẾT CHUYẾN</span><div className={styles.vehicleTitle}><h2>{trip.plate_number||trip.lt_code}</h2>{trip.vehicle&&<span>{trip.vehicle}</span>}</div><p>{trip.lt_code}</p><span className={styles.phase} data-phase={fullyUnloaded(trip)?"unloaded":trip.phase}>{fullyUnloaded(trip)?"Đã xả đủ tải":LH_PHASES[trip.phase]}</span></header>
-  {!history&&trip.direction!=="outbound"&&<TripTrafficEta trip={trip} now={now}/>}
+  {!history&&trip.direction!=="outbound"&&<TripEta trip={trip} now={now}/>}
   {history&&<div className={styles.completed}><CheckCircle2 size={22}/><div><strong>{trip.hub_unloaded_at?"Đã hoàn tất xả tải":isTripUnloaded(trip)?"Đã xả tải":trip.phase==="unloading"?"Đang xả hàng":"Đã đến hub"}</strong>{trip.hub_ata&&<span>Ghi nhận lúc {time(trip.hub_ata)}</span>}</div></div>}
   {trip.hub_ata&&trip.arrived_at_hub!==undefined&&trip.arrived_at_hub!==null&&(
    <div className={styles.arrivedLocationBox} data-at-hub={trip.arrived_at_hub}>

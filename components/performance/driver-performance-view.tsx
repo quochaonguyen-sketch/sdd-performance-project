@@ -5,8 +5,8 @@ import Link from "next/link";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, memo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, TriangleAlert, Download, PackageCheck, RefreshCcw, Search, SlidersHorizontal, Truck, ShieldAlert } from "lucide-react";
-import { RiderMaskDialog } from "@/components/admin/rider-mask-dialog";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, TriangleAlert, Download, PackageCheck, RefreshCcw, Search, SlidersHorizontal, Truck } from "lucide-react";
+import { RiderPreviewToggle } from "@/components/admin/rider-preview-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -75,14 +75,7 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
   const [isPending,startTransition]=useTransition();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [previewAsUser, setPreviewAsUser] = useState(false);
-  const [activeMasks, setActiveMasks] = useState<Record<string, { factor: number; scope: string }>>({});
-  const [maskDialogTarget, setMaskDialogTarget] = useState<{
-    code: string;
-    name?: string | null;
-    factor?: number;
-    scope?: "all" | "delivery" | "pickup";
-    isMasked?: boolean;
-  } | null>(null);
+  const previewMode = useRef(false);
 
   const rows=result?.rows??[];
   const summary=result?.summary??emptySummary;
@@ -90,7 +83,7 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
   const pageCount=Math.max(1,Math.ceil(summary.groups/filters.pageSize));
   const isLoading=clientLoading||isPending;
 
-  const loadParams=useCallback(async(params:URLSearchParams, preview = previewAsUser)=>{
+  const loadParams=useCallback(async(params:URLSearchParams, preview = previewMode.current)=>{
     controllerRef.current?.abort();
     const controller=new AbortController();controllerRef.current=controller;
     const request=++requestRef.current;
@@ -105,23 +98,24 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
       if(!response.ok||!payload.success)throw Error(payload.error??"Không tải được Performance");
       if(!controller.signal.aborted&&request===requestRef.current){
         if (payload.isSuperAdmin !== undefined) setIsSuperAdmin(payload.isSuperAdmin);
-        if (payload.activeMasks) setActiveMasks(payload.activeMasks);
         if(params.get("page")!==String(payload.filters.page)){
           params.set("page",String(payload.filters.page));
           paramsRef.current=new URLSearchParams(params);
           window.history.replaceState(null,"",`${window.location.pathname}?${params}`);
         }
         setFilters(payload.filters);
-        startTransition(()=>setResult(previous=>!controller.signal.aborted&&request===requestRef.current?payload:previous));
+        previewMode.current = preview;
+        startTransition(()=>{
+          setPreviewAsUser(preview);
+          setResult(previous=>!controller.signal.aborted&&request===requestRef.current?payload:previous);
+        });
       }
     }catch(caught){if(!controller.signal.aborted&&request===requestRef.current)setError(caught instanceof Error?caught.message:"Không tải được dữ liệu");}
     finally{if(!controller.signal.aborted&&request===requestRef.current)setClientLoading(false);}
-  },[previewAsUser]);
+  },[]);
 
   const togglePreview = () => {
-    const next = !previewAsUser;
-    setPreviewAsUser(next);
-    void loadParams(paramsRef.current, next);
+    void loadParams(paramsRef.current, !previewMode.current);
   };
 
   const updateParams=useCallback<UpdateParams>(mutator=>{
@@ -207,6 +201,7 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         isSuperAdmin={isSuperAdmin}
         previewAsUser={previewAsUser}
         onTogglePreview={togglePreview}
+        loading={isLoading}
       />
 
       <PerformanceKpiCards summary={summary} isLoading={isLoading&&!result} />
@@ -236,41 +231,21 @@ export function DriverPerformanceView({ result:initialResult, filters:initialFil
         onPageSizeChange={changePageSize}
         onExport={()=>{setExportError(null);setExportOpen(true);}}
         exporting={exporting}
-        isSuperAdmin={isSuperAdmin}
-        previewAsUser={previewAsUser}
-        activeMasks={activeMasks}
-        onOpenMaskDialog={setMaskDialogTarget}
       />
       <div className={analysisStyles.sectionTitle}><div><span>PHÂN TÍCH HIỆU SUẤT</span><h2>Hiểu rõ hơn về sản lượng</h2></div><p>Xu hướng, khu vực và phân bố rider theo cùng bộ lọc.</p></div>
       <StableAnalysis analysis={result?.analysis} isLoading={isLoading&&!result} onArea={selectArea} />
       <PerformanceExportDialog open={exportOpen} filters={filters} exporting={exporting} error={exportError} onClose={()=>{if(!exporting)setExportOpen(false);}} onExport={mode=>void exportExcel(mode)}/>
 
-      {maskDialogTarget && (
-        <RiderMaskDialog
-          open={Boolean(maskDialogTarget)}
-          onClose={() => setMaskDialogTarget(null)}
-          riderCode={maskDialogTarget.code}
-          riderName={maskDialogTarget.name}
-          initialFactor={maskDialogTarget.factor}
-          initialScope={maskDialogTarget.scope}
-          isMasked={maskDialogTarget.isMasked}
-          onSuccess={() => void loadParams(paramsRef.current)}
-        />
-      )}
     </div>
   );
 }
 
-function PageHeader({
-  filters,
-  isSuperAdmin,
-  previewAsUser,
-  onTogglePreview,
-}: {
+function PageHeader({ filters, isSuperAdmin, previewAsUser, onTogglePreview, loading }: {
   filters: PerformanceFilters;
-  isSuperAdmin?: boolean;
-  previewAsUser?: boolean;
-  onTogglePreview?: () => void;
+  isSuperAdmin: boolean;
+  previewAsUser: boolean;
+  onTogglePreview: () => void;
+  loading: boolean;
 }) {
   return (
     <header className="perf-header ops-page-header">
@@ -278,24 +253,7 @@ function PageHeader({
         <div className="perf-header-copy">
           <h1 className="perf-title">Rider Performance</h1>
         </div>
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={onTogglePreview}
-            className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition-all cursor-pointer"
-            style={{
-              borderColor: previewAsUser ? "#e11d48" : "#f59e0b",
-              backgroundColor: previewAsUser ? "#fff1f2" : "#fffbeb",
-              color: previewAsUser ? "#be123c" : "#b45309",
-            }}
-            title="Bấm để chuyển đổi giữa Số thực tế (Super Admin) và Xem như người khác (Masked)"
-          >
-            <ShieldAlert size={13} />
-            <span>
-              {previewAsUser ? "🎭 Đang xem: Người khác thấy (Đã mask)" : "🛡️ Đang xem: Số thực tế 100% (Super Admin)"}
-            </span>
-          </button>
-        )}
+        {isSuperAdmin && <RiderPreviewToggle pressed={previewAsUser} onToggle={onTogglePreview} disabled={loading}/>}
       </div>
       <div className="perf-scope">
         <span><CalendarDays size={15} aria-hidden="true"/>Kỳ đang xem</span>
@@ -475,10 +433,6 @@ function RiderPerformanceTable({
   onPageSizeChange,
   onExport,
   exporting,
-  isSuperAdmin,
-  previewAsUser,
-  activeMasks,
-  onOpenMaskDialog,
 }: {
   rows: PerformanceRow[];
   summary: PerformanceSummary;
@@ -490,10 +444,6 @@ function RiderPerformanceTable({
   onPageSizeChange: (pageSize: number) => void;
   onExport:()=>void;
   exporting:boolean;
-  isSuperAdmin?: boolean;
-  previewAsUser?: boolean;
-  activeMasks?: Record<string, { factor: number; scope: string }>;
-  onOpenMaskDialog?: (rider: { code: string; name?: string | null; factor: number; scope: any; isMasked: boolean }) => void;
 }) {
   const filterText = useMemo(() => {
     const parts = [
@@ -572,10 +522,6 @@ function RiderPerformanceTable({
                 <StablePerformanceRow
                   key={`${row.report_date}-${row.driver_id}`}
                   row={row}
-                  isSuperAdmin={isSuperAdmin}
-                  previewAsUser={previewAsUser}
-                  activeMask={activeMasks?.[row.driver_id.toLowerCase()]}
-                  onOpenMaskDialog={onOpenMaskDialog}
                 />
               ))
             )}
@@ -597,19 +543,7 @@ function RiderPerformanceTable({
 
 const StablePerformanceRow=memo(PerformanceTableRow);
 
-function PerformanceTableRow({
-  row,
-  isSuperAdmin,
-  previewAsUser,
-  activeMask,
-  onOpenMaskDialog,
-}: {
-  row: PerformanceRow;
-  isSuperAdmin?: boolean;
-  previewAsUser?: boolean;
-  activeMask?: { factor: number; scope: string };
-  onOpenMaskDialog?: (rider: { code: string; name?: string | null; factor: number; scope: any; isMasked: boolean }) => void;
-}) {
+function PerformanceTableRow({ row }: { row: PerformanceRow }) {
   const converted = performanceConversion(row.delivery_delivered, row.pickup_picked);
   const deliPercent = converted.deliveryShare === null ? null : Math.round(converted.deliveryShare*10)/10;
   const pickPercent = deliPercent === null ? null : 100-deliPercent;
@@ -617,37 +551,12 @@ function PerformanceTableRow({
   const cot = (row.cot??"").replace(/\s/g,"").toLowerCase();
   const pickupWarning = pickupCotWarning(row);
   const locality = [row.delivery_ward, row.pickup_district && row.pickup_district!==row.delivery_district ? `Pick: ${row.pickup_district}` : null].filter(Boolean).join(" · ");
-  const showMaskControls = isSuperAdmin && !previewAsUser;
   return <tr className={tableStyles.row}>
     <th scope="row" className={tableStyles.identity}>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <strong className={tableStyles.riderName} title={row.rider_name??row.driver_name??row.driver_id}>
-          {row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}
-          {pickupWarning&&<span className={tableStyles.pickupWarning} role="img" aria-label={pickupWarning} title={pickupWarning}><TriangleAlert size={13} aria-hidden="true"/></span>}
-        </strong>
-        {showMaskControls && (
-          <button
-            type="button"
-            onClick={() => onOpenMaskDialog?.({
-              code: row.driver_id,
-              name: row.rider_name ?? row.driver_name,
-              factor: activeMask?.factor ?? 0.5,
-              scope: (activeMask?.scope as any) ?? "all",
-              isMasked: Boolean(activeMask),
-            })}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold transition-all cursor-pointer border",
-              activeMask
-                ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300"
-            )}
-            title={activeMask ? `Đang mask ${Math.round(activeMask.factor * 100)}%. Bấm để chỉnh sửa.` : "Bấm để cài mask cho rider này"}
-          >
-            <ShieldAlert size={10} />
-            <span>{activeMask ? `Mask ${Math.round(activeMask.factor * 100)}%` : "Cài Mask"}</span>
-          </button>
-        )}
-      </div>
+      <strong className={tableStyles.riderName} title={row.rider_name??row.driver_name??row.driver_id}>
+        {row.rider_id?<Link prefetch={false} href={`/riders/${row.rider_id}/performance?origin=performance`} className="hover:text-blue-600 hover:underline">{row.rider_name??row.driver_name??row.driver_id}</Link>:row.rider_name??row.driver_name??"Chưa map rider"}
+        {pickupWarning&&<span className={tableStyles.pickupWarning} role="img" aria-label={pickupWarning} title={pickupWarning}><TriangleAlert size={13} aria-hidden="true"/></span>}
+      </strong>
       <small>{row.driver_id}</small>
     </th>
     <td className={tableStyles.kvCell}><strong>{row.kv??"—"}</strong><span data-cot={cot.startsWith("cot1")?"1":cot.startsWith("cot2")?"2":"unknown"}>{row.cot||"—"}</span></td>

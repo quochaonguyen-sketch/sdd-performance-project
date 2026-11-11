@@ -1,21 +1,22 @@
 import { gpsIsStale, type LinehaulTrip } from "./model.ts";
 import { roadRouteKey, validPoint } from "./road-route.ts";
 
-export class TrafficEtaError extends Error {
+export class LinehaulEtaError extends Error {
   code: string;
   status: number;
   constructor(code: string, message: string, status = 409) {
     super(message); this.code = code; this.status = status;
   }
 }
-export type TrafficEta = {
-  key: string; provider: "TomTom"; calculatedAt: string; gpsAt: string;
-  departureAt: string; arrivalAt: string; distanceMeters: number; travelSeconds: number;
-  trafficDelaySeconds: number | null; noTrafficSeconds: number | null;
-  staDifferenceMinutes: number | null; spxEtaAt: string | null;
-  truckDimensionsApplied: false;
+export type EtaEstimate = { arrivalAt: string; source: "SPX" | "OSRM" };
+export type LinehaulEta = EtaEstimate & {
+  key: string;
+  gpsAt: string;
+  distanceMeters: number | null;
+  staDifferenceMinutes: number | null;
 };
-export function trafficEtaKey(trip: LinehaulTrip) {
+
+export function linehaulEtaKey(trip: LinehaulTrip) {
   return [roadRouteKey(trip), trip.phase, trip.direction, trip.source, trip.hub_ata, trip.hub_atd, trip.hub_unloaded_at, trip.location_error, trip.hub_sta, trip.hub_eta].join("|");
 }
 export function etaUnavailableReason(trip: LinehaulTrip, now: number): string | null {
@@ -29,23 +30,19 @@ export function etaUnavailableReason(trip: LinehaulTrip, now: number): string | 
 }
 export function assertEtaSnapshot(snapshotAt: string | null, now: number) {
   const at = Date.parse(snapshotAt ?? "");
-  if (!Number.isFinite(at) || now - at > 10 * 60_000 || at > now + 60_000) throw new TrafficEtaError("snapshot_stale", "Snapshot LH thiếu hoặc quá 10 phút. Hãy đồng bộ lại LH trước khi dự đoán.");
+  if (!Number.isFinite(at) || now - at > 10 * 60_000 || at > now + 60_000) throw new LinehaulEtaError("snapshot_stale", "Snapshot LH thiếu hoặc quá 10 phút. Hãy đồng bộ lại LH trước khi dự đoán.");
 }
 const nonnegative = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
-const stamp = (value: unknown) => typeof value === "string" && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+const stamp = (value: unknown): value is string => typeof value === "string" && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 
-export function parseTomTomEta(body: unknown, trip: LinehaulTrip, requestedAt: number): TrafficEta {
-  const summary = (body as { routes?: { summary?: Record<string, unknown> }[] } | null)?.routes?.[0]?.summary;
-  if (!summary || !nonnegative(summary.lengthInMeters) || !nonnegative(summary.travelTimeInSeconds) || !stamp(summary.departureTime) || !stamp(summary.arrivalTime)) throw new TrafficEtaError("provider_response", "Nguồn giao thông chưa trả đủ dữ liệu để tính ETA.", 502);
-  const departureAt = summary.departureTime as string, arrivalAt = summary.arrivalTime as string;
-  if (Math.abs(Date.parse(departureAt) - requestedAt) > 120_000 || Math.abs((Date.parse(arrivalAt) - Date.parse(departureAt)) / 1000 - summary.travelTimeInSeconds) > 2) throw new TrafficEtaError("provider_response", "Mốc thời gian từ nguồn giao thông không khớp; chưa sử dụng dự đoán này.", 502);
-  const sta = Date.parse(trip.hub_sta ?? "");
-  return {
-    key: trafficEtaKey(trip), provider: "TomTom", calculatedAt: new Date(requestedAt).toISOString(), gpsAt: trip.gps_at!,
-    departureAt, arrivalAt, distanceMeters: summary.lengthInMeters, travelSeconds: summary.travelTimeInSeconds,
-    trafficDelaySeconds: nonnegative(summary.trafficDelayInSeconds) && summary.trafficDelayInSeconds <= summary.travelTimeInSeconds ? summary.trafficDelayInSeconds : null,
-    noTrafficSeconds: nonnegative(summary.noTrafficTravelTimeInSeconds) ? summary.noTrafficTravelTimeInSeconds : null,
-    staDifferenceMinutes: Number.isFinite(sta) ? Math.round((Date.parse(arrivalAt) - sta) / 60_000) : null,
-    spxEtaAt: stamp(trip.hub_eta) ? trip.hub_eta : null, truckDimensionsApplied: false,
-  };
+export function baselineEta(trip: LinehaulTrip, now: number, roadDurationSeconds?: number): EtaEstimate | null {
+  if (etaUnavailableReason(trip, now)) return null;
+  if (stamp(trip.hub_eta) && Date.parse(trip.hub_eta) > now) {
+    return { arrivalAt: trip.hub_eta, source: "SPX" };
+  }
+  if (!nonnegative(roadDurationSeconds)) return null;
+  // Keep this estimate anchored to the GPS fix as the clock advances.
+  const arrival = new Date(Date.parse(trip.gps_at!) + roadDurationSeconds * 1000);
+  if (!Number.isFinite(arrival.getTime()) || arrival.getTime() <= now) return null;
+  return { arrivalAt: arrival.toISOString(), source: "OSRM" };
 }

@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect,useState } from "react";
-import { ArrowLeft,CalendarDays,Calculator,Download,Layers3,MapPin,PackageCheck,RefreshCcw,Search,SlidersHorizontal,Truck,UserRound,ShieldAlert } from "lucide-react";
+import { ArrowLeft,CalendarDays,Calculator,Download,Layers3,MapPin,PackageCheck,RefreshCcw,Search,SlidersHorizontal,Truck,UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { readDetailRange,riderPerformanceLookup,detailShift,detailToday,type RiderDaily,type DetailRange,summarizeRiderDaily } from "@/lib/performance/rider-detail";
-import { RiderMaskDialog } from "@/components/admin/rider-mask-dialog";
+import { RiderPreviewToggle } from "@/components/admin/rider-preview-toggle";
 import styles from "./rider-performance.module.css";
 
 type Profile={rider_code:string;full_name:string|null;kv:string|null;cot:string|null;delivery_district:string|null;delivery_ward:string|null;pickup_district:string|null;pickup_ward:string|null};
@@ -18,7 +18,6 @@ type Result={
   summary:ReturnType<typeof summarizeRiderDaily>;
   isSuperAdmin?: boolean;
   previewingAsUser?: boolean;
-  activeMask?: { factor: number; scope: "all" | "delivery" | "pickup"; note?: string } | null;
 };
 const number=(n:number)=>n.toLocaleString("vi-VN");
 const percent=(n:number|null)=>n===null?"—":`${n.toLocaleString("vi-VN",{maximumFractionDigits:1})}%`;
@@ -31,7 +30,6 @@ export function RiderPerformanceView({riderId,initialRange,fromPerformance=false
   const [from,setFrom]=useState(range.from),[to,setTo]=useState(range.to);
   const [data,setData]=useState<Result|null>(null),[loading,setLoading]=useState(true),[exporting,setExporting]=useState(false),[error,setError]=useState(""),[version,setVersion]=useState(0);
   const [previewAsUser, setPreviewAsUser] = useState(false);
-  const [maskDialogOpen, setMaskDialogOpen] = useState(false);
 
   useEffect(()=>{
     const controller=new AbortController();
@@ -76,35 +74,10 @@ export function RiderPerformanceView({riderId,initialRange,fromPerformance=false
       </div>
       <div className="flex items-center gap-2">
         {data?.isSuperAdmin && (
-          <>
-            <button
-              type="button"
-              onClick={() => setPreviewAsUser((prev) => !prev)}
-              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition-all cursor-pointer"
-              style={{
-                borderColor: previewAsUser ? "#e11d48" : "#f59e0b",
-                backgroundColor: previewAsUser ? "#fff1f2" : "#fffbeb",
-                color: previewAsUser ? "#be123c" : "#b45309",
-              }}
-              title="Bấm để chuyển đổi giữa Số thực tế (Super Admin) và Xem như người khác (Masked)"
-            >
-              <ShieldAlert size={13} />
-              <span>
-                {previewAsUser ? "🎭 Người khác thấy (Masked)" : "🛡️ Số thực tế 100%"}
-              </span>
-            </button>
-            {!previewAsUser && (
-              <button
-                type="button"
-                onClick={() => setMaskDialogOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 shadow-xs hover:bg-amber-100 transition-all cursor-pointer"
-                title="Cấu hình mask sản lượng cho rider này"
-              >
-                <ShieldAlert size={13} />
-                <span>{data.activeMask ? `Mask ${Math.round(data.activeMask.factor * 100)}%` : "Cài Mask"}</span>
-              </button>
-            )}
-          </>
+          <RiderPreviewToggle pressed={data.previewingAsUser === true} disabled={loading} onToggle={() => {
+            setPreviewAsUser(data.previewingAsUser !== true);
+            setVersion(value => value + 1);
+          }}/>
         )}
         <Button className={styles.exportButton} type="button" disabled={loading||exporting||!rows.length||Boolean(error)} aria-busy={exporting} onClick={download}>
           <Download size={17} aria-hidden="true"/>{exporting?"Đang xuất…":"Xuất Excel"}
@@ -135,19 +108,6 @@ export function RiderPerformanceView({riderId,initialRange,fromPerformance=false
     <section className={styles.ledger} aria-busy={loading}><div className={styles.sectionHeading}><div><span className={styles.eyebrow}>DAILY BREAKDOWN</span><h2>Sản lượng theo ngày</h2><p>{data?`${date(data.range.from)} – ${date(data.range.to)} · ${rows.length} ngày có dữ liệu · ${summary?.activeDays??0} ngày hoạt động`:"Đang tải khoảng ngày…"}</p></div><span className={styles.countBadge}>{loading?"Đang tải dữ liệu…":`${rows.length} ngày`}</span></div><details className={styles.formula}><summary>Cách tính & đối soát COT</summary><p>COT chưa phân loại được cộng vào COT chính của rider. Tổng kỳ quy đổi một lần trên Total Picked; có thể khác tổng các số quy đổi làm tròn từng ngày. Ngày không có bản ghi không được coi là sản lượng bằng 0.</p></details>
     <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Sản lượng rider theo ngày, cuộn ngang để xem các cột"><table><colgroup>{[14,23,23,12,10,18].map((width,index)=><col key={index} style={{width:`${width}%`}}/>)}</colgroup><thead><tr><th>Ngày</th><th className={styles.metricHeading}>Total Delivered<small>/ Total Assigned Deli</small></th><th className={styles.metricHeading}>Total Picked<small>/ Total Assigned Pick</small></th><th className={styles.compactCell}>Convert Pick</th><th className={styles.compactCell}>Total</th><th>Tỷ trọng Deli / Pick QĐ</th></tr></thead><tbody>{rows.map(row=><tr key={row.date}><th scope="row">{date(row.date)}</th><td><Production done={row.delivery_delivered} assigned={row.delivery_assigned} c1={row.delivery_delivered_cot1} a1={row.delivery_assigned_cot1} c2={row.delivery_delivered_cot2} a2={row.delivery_assigned_cot2}/></td><td><Production done={row.pickup_picked} assigned={row.pickup_assigned} c1={row.pickup_picked_cot1} a1={row.pickup_assigned_cot1} c2={row.pickup_picked_cot2} a2={row.pickup_assigned_cot2}/></td><td className={styles.compactCell}><span className={styles.convertedPill}>{number(row.convertedPickup)}</span></td><td className={styles.compactCell}><span className={styles.totalPill}>{number(row.total)}</span></td><td>{shares(row.deliveryShare)}</td></tr>)}{!rows.length&&<tr><td colSpan={6} className={styles.empty}>{loading?"Đang tải lịch sử…":"Chưa có dữ liệu trong khoảng ngày đã chọn."}</td></tr>}</tbody>{summary&&rows.length>0&&<tfoot><tr><th>Tổng kỳ</th><td>{number(summary.delivery_delivered)} / {number(summary.delivery_assigned)}</td><td>{number(summary.pickup_picked)} / {number(summary.pickup_assigned)}</td><td className={styles.compactCell}>{number(summary.convertedPickup)}</td><td className={styles.compactCell}>{number(summary.total)}</td><td>{shares(summary.deliveryShare)}</td></tr></tfoot>}</table></div></section>
     {rows.length>0&&<Trend rows={rows}/>}
-    {maskDialogOpen && rider && (
-      <RiderMaskDialog
-        open={maskDialogOpen}
-        onClose={() => setMaskDialogOpen(false)}
-        riderCode={rider.rider_code}
-        riderName={rider.full_name}
-        initialFactor={data?.activeMask?.factor ?? 0.5}
-        initialScope={data?.activeMask?.scope ?? "all"}
-        initialNote={data?.activeMask?.note ?? ""}
-        isMasked={Boolean(data?.activeMask)}
-        onSuccess={() => setVersion((v) => v + 1)}
-      />
-    )}
   </div>;
 }
 function Production({done,assigned,c1,a1,c2,a2}:{done:number;assigned:number;c1:number;a1:number;c2:number;a2:number}){

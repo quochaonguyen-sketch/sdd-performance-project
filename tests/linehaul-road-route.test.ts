@@ -23,3 +23,12 @@ test("coordinates must be finite numbers and GPS updates invalidate route identi
  const trip={trip_id:"123",lat:10.8,lng:106.6,hub_lat:10.7,hub_lng:106.7,gps_at:"a"} as LinehaulTrip;
  for(const changed of [{gps_at:"b"},{lat:10.9},{hub_lng:106.8},{trip_id:"456"}])assert.notEqual(roadRouteKey(trip),roadRouteKey({...trip,...changed}));
 });
+
+test("road duration is optional, and malformed durations do not affect the valid route",()=>{
+ for(const [duration, expected] of [[620.5,620.5],[0,0],[-1,undefined],[NaN,undefined],[Infinity,undefined],["620",undefined]]){
+  const body=response();
+  const route=parseRoadRoute({...body,routes:[{...body.routes[0],duration}]},"gps");
+  assert.equal(route.durationSeconds,expected);
+  assert.equal(route.distanceMeters,12500);
+ }
+});
