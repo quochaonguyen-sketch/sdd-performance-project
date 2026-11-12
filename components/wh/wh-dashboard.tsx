@@ -49,6 +49,7 @@ import {
 } from "@/lib/wh/model";
 import styles from "./wh.module.css";
 import { WhDateRangePicker } from "./wh-date-picker";
+import { WhSeatalkReport } from "./wh-seatalk-report";
 
 const fmt = (v: number) => v.toLocaleString("vi-VN");
 const vnDateFormatter = new Intl.DateTimeFormat("vi-VN", {
@@ -670,6 +671,7 @@ export function WhDashboard() {
         </div>
         <div className={styles.actions}>
           <Link href="/data-sources">Nguồn dữ liệu</Link>
+          {data?.canRefresh && <WhSeatalkReport />}
           <button onClick={() => void load()} disabled={loading}>
             <RefreshCw size={16} aria-hidden="true" className={loading ? "animate-spin" : ""} />
             Làm mới
