@@ -40,6 +40,7 @@ const navItems = [
   { href: "/performance", label: "Rider Performance", icon: BarChart3 },
   { href: "/onhold", label: "On-Hold Analytics", icon: BarChart3 },
   { href: "/return-orders", label: "Return Orders", icon: PackageSearch },
+  { href: "/lost", label: "Lost & Compensated", icon: PackageSearch },
   { href: "/overnight-holds", label: "Giữ hàng qua đêm", icon: Moon },
   { href: "/notes", label: "Notes", icon: ListChecks },
   { href: "/feedback", label: "Báo lỗi & góp ý", icon: ListChecks },
@@ -70,7 +71,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/lost", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "wh" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};

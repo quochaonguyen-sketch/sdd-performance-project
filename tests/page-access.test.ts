@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {PAGE_ACCESS_OPTIONS,defaultPageAccess,normalizePageAccess,canViewPage,canEditStaff,pageForPath,pagesForApi,viewPermissions} from "../lib/auth/page-access.ts";
 import {normalizePermissions} from "../lib/auth/permissions.ts";
 
-test("member defaults allow operational pages except staff and pickup management",()=>{
+test("member defaults allow operational pages except restricted workspaces",()=>{
  const access=defaultPageAccess("member");
- assert.deepEqual(PAGE_ACCESS_OPTIONS.filter(item=>!access[item.key]).map(item=>item.key),["team","pickup_management"]);
+ assert.deepEqual(PAGE_ACCESS_OPTIONS.filter(item=>!access[item.key]).map(item=>item.key),["lost","team","pickup_management"]);
+ assert.equal(canViewPage("viewer",undefined,"lost"),false);
+ assert.equal(canViewPage("leader",undefined,"lost"),true);
  for(const path of ["/pickup-realtime","/lmhub-inventory","/inventory-delivery","/volume/pickup","/linehaul","/zone-builder"]){
   const key=pageForPath(path);assert.ok(key&&key!=="admin");assert.equal(canViewPage("member",access,key),true);
  }

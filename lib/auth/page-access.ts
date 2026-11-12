@@ -2,6 +2,7 @@ import type {MemberPermissions} from "./permissions";
 
 export const PAGE_ACCESS_OPTIONS=[
  {key:"wh_tracking",label:"WH / iPhone High Value",path:"/wh-dashboard"},
+ {key:"lost",label:"Lost & Compensated",path:"/lost"},
  {key:"dashboard",label:"Dashboard",path:"/dashboard"},
  {key:"delivery_realtime",label:"Delivery Realtime",path:"/realtime-dashboard"},
  {key:"pickup_realtime",label:"Pickup Realtime",path:"/pickup-realtime"},
@@ -30,7 +31,7 @@ export type PageAccess=Record<PageAccessKey,boolean>;
 export type ConfigurableRole="member"|"leader";
 export function defaultPageAccess(role:string):PageAccess{
  return Object.fromEntries(PAGE_ACCESS_OPTIONS.map(item=>[item.key,
-  role==="admin"||role==="leader"||role==="viewer"||(role==="member"&&!["team","pickup_management"].includes(item.key))])) as PageAccess;
+  role==="admin"||role==="leader"||(item.key!=="lost"&&(role==="viewer"||(role==="member"&&!["team","pickup_management"].includes(item.key))))])) as PageAccess;
 }
 export function normalizePageAccess(role:string,value:unknown):PageAccess{
  const result=defaultPageAccess(role);

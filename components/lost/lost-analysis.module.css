@@ -1,0 +1,56 @@
+.analysis { display: grid; gap: 12px; min-width: 0; }
+.header, .sectionHead { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px 16px; }
+.header h2, .sectionHead h3 { margin: 0; font-size: 18px; font-weight: 650; }
+.sectionHead h3 { font-size: 16px; }
+.header p, .sectionHead p, .rankNote, .notice { margin: 3px 0 0; color: var(--color-muted); font-size: 13px; }
+.periods, .periods form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.periods { margin-left: auto; justify-content: flex-end; }
+.periods > button, .periods form :is(button, input), .rankFilter select, .error button {
+  min-height: 40px; padding: 0 10px; border: 1px solid var(--color-rule-strong); border-radius: 8px;
+  color: var(--color-ink); background: var(--color-paper); font: inherit; font-size: 13px;
+}
+.periods > button, .periods form button, .error button { cursor: pointer; }
+.periods > button:hover, .periods form button:hover, .periods > button[aria-pressed="true"] { color: var(--color-accent); background: var(--color-accent-soft); }
+.periods > button[aria-pressed="true"] { border-color: var(--color-accent); font-weight: 650; }
+.chart, .rank { min-width: 0; padding: 14px 16px; border: 1px solid var(--color-rule); border-radius: 12px; background: var(--color-paper); }
+.legend, .chartDetail { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; }
+.pickup { background: var(--color-success); }
+.notReceived { background: var(--color-warning); }
+.chartScroll { overflow-x: auto; margin-top: 13px; padding: 5px 0 2px; }
+.chartFrame { display: grid; grid-template-columns: 32px minmax(0, 1fr); }
+.axis { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; height: 148px; padding-right: 8px; }
+.axis span, .slot small { color: var(--color-muted); font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums; }
+.plot {
+  display: grid; border-left: 1px solid var(--color-rule);
+  background: repeating-linear-gradient(to top, var(--color-rule) 0 1px, transparent 1px 25%) left top / 100% 148px no-repeat;
+}
+.slot { min-width: 0; text-align: center; }
+.slot button {
+  display: flex; justify-content: center; align-items: end; gap: 2px; width: 100%; height: 148px;
+  padding: 0 2px; border: 0; background: transparent; cursor: pointer;
+}
+.slot button:hover, .slot button[aria-pressed="true"] { background: color-mix(in srgb, var(--color-accent-soft) 65%, transparent); }
+.slot button span { display: block; width: min(43%, 15px); border-radius: 3px 3px 0 0; }
+.slot small { display: block; min-height: 18px; margin-top: 5px; white-space: nowrap; }
+.chartDetail { margin: 8px 0 0; padding: 8px 10px; border-radius: 7px; background: var(--color-paper-2); }
+.rankFilter { display: flex; align-items: center; gap: 7px; color: var(--color-muted); font-size: 13px; }
+.rankScroll { overflow-x: auto; margin-top: 10px; }
+.rank table { width: 100%; min-width: 285px; border-collapse: collapse; font-size: 13px; }
+.rank th, .rank td { padding: 8px 9px; text-align: right; border-bottom: 1px solid var(--color-rule); font-variant-numeric: tabular-nums; }
+.rank thead th { background: var(--color-paper-2); font-weight: 650; }
+.rank th:nth-child(2), .rank tbody th { text-align: left; }
+.rank tbody th { overflow-wrap: anywhere; }
+.rank tbody small { display: block; color: var(--color-muted); font-weight: 400; }
+.rankNote { margin-top: 8px; }
+.empty { margin: 14px 0 2px; color: var(--color-muted); font-size: 13px; }
+.error { margin: 0; padding: 8px 12px; border-radius: 8px; color: var(--color-warning); background: var(--color-warning-soft); }
+.analysis :is(button, input, select, summary, .chartScroll):focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+@media (max-width: 640px) {
+  .periods { margin-left: 0; justify-content: flex-start; }
+  .periods > button, .periods form :is(button, input), .rankFilter select { min-height: 44px; }
+  .periods input, .rankFilter select { font-size: 16px; }
+  .chart, .rank { padding: 12px; }
+  .rank th, .rank td { padding: 7px 5px; }
+}
