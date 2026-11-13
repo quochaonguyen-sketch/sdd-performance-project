@@ -83,6 +83,16 @@
 .tripBarTrack { grid-column:1 / -1; height:5px; border-radius:3px; overflow:hidden; background:var(--color-paper-2); }
 .tripBarTrack i { display:block; height:100%; border-radius:3px; background:var(--stage-color); }
 .chartEmpty { padding:32px 4px; font-size:12px; color:var(--color-ink-2); text-align:center; }
+.warehousePanel { padding:16px; border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); }
+.warehousePanel h2 { margin:0 0 12px; font-size:18px; }
+.warehousePanel p { margin:0; color:var(--color-ink-2); font-size:13px; }
+.warehouseGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr)); gap:8px; }
+.warehouseCard { display:grid; align-content:start; gap:5px; padding:10px 12px; border:1px solid var(--color-rule-strong); border-radius:var(--radius-control); background:var(--color-paper-2); color:var(--color-ink); text-align:left; cursor:pointer; }
+.warehouseCard > span { font-size:13px; font-weight:650; overflow-wrap:anywhere; }
+.warehouseCard > strong { color:var(--color-success); font-size:24px; line-height:1.2; font-variant-numeric:tabular-nums; }
+.warehouseCard small { color:var(--color-ink-2); font-size:12px; font-weight:400; }
+.warehouseCard:hover,.warehouseCard[aria-pressed="true"] { border-color:var(--color-accent); background:var(--color-accent-soft); }
+.warehouseCard[aria-pressed="true"] { box-shadow:inset 0 -2px var(--color-accent); }
 @media(max-width:1000px) { .loadCards { grid-template-columns:repeat(2,minmax(0,1fr)); } .loadCharts { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:650px) { .loadCharts header { padding-inline:14px; } .chartLegend { padding-inline:14px; } }
 .workspace { display:block; width:100%; min-width:0; }
@@ -91,10 +101,11 @@
 .listHeader .eyebrow,.detailHeader .eyebrow { color:var(--color-ink-2); font-size:9px; }
 .listHeader h2,.detailHeader h2 { margin:6px 0 0; font-size:20px; font-weight:650; letter-spacing:-.03em; }
 .listHeader > span { font-size:12px; padding:6px 9px; border:1px solid var(--color-rule); border-radius:var(--radius-control); }
-.filters { display:flex; gap:7px; padding:0 16px 16px; }
+.filters { display:flex; flex-wrap:wrap; gap:7px; padding:0 16px 16px; }
 .filters label { display:flex; align-items:center; gap:6px; min-width:0; flex:1; padding:0 10px; border:1px solid var(--color-rule); border-radius:var(--radius-control); color:var(--color-ink-2); }
 .filters input { width:100%; min-width:0; border:0; padding:10px 0; background:transparent; color:var(--color-ink); outline:0; font-size:11px; }
 .filters select { max-width:145px; min-height:40px; padding:8px; border:1px solid var(--color-rule); border-radius:var(--radius-control); font-size:11px; background:var(--color-paper); }
+.filters select:last-child { max-width:215px; }
 .tableScroll { max-height:660px; overflow:auto; }
 .tableScroll table { width:100%; border-collapse:separate; border-spacing:0; text-align:left; }
 .tableScroll th { position:sticky; top:0; z-index:1; padding:12px; background:var(--color-paper-2); border-block:1px solid var(--color-rule); color:var(--color-ink-2); font-size:9px; font-weight:650; letter-spacing:.05em; text-transform:uppercase; white-space:nowrap; }
@@ -110,6 +121,9 @@
 .gpsTimestamp[data-stale="true"],.tableScroll .gpsTimestamp[data-stale="true"] small { color:var(--color-warning); }
 .tableScroll td > strong { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
 .tableScroll td small { display:block; margin-top:5px; font-size:10px; color:var(--color-ink-2); }
+.routeCell { min-width:155px; }
+.routeCell > span { display:inline-block; padding:3px 7px; border-radius:5px; background:var(--color-accent-soft); color:var(--color-accent); font-weight:650; }
+.tableScroll .routeCell > small { font-size:12px; }
 .tableScroll td strong small { display:inline; font-weight:400; }
 .selectTrip { display:flex; flex-direction:column; align-items:flex-start; gap:5px; width:100%; min-height:58px; color:var(--color-ink); text-align:left; cursor:pointer; }
 .selectTrip strong { font-size:12px; font-weight:650; color:var(--color-accent); }
@@ -226,6 +240,7 @@
 @media(max-width:700px) { .header { padding:0 0 16px; } .header h1 { font-size:23px; } }
 
 @media(max-width:400px) { .loadCards { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:650px) { .filters select:last-child { flex-basis:100%; max-width:none; } }
 
 .chartFootnote > summary { width:fit-content; min-height:32px; padding:6px 0; cursor:pointer; }
 .chartFootnote > p { margin:6px 0 0; }

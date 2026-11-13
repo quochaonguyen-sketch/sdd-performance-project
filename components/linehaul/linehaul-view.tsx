@@ -1,16 +1,16 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Boxes, CheckCircle2, Clock3, MapPin, Navigation, RefreshCw, Search, X } from "lucide-react";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
-import { gpsIsStale, inTodayHistory, LH_PHASES, sortTrips, type LinehaulData, type LinehaulTrip } from "@/lib/linehaul/model";
+import { gpsIsStale, inTodayHistory, LH_PHASES, linehaulOrigin, sortTrips, type LinehaulData, type LinehaulTrip } from "@/lib/linehaul/model";
 import styles from "./linehaul.module.css";
 import { TripRoadDistance } from "./trip-road-distance";
 import { TripEta } from "./trip-traffic-eta";
 import {LinehaulSummary} from "./linehaul-summary";
-import {fullyUnloaded,isTripUnloaded} from "@/lib/linehaul/summary";
+import {fullyUnloaded,isTripUnloaded,linehaulSummary} from "@/lib/linehaul/summary";
 
-const Map=dynamic(()=>import("./linehaul-map"),{ssr:false,loading:()=> <p className={styles.mapLoading}>Đang mở bản đồ…</p>});
+const TripMap=dynamic(()=>import("./linehaul-map"),{ssr:false,loading:()=> <p className={styles.mapLoading}>Đang mở bản đồ…</p>});
 const number=(value:number|null)=>value===null?"—":value.toLocaleString("vi-VN");
 const time=(value:string|null)=>value?new Date(value).toLocaleTimeString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",hour:"2-digit",minute:"2-digit"}):"—";
 
@@ -20,6 +20,8 @@ export function LinehaulView(){
  const [syncing,setSyncing]=useState(false),[message,setMessage]=useState(""),[now,setNow]=useState(0);
  const request=useRef<AbortController|null>(null),inFlight=useRef(false);
  const [view,setView]=useState<"active"|"history">("active");
+ const [origin,setOrigin]=useState("all");
+ const listHeading=useRef<HTMLHeadingElement>(null);
  useReportInitialDataLoading("linehaul",loading&&!data);
  const load=useCallback(async()=>{
   if(inFlight.current)return;inFlight.current=true;
@@ -44,27 +46,48 @@ export function LinehaulView(){
   }catch(caught){setError(caught instanceof Error?caught.message:"Không đồng bộ được LH.");}
   finally{setSyncing(false);}
  }
- const all=sortTrips(data?.trips??[]),term=query.trim().toLocaleLowerCase("vi");
+ const all=useMemo(()=>sortTrips(data?.trips??[]),[data]);
+ const summary=useMemo(()=>linehaulSummary(all,data?.day??""),[all,data?.day]);
+ const origins=new Map(all.map(trip=>{const {key,label}=linehaulOrigin(trip);return [key,label];}));
+ const selectedOrigin=origins.has(origin)?origin:"all";
+ const term=query.trim().toLocaleLowerCase("vi");
  const history=all.filter(trip=>inTodayHistory(trip,data?.day??""));
  const active=all.filter(trip=>!isTripUnloaded(trip));
- const scope=view==="history"?history:active;
+ const scope=view==="history"?(phase==="unloaded"?summary.groups.unloaded.trips:history):active;
  const effectivePhase=(trip:LinehaulTrip)=>trip.phase;
- const filtered=scope.filter(trip=>(phase==="all"||effectivePhase(trip)===phase)&&(direction==="all"||trip.direction===direction)&&(!term||[trip.lt_code,trip.plate_number,trip.driver_name,trip.origin,trip.destination].join(" ").toLocaleLowerCase("vi").includes(term)));
+ const filtered=scope.filter(trip=>(phase==="all"||effectivePhase(trip)===phase)&&(direction==="all"||trip.direction===direction)&&
+  (selectedOrigin==="all"||linehaulOrigin(trip).key===selectedOrigin)&&
+  (!term||[trip.lt_code,trip.plate_number,trip.driver_name,trip.origin,trip.destination,linehaulOrigin(trip).label].join(" ").toLocaleLowerCase("vi").includes(term)));
  const current=all.find(trip=>trip.trip_id===selected)??null;
  const hasActualTime=filtered.some(trip=>trip.hub_ata||trip.hub_atd||trip.hub_unloaded_at||trip.origin_atd);
  const hasCargo=filtered.some(trip=>trip.orders!==null||trip.bags!==null||trip.loose!==null||trip.pack_unknown||(view==="history"&&(trip.load_total!==null||trip.unloaded_units!==null)));
+ const columns=3+Number(hasCargo)+Number(hasActualTime)+Number(view==="active");
  const stale=!!data?.snapshotAt&&now-Date.parse(data.snapshotAt)>10*60000;
  return <div className={styles.page}>
   <header className={`ops-page-header ${styles.header}`}><div className="ops-page-heading"><h1>Linehaul Management<span>Hôm nay</span></h1><div className="ops-page-timestamp"><small>Ngày vận hành</small><strong>{data?.day.split("-").reverse().join("/")??"Đang tải…"}</strong></div></div><div className={`ops-page-actions ${styles.headerActions}`}>{data?.canRefresh?<button type="button" className="ops-page-primary-action" onClick={()=>void sync()} disabled={syncing}><RefreshCw size={15}/>{syncing?"Đang gửi…":"Đồng bộ SPX"}</button>:null}<button type="button" onClick={()=>void load()} aria-label="Đọc lại dữ liệu web"><RefreshCw size={16}/></button></div></header>
   <div className={styles.sourceStatus} data-stale={stale}><span><span className={styles.statusDot}/>{!data?.snapshotAt?"Chưa có snapshot hôm nay":stale?"Dữ liệu cần cập nhật":"Đã đồng bộ từ SPX"}{data?.snapshotAt?` · ${time(data.snapshotAt)}`:""}</span><span>Hôm nay · đã gán tài xế · hub 4232 · cập nhật mỗi 5 phút</span></div>
   {error?<p className={styles.error} role="alert">{error}</p>:null}{message?<p className={styles.notice} role="status">{message}</p>:null}
-  <LinehaulSummary trips={all} day={data?.day??""} loading={loading&&!data} onSelect={setSelected}/>
+  <LinehaulSummary summary={summary} loading={loading&&!data} onSelect={setSelected}/>
+  <section className={styles.warehousePanel} aria-labelledby="linehaul-warehouse-title">
+   <h2 id="linehaul-warehouse-title">Đã xả hôm nay theo kho xuất phát</h2>
+   {summary.unloadedByOrigin.length?<div className={styles.warehouseGrid}>{summary.unloadedByOrigin.map(warehouse=>{
+    const known=warehouse.trips>warehouse.missing;
+    const orders=warehouse.missing&&!known?"—":`${warehouse.missing?"≥ ":""}${number(warehouse.knownOrders)}`;
+    return <button type="button" key={warehouse.key} className={styles.warehouseCard}
+     aria-pressed={view==="history"&&phase==="unloaded"&&selectedOrigin===warehouse.key}
+     onClick={()=>{setView("history");setPhase("unloaded");setOrigin(warehouse.key);setDirection("all");setQuery("");listHeading.current?.focus();}}>
+     <span>{warehouse.label}</span><strong>{orders} <small>đơn</small></strong>
+     <small>{number(warehouse.trips)} chuyến đã xả{warehouse.missing?` · ${number(warehouse.missing)} chuyến chưa rõ số đơn`:""}</small>
+    </button>;
+   })}</div>:<p>{loading&&!data?"Đang tải sản lượng…":"Chưa có chuyến về hub hôm nay."}</p>}
+  </section>
   <div className={styles.viewSwitch} role="group" aria-label="Chọn danh sách LH"><button type="button" aria-pressed={view==="active"} onClick={()=>{setView("active");setPhase("all");setSelected(null);}}>Đang điều phối <span>{active.length}</span></button><button type="button" aria-pressed={view==="history"} onClick={()=>{setView("history");setPhase("all");setSelected(null);}}>Đã về / xả hôm nay <span>{history.length}</span></button></div>
   <section className={styles.workspace}><div className={styles.list}>
-   <header className={styles.listHeader}><div><span className={styles.eyebrow}>{view==="history"?"LỊCH SỬ THỰC TẾ TẠI HUB":"ĐIỀU PHỐI XUẤT / XẢ TẢI"}</span><h2>{view==="history"?"Xe đã về / xả trong ngày":"Danh sách chuyến"}</h2></div><span>{number(filtered.length)} chuyến</span></header>
-   <div className={styles.filters}><label><Search size={15}/><input value={query} onChange={event=>setQuery(event.target.value)} aria-label="Tìm mã LT, biển số, tài xế" placeholder="Tìm LT, biển số, tài xế…"/></label><select aria-label="Lọc trạng thái xe" value={phase} onChange={event=>setPhase(event.target.value)}><option value="all">Tất cả trạng thái</option>{Object.entries(LH_PHASES).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select aria-label="Lọc chiều chuyến" value={direction} onChange={event=>setDirection(event.target.value)}><option value="all">Tất cả chiều</option><option value="inbound">Xe vào hub</option><option value="outbound">Xe xuất hub</option><option value="stopover">Xe qua hub</option></select></div>
-   <div className={styles.tableScroll}><table><thead><tr><th>Chuyến / tài xế</th>{hasCargo&&<th>Tải trên xe</th>}<th>Trạng thái tại hub</th>{view==="active"&&<th>GPS gần nhất</th>}{hasActualTime&&<th>Mốc thực tế</th>}</tr></thead><tbody>{loading&&!data?<tr><td colSpan={2+Number(hasCargo)+Number(hasActualTime)+Number(view==="active")} className={styles.empty}>Đang đọc chuyến LH hôm nay…</td></tr>:!filtered.length?<tr><td colSpan={2+Number(hasCargo)+Number(hasActualTime)+Number(view==="active")} className={styles.empty}>Chưa có chuyến phù hợp. {data?.snapshotAt?"Đổi bộ lọc để xem thêm.":"Đồng bộ SPX để lấy danh sách hôm nay."}</td></tr>:filtered.map(trip=><tr key={trip.trip_id} data-selected={current?.trip_id===trip.trip_id} onClick={event=>{event.currentTarget.querySelector("button")?.focus();setSelected(trip.trip_id);}}>
+   <header className={styles.listHeader}><div><span className={styles.eyebrow}>{view==="history"?"LỊCH SỬ THỰC TẾ TẠI HUB":"ĐIỀU PHỐI XUẤT / XẢ TẢI"}</span><h2 ref={listHeading} tabIndex={-1}>{view==="history"?"Xe đã về / xả trong ngày":"Danh sách chuyến"}</h2></div><span>{number(filtered.length)} chuyến</span></header>
+   <div className={styles.filters}><label><Search size={15}/><input value={query} onChange={event=>setQuery(event.target.value)} aria-label="Tìm mã LT, biển số, tài xế hoặc tuyến" placeholder="Tìm LT, biển số, tài xế, tuyến…"/></label><select aria-label="Lọc trạng thái xe" value={phase} onChange={event=>setPhase(event.target.value)}><option value="all">Tất cả trạng thái</option>{Object.entries(LH_PHASES).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select aria-label="Lọc chiều chuyến" value={direction} onChange={event=>setDirection(event.target.value)}><option value="all">Tất cả chiều</option><option value="inbound">Xe vào hub</option><option value="outbound">Xe xuất hub</option><option value="stopover">Xe qua hub</option></select><select aria-label="Lọc kho xuất phát" value={selectedOrigin} onChange={event=>setOrigin(event.target.value)}><option value="all">Tất cả kho xuất phát</option>{[...origins].sort((a,b)=>a[1].localeCompare(b[1],"vi")).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>
+   <div className={styles.tableScroll}><table><thead><tr><th>Chuyến / tài xế</th><th>Tuyến · Kho đi → Điểm đến</th>{hasCargo&&<th>Tải trên xe</th>}<th>Trạng thái tại hub</th>{view==="active"&&<th>GPS gần nhất</th>}{hasActualTime&&<th>Mốc thực tế</th>}</tr></thead><tbody>{loading&&!data?<tr><td colSpan={columns} className={styles.empty}>Đang đọc chuyến LH hôm nay…</td></tr>:!filtered.length?<tr><td colSpan={columns} className={styles.empty}>Chưa có chuyến phù hợp. {data?.snapshotAt?"Đổi bộ lọc để xem thêm.":"Đồng bộ SPX để lấy danh sách hôm nay."}</td></tr>:filtered.map(trip=><tr key={trip.trip_id} data-selected={current?.trip_id===trip.trip_id} onClick={event=>{event.currentTarget.querySelector("button")?.focus();setSelected(trip.trip_id);}}>
     <td><button type="button" className={styles.selectTrip} onClick={()=>setSelected(trip.trip_id)} aria-haspopup="dialog" aria-expanded={current?.trip_id===trip.trip_id}><strong>{trip.lt_code}</strong>{(trip.plate_number||trip.vehicle)&&<span>{[trip.plate_number,trip.vehicle].filter(Boolean).join(" · ")}</span>}{trip.driver_name&&<small>{trip.driver_name}</small>}</button></td>
+    <td className={styles.routeCell}><span>{linehaulOrigin(trip).label}</span><small>→ {trip.destination||"Chưa rõ điểm đến"}</small></td>
     {hasCargo&&<td>{trip.orders!==null&&<strong>{number(trip.orders)} <small>đơn</small></strong>}{(trip.bags!==null||trip.loose!==null)&&<span className={styles.cargo}><Boxes size={13}/>{[trip.bags!==null?`${number(trip.bags)} bao`:null,trip.loose!==null?`${number(trip.loose)} xá`:null].filter(Boolean).join(" · ")}</span>}{view==="history"&&trip.source==="dashboard"&&trip.load_total!==null?<small>Tổng {number(trip.load_total)} kiện TO</small>:view==="history"&&trip.unloaded_units!==null?<small>Đã xả: {number(trip.unloaded_units)} kiện TO</small>:null}{trip.pack_unknown?<small title={trip.pack_description}>Kiện khác: {trip.pack_unknown}</small>:null}</td>}
     <td><span className={styles.phase} data-phase={effectivePhase(trip)}>{effectivePhase(trip)==="unloaded"?(fullyUnloaded(trip)?"Đã xả đủ tải":LH_PHASES.unloaded):LH_PHASES[trip.phase]}</span><small className={styles.direction}>{trip.direction==="outbound"?<ArrowUpFromLine size={12}/>:<ArrowDownToLine size={12}/>} {trip.direction==="outbound"?"Xuất hub":trip.direction==="stopover"?"Qua hub":"Xe vào hub"}</small>{trip.arrived_at_hub===true&&<span className={styles.arrivedBadge} data-at-hub="true" title={`Tọa độ lúc bấm Arrived cách Hub ${trip.arrived_distance_km??0} km`}>✓ Tại Hub SDD</span>}{trip.arrived_at_hub===false&&<span className={styles.arrivedBadge} data-at-hub="false" title={`Cảnh báo: Xe bấm Arrived cách Hub ${trip.arrived_distance_km} km`}>⚠ Bấm ngoài Hub ({trip.arrived_distance_km} km)</span>}{view==="active"&&<TripRoadDistance trip={trip} now={now}/>}</td>
     {view==="active"&&<td><GpsTimestamp trip={trip} now={now}/></td>}
@@ -132,7 +155,7 @@ function TripDetail({trip,now}:{trip:LinehaulTrip;now:number}){
    {trip.unloaded_units!==null&&<div><dt>Đã xả tại hub</dt><dd>{number(trip.unloaded_units)} kiện TO</dd></div>}
   </dl>
   {milestones.length>0&&<section className={styles.milestones}><h3><Clock3 size={15}/> Mốc vận hành thực tế</h3><ol>{milestones.map(item=><li key={item.label}><span>{item.label}</span><time dateTime={item.value!}>{time(item.value!)}</time></li>)}</ol></section>}
-  {!history&&hasGps&&<section className={styles.location}><h3><Navigation size={15}/> Vị trí xe</h3><div className={styles.map}><Map key={trip.trip_id} trip={trip} now={now}/></div><div className={styles.gpsStatus} data-stale={stale}><span>GPS gần nhất · </span><GpsTimestamp trip={trip} now={now}/></div></section>}
+  {!history&&hasGps&&<section className={styles.location}><h3><Navigation size={15}/> Vị trí xe</h3><div className={styles.map}><TripMap key={trip.trip_id} trip={trip} now={now}/></div><div className={styles.gpsStatus} data-stale={stale}><span>GPS gần nhất · </span><GpsTimestamp trip={trip} now={now}/></div></section>}
   {!history&&trip.location_error&&<p className={styles.error} role="status">Không cập nhật được vị trí xe: {trip.location_error}</p>}
   {trip.pack_description&&<details className={styles.pack}><summary>Chi tiết đóng gói từ SPX</summary><p>{trip.pack_description}</p></details>}
  </>;

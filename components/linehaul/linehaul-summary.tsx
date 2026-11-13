@@ -1,14 +1,13 @@
 "use client";
 import {useState} from "react";
 import {ArrowDownToLine,Navigation,PackageOpen,Truck} from "lucide-react";
-import type {LinehaulTrip} from "@/lib/linehaul/model";
-import {linehaulSummary,LOAD_STAGE_KEYS,LOAD_STAGES,loadStage,stageOrders,type LoadStage} from "@/lib/linehaul/summary";
+import {LOAD_STAGE_KEYS,LOAD_STAGES,loadStage,stageOrders,type linehaulSummary,type LoadStage} from "@/lib/linehaul/summary";
 import styles from "./linehaul.module.css";
 
 const nf=new Intl.NumberFormat("vi-VN"),icons={unloaded:ArrowDownToLine,unloading:PackageOpen,incoming:Navigation,loading:Truck};
-export function LinehaulSummary({trips,day,loading,onSelect}:{trips:LinehaulTrip[];day:string;loading:boolean;onSelect:(id:string)=>void}){
+export function LinehaulSummary({summary,loading,onSelect}:{summary:ReturnType<typeof linehaulSummary>;loading:boolean;onSelect:(id:string)=>void}){
  const [stage,setStage]=useState<LoadStage|"all">("all"),[hour,setHour]=useState<number|null>(null);
- const {groups,hourly,unplaced}=linehaulSummary(trips,day);
+ const {groups,hourly,unplaced}=summary;
  const keys=stage==="all"?LOAD_STAGE_KEYS:[stage];
  const maximum=Math.max(1,...hourly.map(bucket=>keys.reduce((sum,key)=>sum+bucket.orders[key],0)));
  const details=(hour===null?keys.flatMap(key=>groups[key].trips):hourly[hour].trips.filter(trip=>keys.includes(loadStage(trip)!)))

@@ -64,6 +64,23 @@ test("completion by absence contributes orders without inventing an unload hour"
  assert.equal(result.unplaced.unloaded,1);assert.ok(result.hourly.every(h=>h.orders.unloaded===0));
 });
 
+test("warehouse totals split today's unloading by origin and preserve unknown counts",()=>{
+ const result=linehaulSummary([
+  {...trip,origin:"51-HCM Warehouse Inbound"},
+  {...trip,origin:" 51-HCM WH  Inbound ",orders:null},
+  {...trip,origin:"63-BDG Warehouse Inbound 02",orders:40,hub_unloaded_at:null,unload_confirmation:"active_list_absence"},
+  {...trip,origin:"70-LAN Warehouse Inbound",phase:"at_hub"},
+  {...trip,origin:"70-LAN Warehouse Inbound",hub_unloaded_at:"2026-10-27T22:00:00+07:00"},
+  {...trip,origin:"HCM Mega SOC",direction:"outbound",orders:999},
+  {...trip,origin:"",orders:3},
+ ],day);
+ assert.deepEqual(result.unloadedByOrigin.map(({label,trips,knownOrders,missing})=>[label,trips,knownOrders,missing]),[
+  ["51-HCM WH Inbound",2,71,1],["63-BDG WH Inbound 02",1,40,0],["70-LAN WH Inbound",0,0,0],["Chưa rõ kho",1,3,0],
+ ]);
+ assert.equal(result.groups.unloaded.knownOrders,114);
+ assert.equal(result.groups.unloaded.trips.length,4);
+});
+
 test("inbound unloaded trip with minor scan discrepancy contributes orders while large discrepancy returns null",()=>{
  const minorShortTrip={...trip,trip_id:"minor1",phase:"unloaded",orders:2259,load_total:291,expected_unload:291,unloaded_units:288,hub_unloaded_at:"2026-10-28T12:00:00+07:00"} as LinehaulTrip;
  assert.equal(stageOrders(minorShortTrip,"unloaded"),2259);

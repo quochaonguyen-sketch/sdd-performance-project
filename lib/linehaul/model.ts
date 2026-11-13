@@ -20,6 +20,10 @@ export function eventOnDay(value:string|null|undefined,day:string){
 export function inTodayHistory(trip:LinehaulTrip,day:string){
  return eventOnDay(trip.hub_ata,day)||eventOnDay(trip.hub_unloaded_at,day);
 }
+export function linehaulOrigin(trip:LinehaulTrip){
+ const label=trip.origin?.trim().replace(/\s+/g," ").replace(/\bWarehouse\b/gi,"WH")||"Chưa rõ kho";
+ return {key:label.toLowerCase(),label};
+}
 export function arrivingSoon(trip:LinehaulTrip,now:number){
  const eta=trip.hub_eta?Date.parse(trip.hub_eta):NaN;
  return trip.phase==="en_route"&&Number.isFinite(eta)&&eta>=now&&eta-now<=30*60000;

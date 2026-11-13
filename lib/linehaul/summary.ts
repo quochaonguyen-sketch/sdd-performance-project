@@ -1,4 +1,4 @@
-import {eventOnDay,type LinehaulTrip} from "./model.ts";
+import {eventOnDay,linehaulOrigin,type LinehaulTrip} from "./model.ts";
 
 export const LOAD_STAGES={unloaded:"Đã xả",unloading:"Đang xả",incoming:"Đang về hub",loading:"Đang lên hàng",at_hub:"Đang chờ xả"} as const;
 export type LoadStage=keyof typeof LOAD_STAGES;
@@ -42,16 +42,27 @@ export function linehaulSummary(trips:LinehaulTrip[],day:string){
  const groups=Object.fromEntries(LOAD_STAGE_KEYS.map(key=>[key,{key,label:LOAD_STAGES[key],trips:[] as LinehaulTrip[],knownOrders:0,missing:0}])) as Record<LoadStage,{key:LoadStage;label:string;trips:LinehaulTrip[];knownOrders:number;missing:number}>;
  const hourly=Array.from({length:24},(_,hour)=>({hour,orders:{unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0},missing:{unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0},trips:[] as LinehaulTrip[]}));
  const unplaced={unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0};
+ const byOrigin=new Map<string,{key:string;label:string;trips:number;knownOrders:number;missing:number}>();
  for(const trip of trips){
   if(trip.trip_day!==day)continue;
   const stage=loadStage(trip);if(!stage)continue;
+  const origin=linehaulOrigin(trip);
+  let originTotal=byOrigin.get(origin.key);
+  if(!originTotal){
+   originTotal={...origin,trips:0,knownOrders:0,missing:0};
+   byOrigin.set(origin.key,originTotal);
+  }
   if(stage==="unloaded"&&!eventOnDay(trip.hub_unloaded_at??trip.hub_ata,day))continue;
   const group=groups[stage],orders=stageOrders(trip,stage);
   group.trips.push(trip);if(orders===null)group.missing++;else group.knownOrders+=orders;
+  if(stage==="unloaded"){
+   originTotal.trips++;
+   if(orders===null)originTotal.missing++;else originTotal.knownOrders+=orders;
+  }
   const stamp=stage==="unloaded"?trip.hub_unloaded_at:stage==="unloading"?(trip.hub_unseal_at??trip.hub_ata):stage==="at_hub"?trip.hub_ata:trip.hub_sta;
   if(!stamp||!eventOnDay(stamp,day)){unplaced[stage]++;continue;}
   const hour=new Date(Date.parse(stamp)+7*3600000).getUTCHours();
   hourly[hour].trips.push(trip);if(orders!==null)hourly[hour].orders[stage]+=orders;else hourly[hour].missing[stage]++;
  }
- return {groups,hourly,unplaced};
+ return {groups,hourly,unplaced,unloadedByOrigin:[...byOrigin.values()].sort((a,b)=>a.label.localeCompare(b.label,"vi"))};
 }
