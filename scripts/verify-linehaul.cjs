@@ -1,7 +1,7 @@
 // Exercise the actual route and render the page with non-sensitive fixture data.
 (async()=>{
  const fs=await import('node:fs'),path=await import('node:path'),{default:Module}=await import('node:module'),{default:ts}=await import('typescript'),assert=await import('node:assert/strict');
- const resolve=Module._resolveFilename,originalLoad=Module._load;let context=null,reading=false,hook=0,view='active',selected=null;
+ const resolve=Module._resolveFilename,originalLoad=Module._load;let context=null,reading=false,hook=0,phase='all',selected=null;
  let refHook=0,modalSetup=null,modalShows=0,modalCloses=0;
  const modal={open:false,showModal(){this.open=true;modalShows++;},close(){this.open=false;modalCloses++;}};
  const now=Date.now(),stamp=new Date(now).toISOString(),day=new Date(now+7*3600000).toISOString().slice(0,10);
@@ -17,7 +17,7 @@
   if(name==='@/components/layout/app-loading-store')return {useReportInitialDataLoading:()=>{}};
   if(name==='next/dynamic')return {__esModule:true,default:()=>()=>null};
   const result=originalLoad.call(this,name,...args);
-  if(name==='react'&&reading)return {...result,useState:initial=>{const index=hook++;if(index===0)refHook=0;return result.useState(index===0?fixture:index===1?false:index===6?selected:index===9?now:index===10?view:initial);},useRef:initial=>{const ref=result.useRef(initial);if(refHook++===2)ref.current=modal;return ref;},useEffect:(effect,deps)=>{if(effect.toString().includes('showModal'))modalSetup=effect;return result.useEffect(effect,deps);}};
+  if(name==='react'&&reading)return {...result,useState:initial=>{const index=hook++;if(index===0)refHook=0;return result.useState(index===0?fixture:index===1?false:index===4?phase:index===5?selected:index===8?now:initial);},useRef:initial=>{const ref=result.useRef(initial);if(refHook++===2)ref.current=modal;return ref;},useEffect:(effect,deps)=>{if(effect.toString().includes('showModal'))modalSetup=effect;return result.useEffect(effect,deps);}};
   return result;
  };
  for(const extension of ['.ts','.tsx'])Module._extensions[extension]=function(mod,file){mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);};
@@ -34,7 +34,9 @@
  assert.ok(!listHtml.includes("<aside"),"Full-width list must not keep the detail sidebar");
  assert.ok(listHtml.includes("GPS gần nhất"));assert.ok(listHtml.includes(`dateTime="${stamp}"`));
  assert.ok(listHtml.includes('aria-haspopup="dialog"'));
- for(const label of ['Hàng về &amp; tiến độ xả tải','Đang lên hàng','Phân bổ đơn theo giờ','Chi tiết tải theo chuyến'])assert.ok(listHtml.includes(label),`Missing summary ${label}`);
+ for(const label of ['Bộ lọc chuyến','Lọc trạng thái xe','Lọc kho xuất phát'])assert.ok(listHtml.includes(label),`Missing trip filter ${label}`);
+ for(const label of ['Tất cả chiều','Tất cả giờ','Phạm vi chuyến','Xem chuyến đã xả'])assert.ok(!listHtml.includes(label),`Unexpected trip filter ${label}`);
+ for(const stage of ['unloaded','unloading','incoming','loading'])assert.ok(listHtml.includes(`data-stage="${stage}"`),`Missing load card ${stage}`);
  const oldGps=new Date(now-30*60000).toISOString();trip.gps_at=oldGps;hook=0;
  const staleGpsHtml=renderToStaticMarkup(React.createElement(LinehaulView));
  assert.ok(staleGpsHtml.includes(`dateTime="${oldGps}"`));assert.ok(staleGpsHtml.includes('GPS cũ'));
@@ -62,32 +64,32 @@
   cleanupAgain();assert.equal(global.document.body.style.overflow,'scroll');
  }finally{if(previousDocument===undefined)delete global.document;else global.document=previousDocument;}
  for(const text of ['LT-DEMO-001','807','10 bao','237 xá','XE MINH HỌA','Tài xế minh họa','Sản lượng chuyến','Mốc vận hành thực tế'])assert.ok(html.includes(text),`Missing ${text}`);
- assert.ok(!html.includes('ETA'));
+ assert.ok(html.includes('Giờ tới hub dự kiến'));
   fixture.trips.push({...trip,trip_id:'456',lt_code:'LT-DONE',source:'history',phase:'unloaded',hub_ata:stamp,hub_unloaded_at:stamp,unloaded_units:167,lat:null,lng:null,gps_at:null});
-  hook=0;view='history';selected='456';const historyHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+  hook=0;phase='unloaded';selected='456';const historyHtml=renderToStaticMarkup(React.createElement(LinehaulView));
   for(const text of ['LT-DONE','Đã hoàn tất xả tải','167 kiện TO','Xả xong:'])assert.ok(historyHtml.includes(text),`History missing ${text}`);
   assert.ok(!historyHtml.includes('SPX chưa có GPS xe cho chuyến này.'));
   fixture.trips[1]={...fixture.trips[1],source:'dashboard',phase:'at_hub',hub_unloaded_at:null,unloaded_units:null,expected_unload:null,load_total:35,bags:10,loose:25,origin_atd:stamp,pack_description:'Bao 90x70 10,Other 25'};
-  hook=0;const dashboardHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+  hook=0;phase='at_hub';const dashboardHtml=renderToStaticMarkup(React.createElement(LinehaulView));
   for(const text of ['Đã đến hub','Tổng 35 kiện TO','10 bao','25 xá','Rời kho xuất phát'])assert.ok(dashboardHtml.includes(text),`Dashboard missing ${text}`);
   assert.ok(!dashboardHtml.includes('Đã hoàn tất xả tải'));
   for(const text of ['ETA','API không cung cấp','Chưa có mốc giờ xả','Hoàn tất xả tải','Rời hub','GPS gần nhất'])assert.ok(!dashboardHtml.includes(text),`Unavailable field shown: ${text}`);
-  view='active';selected='123';fixture.trips=[{...trip,vehicle:'',plate_number:'',driver_name:'',origin:'',destination:'',origin_atd:null,hub_eta:stamp,hub_sta:null,orders:null,bags:0,loose:null,load_total:null,expected_unload:null,unloaded_units:null,pack_description:'',lat:null,lng:null,gps_at:null}];
+  phase='all';selected='123';fixture.trips=[{...trip,vehicle:'',plate_number:'',driver_name:'',origin:'',destination:'',origin_atd:null,hub_eta:stamp,hub_sta:null,orders:null,bags:0,loose:null,load_total:null,expected_unload:null,unloaded_units:null,pack_description:'',lat:null,lng:null,gps_at:null}];
   hook=0;const sparseHtml=renderToStaticMarkup(React.createElement(LinehaulView));
-  for(const text of ['ETA','Mốc thực tế','Mốc vận hành thực tế','Giờ đến kế hoạch','Chưa có tên','Chưa có biển','Vị trí xe','Chi tiết đóng gói'])assert.ok(!sparseHtml.includes(text),`Empty field shown: ${text}`);
+  for(const text of ['Mốc thực tế','Mốc vận hành thực tế','Giờ đến kế hoạch','Chưa có tên','Chưa có biển','Vị trí xe','Chi tiết đóng gói'])assert.ok(!sparseHtml.includes(text),`Empty field shown: ${text}`);
   assert.ok(sparseHtml.includes('Chưa có thời gian GPS'));
   assert.ok(sparseHtml.includes('0 bao'),'Real zero must remain visible');
   fixture.trips[0].bags=null;hook=0;
   const emptyCargoHtml=renderToStaticMarkup(React.createElement(LinehaulView));
   assert.ok(!emptyCargoHtml.includes('Tải trên xe'));
   assert.ok(!emptyCargoHtml.includes('Sản lượng chuyến'));
- view='active';selected=null;fixture.trips=[
+ phase='all';selected=null;fixture.trips=[
   {...trip,trip_id:'UNSEAL',lt_code:'LT0QAS51NOMU5',source:'active',phase:'unloading',hub_ata:stamp,hub_unseal_at:stamp,hub_unloaded_at:null,expected_unload:247,unloaded_units:247},
   {...trip,trip_id:'ARRIVED',lt_code:'LT0QAS51NOMT4',source:'dashboard',phase:'at_hub',hub_ata:stamp,hub_unloaded_at:null,expected_unload:null,unloaded_units:null}];
  hook=0;const stagesHtml=renderToStaticMarkup(React.createElement(LinehaulView));
  for(const text of ['LT0QAS51NOMU5','LT0QAS51NOMT4','Đang xả hàng','Đang chờ xả'])assert.ok(stagesHtml.includes(text),`Incorrect LH status: ${text}`);
  assert.ok(!stagesHtml.includes('Đã xả đủ tải'));
- console.log('LH API permissions, active/history/dashboard UI, no ETA, absent fields hidden and real zero cargo passed.');
+ console.log('LH API permissions, trip filters, active/history/dashboard UI, ETA visibility and cargo passed.');
  if(process.argv.includes('--preview')){
   const css=fs.readFileSync('components/linehaul/linehaul.module.css','utf8');
   fs.mkdirSync('.next',{recursive:true});

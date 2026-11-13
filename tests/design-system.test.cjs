@@ -56,6 +56,7 @@ test('responsive cascade at 375, 768 and 1440px preserves readable inputs and wr
  assert.equal(value(file,'.workspace-content h1','font-size',375),'23px');
  assert.equal(value(file,'.workspace-content h1','font-size',1440),'26px');
  assert.equal(value('components/linehaul/linehaul.module.css','.header h1','flex-wrap',375),'wrap');
+ assert.equal(value('components/linehaul/linehaul.module.css','.filters','grid-template-columns',375),'repeat(2,minmax(0,1fr))');
  assert.equal(value('components/linehaul/linehaul.module.css','.loadCards','grid-template-columns',375),'minmax(0,1fr)');
  assert.equal(value('components/data-sources/data-sources.css','.ds-source-grid','grid-template-columns',375),'minmax(0,1fr)');
 });

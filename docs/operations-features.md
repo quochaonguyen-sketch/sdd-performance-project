@@ -5,7 +5,7 @@
 - Quản lý PUP và thế pick: `/pickup-management`, `/pickup-management?view=replacement`.
 - Return đầy đủ: tổng quan, tra cứu / gán đơn, rider trả, phân công COT ở `/return-orders`.
 - Ghi chú cá nhân `/notes` và nút ghi chú nhanh toàn ứng dụng.
-- Lịch OFF `/off-schedule`, trang rider đăng ký `/off-registration` và tra cứu `/off-lookup`, thông báo yêu cầu mới trên header.
+- Rider gửi yêu cầu tại `/off-registration`. Quản lý duyệt trong tab **Đăng ký OFF** qua liên kết **Quản lý đăng ký OFF** trên trang Staffing & Scheduling.
 - Giao việc `/tasks`, theo dõi vi phạm `/violations`.
 - Khu vực `/zones`, vẽ tuyến `/zone-builder`.
 - Trợ lý AI trên header, cấu hình kết nối AI trong `/settings`.
@@ -13,6 +13,12 @@
 - Excel / Google Sheet tại `/route-sheet`.
 
 Không thêm trang, menu hoặc luồng nhập điểm danh Attendance. Những bảng / API Attendance có sẵn vẫn được giữ vì lịch OFF và thế pick đang sử dụng dữ liệu này. Phạm vi dữ liệu hiện tại của dashboard và realtime KV1–KV5 được giữ.
+
+## Đăng ký OFF
+
+Đặt `OFF_REGISTRATION_SPREADSHEET_ID` trên máy chủ và cấp quyền Editor cho Google Service Account của app trên file quản lý. Cấu hình này trỏ tới file khác với nguồn lịch OFF chấm công. Tạo tab bằng `node --env-file=.env --env-file=.env.local scripts/setup-off-registration.mts`.
+
+Mỗi ngày đăng ký có một dòng, nhiều ngày gửi cùng lượt dùng chung **Mã yêu cầu**. Quản lý cập nhật **Trạng thái** và **Ghi chú quản lý** trong Sheet. Nếu rider cần đổi ngày đã gửi, quản lý xử lý yêu cầu cũ trước khi nhận thay đổi. Duyệt trong file này là quyết định của quản lý, chưa cập nhật lịch chấm công hoặc file thế pick.
 
 ## File Excel
 
