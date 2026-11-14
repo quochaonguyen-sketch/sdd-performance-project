@@ -10,7 +10,7 @@ let metadataFailures = 0, metadataReads = 0;
 const versions = new Map();
 const reads = [], failures = new Map();
 const archiveReads = [], archiveDays = new Map();
-let archiveEnabled = false;
+let archiveEnabled = false, archiveConfigInvalid = false;
 const archive = { from(table) {
   assert.equal(table, 'onhold_archive_days');
   const conditions = {};
@@ -63,7 +63,13 @@ Module._resolveFilename = function(name, ...args) { return resolve.call(this, na
 Module._load = function(name, ...args) {
   if (name === 'server-only') return {};
   if (name === '@/lib/supabase/admin') return { createAdminClient: () => client };
-  if (name === './archive') return { createOHArchiveClient: () => archiveEnabled ? archive : null };
+  if (name === './archive') return { createOHArchiveClient: () => {
+    if (archiveConfigInvalid) throw new TypeError('Invalid URL');
+    return archiveEnabled ? archive : null;
+  } };
+  if (name === '@/lib/auth/current-user') {
+    return { getCurrentUserContext: async () => ({ user: { id: 'admin' }, profile: { role: 'admin' } }) };
+  }
   if (name === '@/lib/data-sources/catalog') return { vietnamDay: () => '2026-11-06' };
   return load.call(this, name, ...args);
 };
@@ -71,7 +77,8 @@ Module._extensions['.ts'] = (mod, file) => mod._compile(ts.transpileModule(fs.re
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, file);
 const { getOHPivot, OHPivotError } = require('../lib/onhold/server.ts');
-const { packOHPivot } = require('../lib/onhold/transport.ts');
+const { packOHPivot, unpackOHPivot } = require('../lib/onhold/transport.ts');
+const { GET } = require('../app/api/onhold/route.ts');
 const day = value => `2026-10-${String(value).padStart(2, '0')}`;
 (async () => {
   reportDates = [1, 2, 3, 4, 5, 6].map(day);
@@ -118,5 +125,14 @@ const day = value => `2026-10-${String(value).padStart(2, '0')}`;
   assert.deepEqual(archiveReads, [day(22), day(23)]);
   assert.deepEqual(split.cells.map(cell => cell.orders), [9, 1, 1]);
   assert.ok(!reads.includes(day(22)) && reads.includes(day(23)) && reads.includes(currentDay));
-  console.log('OH daily loading and archive routing verified, including fallback for a stale copy and current day.');
+
+  archiveConfigInvalid = true;
+  reportDates = [day(24)];
+  const response = await GET(new Request(`http://localhost/api/onhold?from=${day(24)}&to=${day(24)}&format=compact`));
+  assert.equal(response.status, 200, 'Misconfigured archive must not block the OH API');
+  const fallback = unpackOHPivot(await response.json());
+  assert.deepEqual(fallback.reports.map(report => report.report_date), reportDates);
+  assert.deepEqual(fallback.cells.map(cell => cell.orders), [1]);
+  assert.ok(reads.includes(day(24)), 'Fallback reads the original snapshot');
+  console.log('OH daily loading and archive routing verified, including fallback for a stale copy and invalid archive configuration.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

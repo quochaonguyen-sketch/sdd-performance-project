@@ -50,7 +50,6 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
   const today = vietnamDay();
   ohRange(from, to, today);
   const client = createAdminClient();
-  const archive = createOHArchiveClient();
   const signal = AbortSignal.timeout(45_000);
   const readReports = (columns = "report_date,fetched_at,finalized_at") => client.from("onhold_daily_reports")
     .select(columns).gte("report_date", from).lte("report_date", to).order("report_date").abortSignal(signal);
@@ -67,6 +66,15 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
   const { data, error, status } = metadata;
   const reports = data as { report_date: string; fetched_at: string; finalized_at?: string | null }[] | null;
   if (error || !reports) throw new OHPivotError(error ? error.code || "OH_NETWORK_ERROR" : "OH_EMPTY_RESPONSE", status, error?.message ?? "Missing OH reports response");
+
+  let archive: ReturnType<typeof createOHArchiveClient> = null;
+  if (reports.some(report => report.finalized_at && report.report_date < today)) {
+    try {
+      archive = createOHArchiveClient();
+    } catch {
+      console.warn("[onhold] Invalid archive configuration. Reading from the primary source.");
+    }
+  }
 
   async function readDay(day: string, fetchedAt: string, finalizedAt?: string | null): Promise<OHData> {
     if (archive && finalizedAt && day < today) {
