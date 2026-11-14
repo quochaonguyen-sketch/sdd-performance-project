@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ohRange, ohWeekRange, ohPivotIndex, ohSummary, ohRankings, resolveOHRiders, reasonName, reasonNameVi, type OHCell } from '../lib/onhold/model.ts';
+import { packOHPivot, unpackOHPivot } from '../lib/onhold/transport.ts';
+
+test('compact pivot preserves filtered totals, names, blank values and date order', () => {
+  const first: OHCell = { report_date: '2026-11-01', area: 'Khu vực 1', reason: '169', hour: -1, status: 5, orders: 2, rider_name: 'Nguyễn Văn A', ward: '' };
+  const cells = [first, { ...first, report_date: '2026-11-02', status: 1 as const, rider_code: '000123' }];
+  const packed = packOHPivot({ reports: [], cells });
+  const restored = unpackOHPivot(JSON.parse(JSON.stringify(packed)));
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.cells)), cells);
+  assert.deepEqual(ohRankings(restored.cells, 'rider'), ohRankings(cells, 'rider'));
+  assert.deepEqual(ohPivotIndex(restored.cells), ohPivotIndex(cells));
+});
 
 test('missing rider IDs use names and exact unique directory matches without inventing identities', () => {
   const directory = [{ rider_code: 'R1', rider_name: 'Nguyễn Văn A' }, { rider_code: 'R2', rider_name: 'Trần Văn B' }, { rider_code: 'R3', rider_name: 'Trần Văn B' }];

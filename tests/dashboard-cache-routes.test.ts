@@ -6,6 +6,7 @@ import ts from "typescript";
 import { TtlCache } from "../lib/cache/ttl-cache.ts";
 import { summarizeHubRoster } from "../lib/dashboard/hub-roster.ts";
 import { summarizeRiderHiring } from "../lib/dashboard/rider-hiring.ts";
+import { packOHPivot } from "../lib/onhold/transport.ts";
 
 function route(file: string, mocks: Record<string, unknown>, fetcher?: typeof fetch) {
   const exports: { GET?: (request: Request) => Promise<Response> } = {};
@@ -27,7 +28,8 @@ test("OH route checks access before cache, bypasses on refresh and retries failu
     "@/lib/auth/current-user": { getCurrentUserContext: async () => context },
     "@/lib/data-sources/catalog": { vietnamDay: () => "2026-10-29" },
     "@/lib/onhold/model": { ohRange: () => {} },
-    "@/lib/onhold/server": { getOHPivot: async () => { reads++; if (fail) throw Error("offline"); return { orders: reads }; } },
+    "@/lib/onhold/server": { OHPivotError: class extends Error {}, getOHPivot: async () => { reads++; if (fail) throw Error("offline"); return { reports: [], cells: [] }; } },
+    "@/lib/onhold/transport": { packOHPivot },
   });
   assert.equal((await get(request())).headers.get("X-Data-Cache"), "MISS");
   assert.equal((await get(request())).headers.get("X-Data-Cache"), "HIT");
@@ -44,6 +46,11 @@ test("OH route checks access before cache, bypasses on refresh and retries failu
   assert.equal(reads, 3);
   context.user.id = "b";
   assert.equal((await get(request())).headers.get("X-Data-Cache"), "MISS");
+  const compact = new Request("http://localhost/api/onhold?format=compact");
+  assert.deepEqual(await (await get(compact)).json(), { reports: [], dictionary: [], rows: [] });
+  assert.equal((await get(compact)).headers.get("X-Data-Cache"), "HIT");
+  await get(request(true));
+  assert.equal((await get(compact)).headers.get("X-Data-Cache"), "MISS");
 });
 
 test("Sheet caches expire independently, share reads and recalculate shifts from cached roster", async t => {

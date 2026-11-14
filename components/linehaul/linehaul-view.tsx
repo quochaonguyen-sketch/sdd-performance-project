@@ -53,16 +53,18 @@ export function LinehaulView(){
   finally{setSyncing(false);}
  }
  const all=useMemo(()=>sortTrips(data?.trips??[]),[data]);
- const summary=useMemo(()=>linehaulSummary(all,data?.day??""),[all,data?.day]);
- const origins=new Map(all.map(trip=>{const {key,label}=linehaulOrigin(trip);return [key,label];}));
+ const day=data?.day??"";
+ const origins=useMemo(()=>new Map(all.map(trip=>{const {key,label}=linehaulOrigin(trip);return [key,label];})),[all]);
+ const originOptions=[...origins].sort((a,b)=>a[1].localeCompare(b[1],"vi"));
  const selectedOrigin=origins.has(origin)?origin:"all";
- const warehouseTotals=new Map(summary.unloadedByOrigin.map(warehouse=>[warehouse.key,warehouse]));
- const unloaded=summary.groups.unloaded;
- const selectedWarehouse=warehouseTotals.get(selectedOrigin);
+ const tripsAtOrigin=useMemo(()=>selectedOrigin==="all"?all:all.filter(trip=>linehaulOrigin(trip).key===selectedOrigin),[all,selectedOrigin]);
+ const fullSummary=useMemo(()=>linehaulSummary(all,day),[all,day]);
+ const summary=useMemo(()=>tripsAtOrigin===all?fullSummary:linehaulSummary(tripsAtOrigin,day),[all,day,fullSummary,tripsAtOrigin]);
+ const warehouseTotals=new Map(fullSummary.unloadedByOrigin.map(warehouse=>[warehouse.key,warehouse]));
+ const unloaded=fullSummary.groups.unloaded;
  const term=query.trim().toLocaleLowerCase("vi");
- const scope=phase==="unloaded"?unloaded.trips:all;
+ const scope=phase==="unloaded"?summary.groups.unloaded.trips:tripsAtOrigin;
  const filtered=scope.filter(trip=>(phase==="all"||trip.phase===phase)&&
-  (selectedOrigin==="all"||linehaulOrigin(trip).key===selectedOrigin)&&
   (!term||[trip.lt_code,trip.plate_number,trip.driver_name,trip.origin,trip.destination,linehaulOrigin(trip).label].join(" ").toLocaleLowerCase("vi").includes(term)));
  const current=all.find(trip=>trip.trip_id===selected)??null;
  const hasActualTime=filtered.some(trip=>trip.hub_ata||trip.hub_atd||trip.hub_unloaded_at||trip.origin_atd);
@@ -75,6 +77,17 @@ export function LinehaulView(){
   <header className={`ops-page-header ${styles.header}`}><div className="ops-page-heading"><h1>Linehaul Management<span>Hôm nay</span></h1><div className="ops-page-timestamp"><small>Ngày vận hành</small><strong>{data?.day.split("-").reverse().join("/")??"Đang tải…"}</strong></div></div><div className={`ops-page-actions ${styles.headerActions}`}>{data?.canRefresh?<button type="button" className="ops-page-primary-action" onClick={()=>void sync()} disabled={syncing}><RefreshCw size={15}/>{syncing?"Đang gửi…":"Đồng bộ SPX"}</button>:null}<button type="button" onClick={()=>void load()} aria-label="Đọc lại dữ liệu web"><RefreshCw size={16}/></button></div></header>
   <div className={styles.sourceStatus} data-stale={stale}><span><span className={styles.statusDot}/>{!data?.snapshotAt?"Chưa có snapshot hôm nay":stale?"Dữ liệu cần cập nhật":"Đã đồng bộ từ SPX"}{data?.snapshotAt?` · ${time(data.snapshotAt)}`:""}</span><span>Hôm nay · đã gán tài xế · hub 4232 · cập nhật mỗi 5 phút</span></div>
   {error?<p className={styles.error} role="alert">{error}</p>:null}{message?<p className={styles.notice} role="status">{message}</p>:null}
+  {originOptions.length>0&&<section className={styles.originCards} aria-label="Kho xuất phát">
+   <button type="button" className={styles.originCard} aria-pressed={selectedOrigin==="all"} onClick={()=>setOrigin("all")}>
+    <strong>Tất cả kho</strong><span>{orderLabel(unloaded.trips.length,unloaded.knownOrders,unloaded.missing)} · Đã xả</span>
+   </button>
+   {originOptions.map(([key,label])=>{
+    const total=warehouseTotals.get(key);
+    return <button type="button" key={key} className={styles.originCard} aria-pressed={selectedOrigin===key} onClick={()=>setOrigin(key)}>
+     <strong>{label}</strong><span>{orderLabel(total?.trips??0,total?.knownOrders??0,total?.missing??0)} · Đã xả</span>
+    </button>;
+   })}
+  </section>}
   <section className={styles.loadCards} aria-label="Tổng sản lượng hôm nay">
    {stageCards.map(({key,Icon})=>{
     const {trips,knownOrders,missing}=summary.groups[key];
@@ -99,14 +112,10 @@ export function LinehaulView(){
     </select>
     <select className={styles.originFilter} aria-label="Lọc kho xuất phát" value={selectedOrigin} onChange={event=>setOrigin(event.target.value)}>
      <option value="all">Tất cả kho xuất phát</option>
-     {[...origins].sort((a,b)=>a[1].localeCompare(b[1],"vi")).map(([key,label])=>{const total=warehouseTotals.get(key);return <option key={key} value={key}>{label}{total?` · ${orderLabel(total.trips,total.knownOrders,total.missing)}`:""}</option>;})}
+     {originOptions.map(([key,label])=><option key={key} value={key}>{label}</option>)}
     </select>
     {hasFilters&&<button type="button" className={styles.clearFilters} onClick={()=>{setQuery("");setPhase("all");setOrigin("all");}}>Xóa lọc</button>}
    </div>
-   {data?.snapshotAt&&selectedOrigin!=="all"&&<p className={styles.unloadedStrip}>
-    Đã xả hôm nay · {origins.get(selectedOrigin)} <strong>{orderLabel(selectedWarehouse?.trips??0,selectedWarehouse?.knownOrders??0,selectedWarehouse?.missing??0)}</strong> · {number(selectedWarehouse?.trips??0)} chuyến
-    {selectedWarehouse?.missing?` · ${number(selectedWarehouse.missing)} chuyến chưa rõ số đơn`:""}
-   </p>}
    <div className={styles.tableScroll}><table><thead><tr><th>Chuyến / tài xế</th><th>Tuyến · Kho đi → Điểm đến</th>{hasCargo&&<th>Tải trên xe</th>}<th>Trạng thái tại hub</th>{showGps&&<th>GPS gần nhất</th>}{hasActualTime&&<th>Mốc thực tế</th>}</tr></thead><tbody>{loading&&!data?<tr><td colSpan={columns} className={styles.empty}>Đang đọc chuyến LH hôm nay…</td></tr>:!filtered.length?<tr><td colSpan={columns} className={styles.empty}>Chưa có chuyến phù hợp. {data?.snapshotAt?"Đổi bộ lọc để xem thêm.":"Đồng bộ SPX để lấy danh sách hôm nay."}</td></tr>:filtered.map(trip=>{
     const historical=isHistorical(trip);
     return <tr key={trip.trip_id} data-selected={current?.trip_id===trip.trip_id} onClick={event=>{event.currentTarget.querySelector("button")?.focus();setSelected(trip.trip_id);}}>

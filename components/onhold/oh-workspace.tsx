@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Filter, RefreshCw, Search, MapPin, Users } from "lucide-react";
 import { useRememberedState } from "@/components/layout/filter-memory";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
-import { OH_AREAS, ohPivotIndex, ohRange, ohRankings, ohSummary, ohWeekRange, reasonNameVi, type OHData, type OHRank } from "@/lib/onhold/model";
-import { OHOrderDialog } from "./oh-order-dialog";
+import { OH_AREAS, ohPivotIndex, ohRange, ohRankings, ohWeekRange, reasonNameVi, type OHData, type OHRank } from "@/lib/onhold/model";
+import { unpackOHPivot } from "@/lib/onhold/transport";
 import s from "./oh-workspace.module.css";
 
 const number = (value: number) => value.toLocaleString("vi-VN");
 const date = (value: string) => value.split("-").reverse().join("/");
+const OHOrderDialog = dynamic(() => import("./oh-order-dialog").then(module => module.OHOrderDialog), {
+  loading: () => <p className={s.loading} role="status">Đang mở danh sách mã đơn…</p>,
+});
 
 export function OHWorkspace({ initialData, initialError = "", from, today }: {
   initialData?: OHData; initialError?: string; from: string; today: string;
@@ -35,6 +39,7 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
   const [day, setDay] = useRememberedState("oh-workspace:day", today);
   const [geoMode, setGeoMode] = useState<"ward" | "district">("ward");
   const [query, setQuery] = useState("");
+  const rankQuery = useDeferredValue(query);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [ordersOpen, setOrdersOpen] = useState(false);
@@ -50,14 +55,14 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
       setError("");
       try {
         ohRange(range.from, range.to, today);
-        const response = await fetch(`/api/onhold?from=${range.from}&to=${range.to}`, {
+        const response = await fetch(`/api/onhold?from=${range.from}&to=${range.to}&format=compact`, {
           cache: "no-store", signal: controller.signal,
           headers: forceRefresh ? { "x-dashboard-refresh": "1" } : undefined,
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Không tải được dữ liệu OH.");
         if (controller.signal.aborted) return;
-        setData(payload);
+        setData(unpackOHPivot(payload));
         setHasLoaded(true);
         setLoadedRange(range);
         setDay(previous => previous < range.from || previous > range.to ? range.to : previous);
@@ -74,7 +79,7 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
   const periodCells = useMemo(() => data.cells.filter(cell =>
     cell.report_date >= loadedRange.from && cell.report_date <= loadedRange.to && reports.has(cell.report_date)
   ), [data.cells, loadedRange, reports]);
-  const areaCells = useMemo(() => periodCells.filter(cell => area === "all" || cell.area === area), [periodCells, area]);
+  const areaCells = useMemo(() => area === "all" ? periodCells : periodCells.filter(cell => cell.area === area), [periodCells, area]);
   const districts = useMemo(() => filtersOpen ? ohRankings(areaCells, "district") : [], [areaCells, filtersOpen]);
   const wards = useMemo(() => filtersOpen ? ohRankings(areaCells.filter(cell => district === "all" || (cell.district || "Chưa rõ quận") === district), "ward") : [], [areaCells, district, filtersOpen]);
   const reasonLabels = useMemo(() => {
@@ -83,12 +88,12 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
     return labels;
   }, [data.cells]);
   const reasons = useMemo(() => [...new Set(areaCells.map(cell => cell.reason))].sort(), [areaCells]);
-  const cells = useMemo(() => areaCells.filter(cell =>
+  const cells = useMemo(() => district === "all" && ward === "all" && reason === "all" ? areaCells : areaCells.filter(cell =>
     (district === "all" || (cell.district || "Chưa rõ quận") === district) &&
     (ward === "all" || (cell.ward || "Chưa rõ phường") === ward) &&
     (reason === "all" || cell.reason === reason)
   ), [areaCells, district, ward, reason]);
-  const total = useMemo(() => ohSummary(cells).total, [cells]);
+  const total = useMemo(() => cells.reduce((sum, cell) => sum + cell.orders, 0), [cells]);
   const geography = useMemo(() => ohRankings(cells, geoMode), [cells, geoMode]);
   const riders = useMemo(() => ohRankings(cells, "rider"), [cells]);
   const days = useMemo(() => Array.from({ length: Math.round((Date.parse(loadedRange.to) - Date.parse(loadedRange.from)) / 86400000) + 1 },
@@ -100,17 +105,20 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
   });
   const extraFilters = Number(district !== "all") + Number(ward !== "all") + Number(reason !== "all");
   const period = loadedRange.from === loadedRange.to ? date(loadedRange.from) : `${date(loadedRange.from)} – ${date(loadedRange.to)}`;
-  const tableKey = JSON.stringify([loadedRange, area, district, ward, reason, query]);
+  const tableKey = JSON.stringify([loadedRange, area, district, ward, reason, rankQuery]);
+  const dailyPivot = useMemo(() => detailsOpen ? ohPivotIndex(cells) : null, [cells, detailsOpen]);
   const daily = useMemo(() => {
     if (!detailsOpen) return null;
-    const selected = cells.filter(cell => cell.report_date === day);
     const counts = new Map<string, number>();
     const hours = Array<number>(24).fill(0);
-    for (const cell of selected) {
+    let total = 0;
+    for (const cell of cells) {
+      if (cell.report_date !== day) continue;
+      total += cell.orders;
       counts.set(cell.reason, (counts.get(cell.reason) ?? 0) + cell.orders);
       if (cell.hour >= 0 && cell.hour < 24) hours[cell.hour] += cell.orders;
     }
-    return { total: ohSummary(selected).total, reasons: [...counts].sort((a, b) => b[1] - a[1]), hours, pivot: ohPivotIndex(cells) };
+    return { total, reasons: [...counts].sort((a, b) => b[1] - a[1]), hours };
   }, [cells, day, detailsOpen]);
 
   function refresh() {
@@ -203,13 +211,13 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
         <label className={s.search}><Search size={17} aria-hidden="true"/><span className={s.srOnly}>Tìm phường hoặc rider</span><input type="search" value={query} placeholder="Tìm phường, rider, mã rider…" onChange={event => setQuery(event.target.value)}/></label>
       </section>
 
-      {!coverage ? <div className={s.empty}>Chưa có báo cáo trong khoảng ngày này. Hãy chọn khoảng ngày khác.</div> : <div className={s.rankings}>
-        <RankPanel key={`geo:${geoMode}:${tableKey}`} title={geoMode === "ward" ? "Phường / xã" : "Quận / huyện"} rows={geography} total={total} query={query}
+      {!coverage ? <div className={s.empty}>Chưa có báo cáo trong khoảng ngày này. Hãy chọn khoảng ngày khác.</div> : <div className={s.rankings} aria-busy={query !== rankQuery}>
+        <RankPanel key={`geo:${geoMode}:${tableKey}`} title={geoMode === "ward" ? "Phường / xã" : "Quận / huyện"} rows={geography} total={total} query={rankQuery}
           controls={<div className={s.tabs} role="group" aria-label="Thống kê theo địa bàn">
             <button type="button" aria-pressed={geoMode === "ward"} onClick={() => setGeoMode("ward")}>Phường</button>
             <button type="button" aria-pressed={geoMode === "district"} onClick={() => setGeoMode("district")}>Quận</button>
           </div>}/>
-        <RankPanel key={`rider:${tableKey}`} title="Rider" rows={riders} total={total} query={query}/>
+        <RankPanel key={`rider:${tableKey}`} title="Rider" rows={riders} total={total} query={rankQuery}/>
       </div>}
 
       <details className={s.details} onToggle={event => setDetailsOpen(event.currentTarget.open)}>
@@ -227,14 +235,14 @@ export function OHWorkspace({ initialData, initialError = "", from, today }: {
           <h2>OH theo ngày và khu vực</h2>
           <div className={s.tableScroll} tabIndex={0} role="region" aria-label="Bảng OH theo ngày và khu vực">
             <table><thead><tr><th scope="col">Khu vực</th>{days.map(day => <th key={day} scope="col">{date(day)}</th>)}</tr></thead>
-              <tbody>{OH_AREAS.filter(item => area === "all" || item === area).map(area => <tr key={area}><th scope="row">{area}</th>{days.map(day => <td key={day}>{reports.has(day) ? number(daily.pivot.get(day)?.get(area) ?? 0) : "—"}</td>)}</tr>)}</tbody>
+              <tbody>{OH_AREAS.filter(item => area === "all" || item === area).map(area => <tr key={area}><th scope="row">{area}</th>{days.map(day => <td key={day}>{reports.has(day) ? number(dailyPivot?.get(day)?.get(area) ?? 0) : "—"}</td>)}</tr>)}</tbody>
             </table>
           </div>
           <Link href="/data-sources">Quản lý nguồn dữ liệu</Link>
         </div>}
       </details>
     </>}
-    {ordersOpen && <OHOrderDialog isOpen onClose={() => setOrdersOpen(false)} day={day} today={today} filters={{ status: "all", area, district, ward, reason }} reasonLabelMap={reasonLabels}/>}
+    {ordersOpen && <OHOrderDialog onClose={() => setOrdersOpen(false)} day={day} today={today} filters={{ status: "all", area, district, ward, reason }} reasonLabelMap={reasonLabels}/>}
   </div>;
 }
 

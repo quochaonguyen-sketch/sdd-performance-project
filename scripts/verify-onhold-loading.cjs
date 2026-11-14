@@ -7,6 +7,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 let reportDates = [], active = 0, peak = 0;
 let metadataFailures = 0, metadataReads = 0;
+const versions = new Map();
 const reads = [], failures = new Map();
 const client = {
   from(table) {
@@ -19,7 +20,7 @@ const client = {
       async abortSignal() {
         metadataReads++;
         if (metadataFailures > 0) { metadataFailures--; return { data: null, error: { code: '', message: 'Fetch failed' }, status: 0 }; }
-        return { data: reportDates.map(report_date => ({ report_date })), error: null, status: 200 };
+        return { data: reportDates.map(report_date => ({ report_date, fetched_at: versions.get(report_date), finalized_at: report_date < '2026-11-06' ? 'closed' : null })), error: null, status: 200 };
       },
     };
     return query;
@@ -64,6 +65,9 @@ const day = value => `2026-10-${String(value).padStart(2, '0')}`;
   assert.equal(reads.length, 6, 'Overlapping periods reuse daily cache');
   await getOHPivot(day(2), day(5), true);
   assert.equal(reads.length, 10, 'Manual refresh bypasses daily cache');
+  versions.set(day(2), 'updated');
+  await getOHPivot(day(2), day(5));
+  assert.equal(reads.length, 11, 'Revised reports invalidate only the affected day');
   reportDates = [day(7)]; failures.set(day(7), { remaining: 1, code: '57014', status: 500 });
   assert.equal((await getOHPivot(day(7), day(7))).cells.length, 1);
   assert.equal(reads.filter(value => value === day(7)).length, 2, 'Transient failures retry once');

@@ -6,6 +6,7 @@ import { vietnamDay } from "@/lib/data-sources/catalog";
 import { TtlCache } from "@/lib/cache/ttl-cache";
 
 const dayCache = new TtlCache<OHData>(120_000, 96);
+const finalizedDayCache = new TtlCache<OHData>(30 * 60_000, 96);
 const riderCache = new TtlCache<{ rider_code: string; rider_name: string }[]>(60_000, 1);
 
 async function riderDirectory() {
@@ -47,14 +48,20 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
   ohRange(from, to, vietnamDay());
   const client = createAdminClient();
   const signal = AbortSignal.timeout(45_000);
-  const readReports = () => client.from("onhold_daily_reports")
-    .select("report_date").gte("report_date", from).lte("report_date", to).order("report_date").abortSignal(signal);
-  let metadata = await readReports();
+  const readReports = (columns = "report_date,fetched_at,finalized_at") => client.from("onhold_daily_reports")
+    .select(columns).gte("report_date", from).lte("report_date", to).order("report_date").abortSignal(signal);
+  let columns = "report_date,fetched_at,finalized_at";
+  let metadata = await readReports(columns);
+  if (metadata.error?.code === "42703") {
+    columns = "report_date,fetched_at";
+    metadata = await readReports(columns);
+  }
   if (metadata.error && transient(metadata.error.code, metadata.status) && !signal.aborted) {
     await new Promise(resolve => setTimeout(resolve, 250));
-    metadata = await readReports();
+    metadata = await readReports(columns);
   }
-  const { data: reports, error, status } = metadata;
+  const { data, error, status } = metadata;
+  const reports = data as { report_date: string; fetched_at: string; finalized_at?: string | null }[] | null;
   if (error || !reports) throw new OHPivotError(error ? error.code || "OH_NETWORK_ERROR" : "OH_EMPTY_RESPONSE", status, error?.message ?? "Missing OH reports response");
 
   async function readDay(day: string): Promise<OHData> {
@@ -73,18 +80,32 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
     throw new OHPivotError("OH_RETRY_EXHAUSTED", 503, "OH day read failed");
   }
 
-  // Keep each SQL aggregation small; never return a partial period as a successful total.
+  // Keep at most three small reads running and preserve chronological order across the period.
   const result: OHData = { reports: [], cells: [] };
-  if (refresh) for (const report of reports) dayCache.delete(report.report_date);
-  for (let offset = 0; offset < reports.length; offset += 3) {
-    signal.throwIfAborted();
-    const batch = await Promise.all(reports.slice(offset, offset + 3).map(async report =>
-      (await dayCache.load(report.report_date, () => readDay(report.report_date))).value
-    ));
-    for (const day of batch) {
-      result.reports.push(...day.reports);
-      for (const cell of day.cells) result.cells.push(cell);
+  const sources = reports.map(report => ({
+    day: report.report_date,
+    cache: report.finalized_at ? finalizedDayCache : dayCache,
+    key: JSON.stringify([report.report_date, report.fetched_at, report.finalized_at]),
+  }));
+  if (refresh) for (const source of sources) source.cache.delete(source.key);
+  const days: OHData[] = [];
+  let next = 0, failed = false;
+  await Promise.all(Array.from({ length: Math.min(3, sources.length) }, async () => {
+    while (!failed && next < sources.length) {
+      signal.throwIfAborted();
+      const index = next++;
+      const { day, cache, key } = sources[index];
+      try {
+        days[index] = (await cache.load(key, () => readDay(day))).value;
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
+  }));
+  for (const day of days) {
+    result.reports.push(...day.reports);
+    for (const cell of day.cells) result.cells.push(cell);
   }
   result.cells = await withRiderNames(result.cells);
   return result;

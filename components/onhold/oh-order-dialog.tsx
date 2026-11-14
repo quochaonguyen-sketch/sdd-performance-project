@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Download,
   RefreshCcw,
   Search,
   X,
@@ -13,11 +12,10 @@ import {
   AlertCircle,
   CheckCircle2,
 } from "lucide-react";
-import type { OHOrder, OHOrdersResult } from "@/lib/onhold/model";
-import { reasonNameVi, reasonName } from "@/lib/onhold/model";
+import type { OHOrdersResult } from "@/lib/onhold/model";
+import { reasonNameVi } from "@/lib/onhold/model";
 
 export type OHOrderDialogProps = {
-  isOpen: boolean;
   onClose: () => void;
   day: string;
   today: string;
@@ -29,17 +27,14 @@ export type OHOrderDialogProps = {
     ward: string;
   };
   reasonLabelMap?: Record<string, string>;
-  initialQuery?: string;
 };
 
 export function OHOrderDialog({
-  isOpen,
   onClose,
   day,
   today,
   filters,
   reasonLabelMap = {},
-  initialQuery = "",
 }: OHOrderDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -51,17 +46,9 @@ export function OHOrderDialog({
     offset: 0,
   });
   const [page, setPage] = useState(0);
-  const [input, setInput] = useState(initialQuery);
-  const [query, setQuery] = useState(initialQuery);
-
-  useEffect(() => {
-    if (isOpen) {
-      setInput(initialQuery || "");
-      setQuery(initialQuery || "");
-      setPage(0);
-    }
-  }, [isOpen, initialQuery]);
-  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -69,18 +56,11 @@ export function OHOrderDialog({
 
   useEffect(() => {
     const node = dialog.current;
-    if (isOpen) {
-      if (!node?.open) node?.showModal();
-    } else {
-      if (node?.open) node?.close();
-    }
-  }, [isOpen]);
+    if (!node?.open) node?.showModal();
+  }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
 
     const params = new URLSearchParams({
       day,
@@ -94,39 +74,26 @@ export function OHOrderDialog({
       limit: "50",
     });
 
-    fetch(`/api/onhold/orders?${params}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || "Không tải được danh sách mã đơn OH.");
-        }
-        return res.json();
-      })
-      .then((data: OHOrdersResult) => {
-        if (!controller.signal.aborted) {
-          setResult(data);
-        }
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setError(e instanceof Error ? e.message : "Không tải được mã đơn.");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(`/api/onhold/orders?${params}`, { cache: "no-store", signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Không tải được danh sách mã đơn OH.");
+        if (!controller.signal.aborted) setResult(data);
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Không tải được mã đơn.");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 0);
 
     return () => {
+      clearTimeout(timer);
       controller.abort();
     };
-  }, [isOpen, day, filters.area, filters.status, filters.reason, filters.district, filters.ward, query, page, retry]);
-
-  if (!isOpen) return null;
+  }, [day, filters.area, filters.status, filters.reason, filters.district, filters.ward, query, page, retry]);
 
   async function copyToClipboard(text: string, message: string) {
     try {

@@ -1,7 +1,7 @@
 // Exercise the actual route and render the page with non-sensitive fixture data.
 (async()=>{
  const fs=await import('node:fs'),path=await import('node:path'),{default:Module}=await import('node:module'),{default:ts}=await import('typescript'),assert=await import('node:assert/strict');
- const resolve=Module._resolveFilename,originalLoad=Module._load;let context=null,reading=false,hook=0,phase='all',selected=null;
+ const resolve=Module._resolveFilename,originalLoad=Module._load;let context=null,reading=false,hook=0,phase='all',selected=null,origin='all';
  let refHook=0,modalSetup=null,modalShows=0,modalCloses=0;
  const modal={open:false,showModal(){this.open=true;modalShows++;},close(){this.open=false;modalCloses++;}};
  const now=Date.now(),stamp=new Date(now).toISOString(),day=new Date(now+7*3600000).toISOString().slice(0,10);
@@ -17,7 +17,7 @@
   if(name==='@/components/layout/app-loading-store')return {useReportInitialDataLoading:()=>{}};
   if(name==='next/dynamic')return {__esModule:true,default:()=>()=>null};
   const result=originalLoad.call(this,name,...args);
-  if(name==='react'&&reading)return {...result,useState:initial=>{const index=hook++;if(index===0)refHook=0;return result.useState(index===0?fixture:index===1?false:index===4?phase:index===5?selected:index===8?now:initial);},useRef:initial=>{const ref=result.useRef(initial);if(refHook++===2)ref.current=modal;return ref;},useEffect:(effect,deps)=>{if(effect.toString().includes('showModal'))modalSetup=effect;return result.useEffect(effect,deps);}};
+  if(name==='react'&&reading)return {...result,useState:initial=>{const index=hook++;if(index===0)refHook=0;return result.useState(index===0?fixture:index===1?false:index===4?phase:index===5?selected:index===8?now:index===9?origin:initial);},useRef:initial=>{const ref=result.useRef(initial);if(refHook++===2)ref.current=modal;return ref;},useEffect:(effect,deps)=>{if(effect.toString().includes('showModal'))modalSetup=effect;return result.useEffect(effect,deps);}};
   return result;
  };
  for(const extension of ['.ts','.tsx'])Module._extensions[extension]=function(mod,file){mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);};
@@ -37,6 +37,17 @@
  for(const label of ['Bộ lọc chuyến','Lọc trạng thái xe','Lọc kho xuất phát'])assert.ok(listHtml.includes(label),`Missing trip filter ${label}`);
  for(const label of ['Tất cả chiều','Tất cả giờ','Phạm vi chuyến','Xem chuyến đã xả'])assert.ok(!listHtml.includes(label),`Unexpected trip filter ${label}`);
  for(const stage of ['unloaded','unloading','incoming','loading'])assert.ok(listHtml.includes(`data-stage="${stage}"`),`Missing load card ${stage}`);
+ assert.ok(listHtml.indexOf('aria-label="Kho xuất phát"')<listHtml.indexOf('data-stage="unloaded"'));
+ fixture.trips.push({...trip,trip_id:'lan',lt_code:'LT-LAN-DONE',origin:'70-LAN Warehouse Inbound',phase:'unloaded',hub_ata:stamp,hub_unloaded_at:stamp,unloaded_units:247,orders:578});
+ fixture.trips.push({...trip,trip_id:'hcm',lt_code:'LT-HCM-DONE',origin:'51-HCM WH Inbound',phase:'unloaded',hub_ata:stamp,hub_unloaded_at:stamp,unloaded_units:247,orders:324});
+ hook=0;phase='unloaded';origin='70-lan wh inbound';
+ const warehouseHtml=renderToStaticMarkup(React.createElement(LinehaulView));
+ assert.match(warehouseHtml,/class="originCard" aria-pressed="true"><strong>70-LAN WH Inbound<\/strong><span>578 đơn · Đã xả/);
+ assert.match(warehouseHtml,/data-stage="unloaded" aria-pressed="true">[\s\S]*?<strong>578<small>đơn/);
+ assert.match(warehouseHtml,/value="70-lan wh inbound" selected=""/);
+ assert.ok(warehouseHtml.includes('LT-LAN-DONE'));
+ assert.ok(!warehouseHtml.includes('LT-HCM-DONE'));
+ fixture.trips.splice(1);phase='all';origin='all';
  const oldGps=new Date(now-30*60000).toISOString();trip.gps_at=oldGps;hook=0;
  const staleGpsHtml=renderToStaticMarkup(React.createElement(LinehaulView));
  assert.ok(staleGpsHtml.includes(`dateTime="${oldGps}"`));assert.ok(staleGpsHtml.includes('GPS cũ'));

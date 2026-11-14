@@ -137,19 +137,30 @@ const riderValue = (value?: string | null) => value && !missingRider.has(normali
 export function resolveOHRiders<T extends RiderIdentity>(rows: T[], directory: RiderIdentity[] = []): T[] {
   const byCode = new Map<string, string>();
   const byName = new Map<string, Set<string>>();
+  const identities = new Map<string, string>();
+  function normalized(value?: string | null) {
+    if (!value) return "";
+    const cached = identities.get(value);
+    if (cached !== undefined) return cached;
+    const name = normalizeRider(value);
+    identities.set(value, name);
+    return name;
+  }
+  const usable = (value?: string | null) => value && !missingRider.has(normalized(value)) ? value.trim().replace(/\s+/g, " ") : "";
   for (const row of [...directory, ...rows]) {
-    const code = riderValue(row.rider_code), name = riderValue(row.rider_name);
+    const code = usable(row.rider_code), name = usable(row.rider_name);
     if (!code || !name) continue;
     if (!byCode.has(code)) byCode.set(code, name);
-    const key = normalizeRider(name), codes = byName.get(key) ?? new Set<string>();
+    const key = normalized(name), codes = byName.get(key) ?? new Set<string>();
     codes.add(code); byName.set(key, codes);
   }
   return rows.map(row => {
-    let code = riderValue(row.rider_code), name = riderValue(row.rider_name);
-    const candidates = name ? byName.get(normalizeRider(name)) : undefined;
+    let code = usable(row.rider_code), name = usable(row.rider_name);
+    const candidates = !code && name ? byName.get(normalized(name)) : undefined;
     if (!code && candidates?.size === 1) code = candidates.values().next().value!;
     if (!name && code) name = byCode.get(code) ?? "";
-    return { ...row, rider_code: code || "unknown", rider_name: name || "Chưa rõ rider" };
+    const rider_code = code || "unknown", rider_name = name || "Chưa rõ rider";
+    return rider_code === row.rider_code && rider_name === row.rider_name ? row : { ...row, rider_code, rider_name };
   });
 }
 
@@ -161,10 +172,15 @@ export function ohRankings(cells: OHCell[], kind: "district" | "ward" | "rider")
     _wards: Map<string, number>;
   };
   const groups = new Map<string, GroupRank>();
+  const riderCodes = new Map<string | undefined, string>();
   for (const c of cells) {
     const district = c.district || "Chưa rõ quận",
       ward = c.ward || "Chưa rõ phường";
-    const code = riderValue(c.rider_code);
+    let code = "";
+    if (kind === "rider") {
+      code = riderCodes.get(c.rider_code) ?? riderValue(c.rider_code);
+      riderCodes.set(c.rider_code, code);
+    }
     const name =
       kind === "rider"
         ? c.rider_name || "Chưa rõ rider"
@@ -200,13 +216,13 @@ export function ohRankings(cells: OHCell[], kind: "district" | "ward" | "rider")
 
     rank.orders += c.orders;
 
-    if (c.area) {
+    if (c.area && kind !== "district") {
       rank._areas.set(c.area, (rank._areas.get(c.area) || 0) + c.orders);
     }
-    if (c.district && c.district !== "Chưa rõ quận") {
+    if (kind === "rider" && c.district && c.district !== "Chưa rõ quận") {
       rank._districts.set(c.district, (rank._districts.get(c.district) || 0) + c.orders);
     }
-    if (c.ward && c.ward !== "Chưa rõ phường") {
+    if (kind === "rider" && c.ward && c.ward !== "Chưa rõ phường") {
       rank._wards.set(c.ward, (rank._wards.get(c.ward) || 0) + c.orders);
     }
   }
