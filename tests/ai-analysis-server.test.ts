@@ -37,6 +37,7 @@ function fixture(allowed?: "oh" | "returns" | "volume" | "all") {
     if (name === "@/lib/onhold/server") return { getOHPivot: async (from: string, to: string) => { assert.equal(from, to); calls.push("oh"); return { reports: [], cells: [] }; } };
     if (name === "@/lib/return-orders/workspace-server") return { getReturnWorkspace: async () => { calls.push("returns"); return { snapshotAt: "2026-11-02T00:00:00Z", rows: [] }; } };
     if (name === "@/lib/return-orders/history-server") return { getReturnHistory: async () => { calls.push("history"); return { days: [], groups: [] }; } };
+    if (name === "@/lib/dashboard/backlog-hourly-server") return { readBacklogHourly: async () => { calls.push("backlog"); throw Error("offline"); } };
     if (name === "@/lib/pickup/realtime") return { readAllPages: async (read: (from: number, to: number) => unknown) => read(0, 999) };
     if (name === "@/lib/supabase/admin") return { createAdminClient: () => { calls.push("admin"); throw Error("unexpected privileged read"); } };
     if (name === "@/lib/supabase/server") return { createClient: async () => { calls.push("session"); throw Error("offline"); } };
@@ -47,7 +48,7 @@ function fixture(allowed?: "oh" | "returns" | "volume" | "all") {
 
 test("all denied analysis sources cause no admin/client/RPC/Google/Return reads", async () => {
   const f = fixture(), result = await f.run();
-  assert.deepEqual(f.calls, []); assert.equal(result.sources.length, 8); assert.ok(result.sources.every(source => source.state === "forbidden"));
+  assert.deepEqual(f.calls, []); assert.equal(result.sources.length, 10); assert.ok(result.sources.every(source => source.state === "forbidden"));
   assert.equal(result.daily[0].oh.orders, null); assert.equal(result.returns, null); assert.equal(result.forecast, null);
 });
 test("OH-only and Return-only rights read just the authorized source", async () => {

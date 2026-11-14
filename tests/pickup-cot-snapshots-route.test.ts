@@ -17,6 +17,7 @@ function fixture({ signedIn = true, allowed = true, fail = false } = {}) {
     if (name === "@/lib/auth/current-user") return { getCurrentUserContext: async () => signedIn ? { profile: { role: "member", permissions: {} } } : null };
     if (name === "@/lib/auth/permissions") return { canAccessPickupManagement: () => allowed };
     if (name === "@/lib/data-sources/catalog") return { vietnamDay: () => "2026-11-03" };
+    if (name === "@/lib/supabase/operations-archive") return { readOperationsArchive: async () => null };
     if (name === "@/lib/supabase/admin") return { createAdminClient: () => { reads++; return { from(table: string) { assert.equal(table, "pickup_cot_oh_snapshots"); return query; } }; } };
     throw Error(name);
   } });

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sourceAllowed, vietnamDay } from "@/lib/data-sources/catalog";
 import { counts, type WhDailySummary, type WhOrder } from "@/lib/wh/model";
 import { TtlCache } from "@/lib/cache/ttl-cache";
+import { operationsArchiveWindow, readOperationsArchive } from "@/lib/supabase/operations-archive";
 
 interface WhRangePayload {
   day: string;
@@ -17,7 +18,8 @@ interface WhRangePayload {
   dailyBreakdown: WhDailySummary[];
 }
 
-const whRangeCache = new TtlCache<WhRangePayload>(30_000, 10);
+type WhSnapshot = { report_date: string; snapshot_at: string; orders: WhOrder[] };
+const whRangeCache = new TtlCache<Omit<WhRangePayload, "canRefresh">>(30_000, 10);
 
 export async function GET(request: Request) {
   const context = await getCurrentUserContext();
@@ -72,15 +74,15 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
+  const canRefresh = sourceAllowed(context.profile.role, context.profile.permissions, "wh_tracking");
+  const { yesterday } = operationsArchiveWindow();
 
-  // If single date, use simple maybeSingle query to stay 100% compatible with existing test fixtures
   if (fromDate === toDate) {
-    const { data, error } = await admin
-      .from("wh_tracking_snapshots")
-      .select("snapshot_at,orders")
-      .eq("station_id", "4232")
-      .eq("report_date", fromDate)
-      .maybeSingle();
+    const archive = fromDate < today ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate, request.signal) : null;
+    const { data, error } = archive
+      ? { data: archive[0], error: null }
+      : await admin.from("wh_tracking_snapshots").select("snapshot_at,orders")
+        .eq("station_id", "4232").eq("report_date", fromDate).maybeSingle();
 
     if (error) {
       return Response.json(
@@ -103,7 +105,7 @@ export async function GET(request: Request) {
         mode,
         snapshotAt: data?.snapshot_at ?? null,
         orders,
-        canRefresh: sourceAllowed(context.profile.role, context.profile.permissions, "wh_tracking"),
+        canRefresh,
         availableDates: [fromDate],
         dailyBreakdown: data
           ? [
@@ -129,19 +131,25 @@ export async function GET(request: Request) {
 
   // Multi-date range query with high-speed in-memory TTL caching (30s)
   try {
-    const cacheKey = `${fromDate}:${toDate}:${mode}`;
+    const cacheKey = `${today}:${fromDate}:${toDate}:${mode}`;
     const result = await whRangeCache.load(cacheKey, async () => {
-      const { data: snapshots, error } = await admin
-        .from("wh_tracking_snapshots")
-        .select("report_date, snapshot_at, orders")
-        .eq("station_id", "4232")
-        .gte("report_date", fromDate)
-        .lte("report_date", toDate)
-        .order("report_date", { ascending: false });
-
-      if (error) {
-        throw new Error("Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker.");
-      }
+      const readPrimary = async (start: string, end: string) => {
+        const { data, error } = await admin
+          .from("wh_tracking_snapshots")
+          .select("report_date, snapshot_at, orders")
+          .eq("station_id", "4232")
+          .gte("report_date", start)
+          .lte("report_date", end)
+          .order("report_date", { ascending: false });
+        if (error) throw new Error("Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker.");
+        return data ?? [];
+      };
+      const archive = fromDate < today
+        ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate < today ? toDate : yesterday)
+        : null;
+      const snapshots = archive
+        ? [...(toDate >= today ? await readPrimary(today, toDate) : []), ...archive.reverse()]
+        : await readPrimary(fromDate, toDate);
 
       const orderMap = new Map<string, WhOrder>();
       const dailyBreakdown: WhDailySummary[] = [];
@@ -185,13 +193,12 @@ export async function GET(request: Request) {
         mode,
         snapshotAt: latestSnapshotAt,
         orders,
-        canRefresh: sourceAllowed(context.profile.role, context.profile.permissions, "wh_tracking"),
         availableDates: dailyBreakdown.map((d) => d.date),
         dailyBreakdown,
       };
     });
 
-    return Response.json(result.value, {
+    return Response.json({ ...result.value, canRefresh }, {
       headers: {
         "Cache-Control": "private, no-store",
         "X-Cache": result.hit ? "HIT" : "MISS",

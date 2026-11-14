@@ -4,6 +4,8 @@ import { ohRange, resolveOHRiders, type OHData, type OHOrdersResult } from "./mo
 import { vietnamDay } from "@/lib/data-sources/catalog";
 
 import { TtlCache } from "@/lib/cache/ttl-cache";
+import { createOHArchiveClient } from "./archive";
+import { unpackOHPivot } from "./transport";
 
 const dayCache = new TtlCache<OHData>(120_000, 96);
 const finalizedDayCache = new TtlCache<OHData>(30 * 60_000, 96);
@@ -45,8 +47,10 @@ function transient(code: string, status: number) {
 }
 
 export async function getOHPivot(from: string, to: string, refresh = false): Promise<OHData> {
-  ohRange(from, to, vietnamDay());
+  const today = vietnamDay();
+  ohRange(from, to, today);
   const client = createAdminClient();
+  const archive = createOHArchiveClient();
   const signal = AbortSignal.timeout(45_000);
   const readReports = (columns = "report_date,fetched_at,finalized_at") => client.from("onhold_daily_reports")
     .select(columns).gte("report_date", from).lte("report_date", to).order("report_date").abortSignal(signal);
@@ -64,7 +68,23 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
   const reports = data as { report_date: string; fetched_at: string; finalized_at?: string | null }[] | null;
   if (error || !reports) throw new OHPivotError(error ? error.code || "OH_NETWORK_ERROR" : "OH_EMPTY_RESPONSE", status, error?.message ?? "Missing OH reports response");
 
-  async function readDay(day: string): Promise<OHData> {
+  async function readDay(day: string, fetchedAt: string, finalizedAt?: string | null): Promise<OHData> {
+    if (archive && finalizedAt && day < today) {
+      try {
+        const { data, error } = await archive.from("onhold_archive_days").select("payload")
+          .eq("report_date", day).eq("fetched_at", fetchedAt).eq("finalized_at", finalizedAt)
+          .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(3_000)])).maybeSingle();
+        if (!error && data?.payload) {
+          const archived = unpackOHPivot(data.payload);
+          const report = archived.reports[0];
+          if (archived.reports.length === 1 && report.report_date === day && report.fetched_at === fetchedAt && report.finalized_at === finalizedAt) {
+            return archived;
+          }
+        }
+      } catch {
+        // The primary snapshot remains available when the archive has not caught up.
+      }
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       signal.throwIfAborted();
       const { data, error, status } = await client.rpc("read_onhold_pivot", { p_from: day, p_to: day })
@@ -84,6 +104,8 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
   const result: OHData = { reports: [], cells: [] };
   const sources = reports.map(report => ({
     day: report.report_date,
+    fetchedAt: report.fetched_at,
+    finalizedAt: report.finalized_at,
     cache: report.finalized_at ? finalizedDayCache : dayCache,
     key: JSON.stringify([report.report_date, report.fetched_at, report.finalized_at]),
   }));
@@ -94,9 +116,9 @@ export async function getOHPivot(from: string, to: string, refresh = false): Pro
     while (!failed && next < sources.length) {
       signal.throwIfAborted();
       const index = next++;
-      const { day, cache, key } = sources[index];
+      const { day, fetchedAt, finalizedAt, cache, key } = sources[index];
       try {
-        days[index] = (await cache.load(key, () => readDay(day))).value;
+        days[index] = (await cache.load(key, () => readDay(day, fetchedAt, finalizedAt))).value;
       } catch (error) {
         failed = true;
         throw error;

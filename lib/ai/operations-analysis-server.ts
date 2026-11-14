@@ -15,6 +15,7 @@ import { analysisAccess } from "./source-access";
 import { buildOperationsAnalysis, validateAnalysisScope, type AnalysisInput, type AnalysisScope, type AnalysisHub, type AnalysisOvernightRow, type AnalysisOvernightSnapshot } from "./operations-analysis";
 import type { BriefingSource } from "./briefing";
 import type { BacklogHourlyDay } from "@/lib/dashboard/backlog-history";
+import { readBacklogHourly } from "@/lib/dashboard/backlog-hourly-server";
 import type { DashboardVolumeRow } from "@/lib/dashboard/volume-overview";
 
 const ohDayCache = new TtlCache<OHData>(60_000, 64);
@@ -35,7 +36,7 @@ export async function loadOperationsAnalysis(context: CurrentUserContext, scope:
   const readBacklog=(kind:"delivery"|"pickup")=>source(`analysis_backlog_${kind}`,`Backlog ${kind}`,"/backlog-history",access.backlog,async target=>{
     const days:BacklogHourlyDay[]=[];
     for(let offset=0;offset<dates.length;offset+=2){
-      const batch=await Promise.all(dates.slice(offset,offset+2).map(async day=>{const {data,error}=await db().rpc("read_backlog_hourly",{p_source:kind,p_day:day}).abortSignal(signal??AbortSignal.timeout(45000));if(error||!data)throw Error("Backlog unavailable");return data as BacklogHourlyDay;}));days.push(...batch);
+      const batch=await Promise.all(dates.slice(offset,offset+2).map(day=>readBacklogHourly(kind,day,signal)));days.push(...batch);
     }
     input.backlog=[...(input.backlog??[]),...days];
     const stamps=days.filter(day=>day.day>=scope.from).flatMap(day=>day.hours.filter(hour=>hour.hour===scope.hour&&hour.snapshot_id).map(hour=>hour.source_snapshot_at)).filter((at):at is string=>!!at).sort();

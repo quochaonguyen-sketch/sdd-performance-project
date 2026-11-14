@@ -3,6 +3,7 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validHistoryDay, vietnamDay } from "@/lib/dashboard/backlog-history";
+import { readBacklogHourly } from "@/lib/dashboard/backlog-hourly-server";
 
 export async function GET(request: Request) {
   const context = await getCurrentUserContext();
@@ -11,15 +12,17 @@ export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const source = query.get("source");
   if (source !== "pickup" && source !== "delivery") return NextResponse.json({ error: "Nguồn tồn không hợp lệ" }, { status: 400 });
-  const db = createAdminClient();
   const headers = { "Cache-Control": "private, no-store" };
   if (query.get("mode") === "hourly") {
     const day = query.get("day") ?? vietnamDay();
     if (!validHistoryDay(day)) return NextResponse.json({ error: "Ngày phân tích không hợp lệ" }, { status: 400 });
-    const { data, error } = await db.rpc("read_backlog_hourly", { p_source: source, p_day: day });
-    if (error) return NextResponse.json({ error: "Không đọc được báo cáo theo giờ" }, { status: 503 });
-    return NextResponse.json(data, { headers });
+    try {
+      return NextResponse.json(await readBacklogHourly(source, day, request.signal), { headers });
+    } catch {
+      return NextResponse.json({ error: "Không đọc được báo cáo theo giờ" }, { status: 503 });
+    }
   }
+  const db = createAdminClient();
   const id = query.get("snapshot");
   if (id) {
     if (!/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) return NextResponse.json({ error: "Mã snapshot không hợp lệ" }, { status: 400 });

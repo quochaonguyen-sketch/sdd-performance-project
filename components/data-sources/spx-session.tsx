@@ -47,12 +47,14 @@ function CredentialsForm({ session, disabled, onSave }: { session: Session; disa
   </form>;
 }
 
-export function SpxSession() {
+export function SpxSession({ open }: { open: boolean }) {
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const pending = state?.sessions.some(session => ["QUEUED", "RUNNING"].includes(session.status));
+  const pollMs = pending ? 5000 : 30000;
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch("/api/data-sources/session", { cache: "no-store", signal });
@@ -62,15 +64,24 @@ export function SpxSession() {
     } catch (e) { if (!(e instanceof Error && e.name === "AbortError")) setError(e instanceof Error ? e.message : "Không tải được phiên SPX"); }
   }, []);
   useEffect(() => {
+    if (!open) return;
     const controller = new AbortController();
-    const initial = setTimeout(() => void load(controller.signal), 0);
-    const interval = setInterval(() => { if (!document.hidden) void load(controller.signal); }, 5000);
-    return () => { controller.abort(); clearTimeout(initial); clearInterval(interval); };
-  }, [load]);
+    const poll = () => { if (!document.hidden) void load(controller.signal); };
+    const initial = setTimeout(poll, 0);
+    const interval = setInterval(poll, pollMs);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      controller.abort();
+      clearTimeout(initial);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [load, open, pollMs]);
   useEffect(() => {
+    if (!open) return;
     const timer = setInterval(() => setElapsed(value => value + 1), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [open]);
   async function refresh(worker: string, envelope?: CredentialEnvelope) {
     if (busy) return;
     setBusy(true); setNotice("");

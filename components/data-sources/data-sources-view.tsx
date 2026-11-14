@@ -23,11 +23,24 @@ export function DataSourcesView(){
   const [state,setState]=useState<State|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [busy,setBusy]=useState<string|null>(null),[dates,setDates]=useState<Record<string,string>>({}),[selected,setSelected]=useState<string|null>(null);
   const [query,setQuery]=useState(''),[filter,setFilter]=useState<'all'|'running'|'failed'>('all'),[sessionLoaded,setSessionLoaded]=useState(false);
+  const [sessionOpen,setSessionOpen]=useState(false);
+  const pollMs=state?.jobs.some(active)?5000:30000;
   const load=useCallback(async(signal?:AbortSignal)=>{
     try{const response=await fetch("/api/data-sources",{cache:"no-store",signal});const body=await response.json();if(!response.ok)throw new Error(body.error);setState(body);setError("");}
     catch(e){if(!(e instanceof Error&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Không tải được dữ liệu");}
   },[]);
-  useEffect(()=>{const controller=new AbortController();const initial=setTimeout(()=>void load(controller.signal),0);const interval=setInterval(()=>{if(!document.hidden)void load(controller.signal);},5000);return()=>{controller.abort();clearTimeout(initial);clearInterval(interval);};},[load]);
+  useEffect(()=>{
+    const controller=new AbortController();
+    const initial=setTimeout(()=>{if(!document.hidden)void load(controller.signal);},0);
+    return()=>{clearTimeout(initial);controller.abort();};
+  },[load]);
+  useEffect(()=>{
+    const controller=new AbortController();
+    const poll=()=>{if(!document.hidden)void load(controller.signal);};
+    const interval=setInterval(poll,pollMs);
+    document.addEventListener("visibilitychange",poll);
+    return()=>{controller.abort();clearInterval(interval);document.removeEventListener("visibilitychange",poll);};
+  },[load,pollMs]);
   async function command(source:DataSourceId,action:string,extra:object={}){
     if(busy)return;setBusy(source);setNotice("");
     try{const response=await fetch("/api/data-sources",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source,action,day:dates[source]??vietnamDay(),...extra})});const body=await response.json();if(!response.ok)throw new Error(body.error);setNotice(body.message);await load();}
@@ -43,10 +56,10 @@ export function DataSourcesView(){
   })??[];
   return <div className="data-sources-page space-y-3">
     <header className="ds-page-heading ops-page-header"><div><h1>Nguồn dữ liệu</h1></div><button type="button" onClick={()=>void load()} className="ds-refresh"><RefreshCw size={15} aria-hidden="true"/>Làm mới</button></header>
-    <div className="ds-worker-strip" data-connected={!!workers.length}><Server size={18} aria-hidden="true"/><div><strong>{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</strong><p>{workers.length?workers.map(w=>`${w.hostname} · ${w.concurrency} nguồn song song`).join(" | "):"Lệnh sẽ xếp hàng. Bật run_sources_worker.cmd trên máy chủ để nhận lệnh."}</p></div><span>{state?.jobs.filter(active).length??0} chờ / chạy · cập nhật mỗi 5 giây</span></div>
+    <div className="ds-worker-strip" data-connected={!!workers.length}><Server size={18} aria-hidden="true"/><div><strong>{workers.length?"Máy chủ đang kết nối":"Chưa có worker kết nối"}</strong><p>{workers.length?workers.map(w=>`${w.hostname} · ${w.concurrency} nguồn song song`).join(" | "):"Lệnh sẽ xếp hàng. Bật run_sources_worker.cmd trên máy chủ để nhận lệnh."}</p></div><span>{state?.jobs.filter(active).length??0} chờ / chạy · cập nhật mỗi {pollMs/1000} giây</span></div>
     {error&&<div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</div>}{notice&&<div role="status" className="rounded-xl bg-blue-50 p-4 text-blue-700">{notice}</div>}
     {!state&&!error&&<p className="flex gap-2"><Loader2 className="animate-spin" size={18}/>Đang tải nguồn dữ liệu…</p>}
-    {state?.canControl&&<details className="ds-session-panel" onToggle={event=>{if(event.currentTarget.open)setSessionLoaded(true);}}><summary><KeyRound size={16} aria-hidden="true"/><span>Phiên kết nối SPX<small>Cookie và tài khoản dùng chung cho các nguồn</small></span><ChevronDown size={15} aria-hidden="true"/></summary>{sessionLoaded&&<SpxSession/>}</details>}
+    {state?.canControl&&<details className="ds-session-panel" onToggle={event=>{const open=event.currentTarget.open;setSessionOpen(open);if(open)setSessionLoaded(true);}}><summary><KeyRound size={16} aria-hidden="true"/><span>Phiên kết nối SPX<small>Cookie và tài khoản dùng chung cho các nguồn</small></span><ChevronDown size={15} aria-hidden="true"/></summary>{sessionLoaded&&<SpxSession open={sessionOpen}/>}</details>}
     <div className="ds-section-heading"><div><h2>Các nguồn đồng bộ <span>{state?.sources.length??"—"}</span></h2></div><p>Trạng thái gần nhất · ms mỗi lượt · tỷ lệ thất bại</p></div>
     <div className="ds-source-toolbar"><div className="ds-status-filters" role="group" aria-label="Lọc trạng thái nguồn">{([['all','Tất cả'],['running','Chờ / chạy'],['failed','Thất bại']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span>{counts[value]}</span></button>)}</div><label className="ds-source-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label="Tìm nguồn dữ liệu" placeholder="Tìm nguồn dữ liệu…" value={query} onChange={event=>setQuery(event.target.value)}/></label></div>
     {state&&!sources.length&&<div className="ds-empty"><p>Không có nguồn khớp bộ lọc.</p><button type="button" onClick={()=>{setQuery('');setFilter('all');}}>Đặt lại bộ lọc</button></div>}

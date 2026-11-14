@@ -9,6 +9,23 @@ let reportDates = [], active = 0, peak = 0;
 let metadataFailures = 0, metadataReads = 0;
 const versions = new Map();
 const reads = [], failures = new Map();
+const archiveReads = [], archiveDays = new Map();
+let archiveEnabled = false;
+const archive = { from(table) {
+  assert.equal(table, 'onhold_archive_days');
+  const conditions = {};
+  const query = {
+    select(fields) { assert.equal(fields, 'payload'); return query; },
+    eq(field, value) { conditions[field] = value; return query; },
+    abortSignal() { return query; },
+    async maybeSingle() {
+      archiveReads.push(conditions.report_date);
+      const row = archiveDays.get(conditions.report_date);
+      return { data: row?.fetched_at === conditions.fetched_at && row?.finalized_at === conditions.finalized_at ? { payload: row.payload } : null };
+    },
+  };
+  return query;
+} };
 const client = {
   from(table) {
     if (table === 'riders') {
@@ -46,6 +63,7 @@ Module._resolveFilename = function(name, ...args) { return resolve.call(this, na
 Module._load = function(name, ...args) {
   if (name === 'server-only') return {};
   if (name === '@/lib/supabase/admin') return { createAdminClient: () => client };
+  if (name === './archive') return { createOHArchiveClient: () => archiveEnabled ? archive : null };
   if (name === '@/lib/data-sources/catalog') return { vietnamDay: () => '2026-11-06' };
   return load.call(this, name, ...args);
 };
@@ -53,6 +71,7 @@ Module._extensions['.ts'] = (mod, file) => mod._compile(ts.transpileModule(fs.re
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, file);
 const { getOHPivot, OHPivotError } = require('../lib/onhold/server.ts');
+const { packOHPivot } = require('../lib/onhold/transport.ts');
 const day = value => `2026-10-${String(value).padStart(2, '0')}`;
 (async () => {
   reportDates = [1, 2, 3, 4, 5, 6].map(day);
@@ -83,5 +102,21 @@ const day = value => `2026-10-${String(value).padStart(2, '0')}`;
   const before = metadataReads;
   assert.deepEqual(await getOHPivot(day(11), day(12)), { reports: [], cells: [] });
   assert.equal(metadataReads - before, 2, 'Metadata network failures also retry once');
-  console.log('OH daily batching, concurrency, overlap cache, forced refresh, bounded retry and all-or-nothing reads verified.');
+
+  archiveEnabled = true;
+  const currentDay = '2026-11-06';
+  reportDates = [day(22), day(23), currentDay];
+  for (const date of reportDates) {
+    versions.set(date, 'primary');
+    const fetched_at = date === day(23) ? 'stale' : 'primary';
+    const report = { report_date: date, fetched_at, finalized_at: 'closed' };
+    archiveDays.set(date, { ...report, payload: packOHPivot({ reports: [report], cells: [
+      { report_date: date, area: 'Khu vực 1', reason: '169', hour: 7, status: 5, orders: 9 },
+    ] }) });
+  }
+  const split = await getOHPivot(day(22), currentDay);
+  assert.deepEqual(archiveReads, [day(22), day(23)]);
+  assert.deepEqual(split.cells.map(cell => cell.orders), [9, 1, 1]);
+  assert.ok(!reads.includes(day(22)) && reads.includes(day(23)) && reads.includes(currentDay));
+  console.log('OH daily loading and archive routing verified, including fallback for a stale copy and current day.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
