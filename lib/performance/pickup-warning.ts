@@ -1,5 +1,5 @@
 import type { PerformanceRow } from "./driver-performance";
-import { allocateCotRemainder } from "./cot-allocation";
+import { allocateCotRemainder } from "./cot-allocation.ts";
 
 export function pickupCotWarning(row: Pick<PerformanceRow, "cot" | "pickup_assigned" | "pickup_picked" | "pickup_assigned_cot1" | "pickup_picked_cot1" | "pickup_assigned_cot2" | "pickup_picked_cot2">): string | null {
   const cot = (row.cot ?? "").replace(/\s/g, "").toUpperCase();

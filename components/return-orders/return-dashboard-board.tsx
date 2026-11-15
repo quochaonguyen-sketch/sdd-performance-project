@@ -324,18 +324,21 @@ function Donut({
 }) {
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
   const filtered = segments.filter((s) => s.value > 0);
   const sum = filtered.reduce((a, s) => a + s.value, 0) || 1;
+  let offset = 0;
+  const arcs = [];
+  for (const segment of filtered) {
+    const length = (segment.value / sum) * circumference;
+    arcs.push({ ...segment, offset, length });
+    offset += length;
+  }
 
   return (
     <div className="return-dashboard-donut">
       <svg viewBox="0 0 120 120" width={120} height={120} role="img" aria-label="Biểu đồ tròn">
         <circle cx={60} cy={60} r={radius} fill="none" stroke="var(--color-paper-3)" strokeWidth={14} />
-        {filtered.map((seg) => {
-          const len = (seg.value / sum) * circumference;
-          const dash = `${len} ${circumference - len}`;
-          const el = (
+        {arcs.map((seg) => (
             <circle
               key={seg.label}
               cx={60}
@@ -344,15 +347,12 @@ function Donut({
               fill="none"
               stroke={seg.color}
               strokeWidth={14}
-              strokeDasharray={dash}
-              strokeDashoffset={-offset}
+              strokeDasharray={`${seg.length} ${circumference - seg.length}`}
+              strokeDashoffset={-seg.offset}
               strokeLinecap="butt"
               transform="rotate(-90 60 60)"
             />
-          );
-          offset += len;
-          return el;
-        })}
+        ))}
       </svg>
       <div className="return-dashboard-donut-center">
         <strong>{total.toLocaleString("vi-VN")}</strong>

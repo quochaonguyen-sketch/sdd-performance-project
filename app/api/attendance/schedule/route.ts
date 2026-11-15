@@ -1,17 +1,18 @@
-import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { canManageOperations } from "@/lib/auth/permissions";
+import { canEditRiderSchedule } from "@/lib/auth/page-access";
+import { loadRoleAccess } from "@/lib/auth/role-access-server";
 import { getCachedAttendanceSchedule, getCachedRiders, invalidateAttendanceCache } from "@/lib/cache/operations-cache";
 import {
   processAttendanceSheetSync,
 } from "@/lib/google/attendance-sheet-sync";
 import type { Rider } from "@/types";
+import { readScheduleArchive } from "@/lib/attendance/schedule-archive";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.iso.date();
 const scheduleStatusSchema = z.enum([
   "",
   "ON",
@@ -99,7 +100,7 @@ export async function GET(request: Request) {
     const { data, cache } = await getCachedAttendanceSchedule(parsedMonth.data, async () => {
       const [{ data: riders }, logs] = await Promise.all([
         getCachedRiders(),
-        fetchAll((from, to) =>
+        readScheduleArchive(session.admin, parsedMonth.data).then(archived => archived ?? fetchAll((from, to) =>
           session.admin
             .from("attendance_logs")
             .select("*")
@@ -107,8 +108,9 @@ export async function GET(request: Request) {
             .lte("work_date", end)
             .neq("status", "ON")
             .order("updated_at", { ascending: false })
+            .order("id")
             .range(from, to),
-        ),
+        )),
       ]);
 
       return { riders: [...riders].sort(compareScheduleRiders), logs };
@@ -116,7 +118,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      can_edit: canManageOperations(session.role),
+      can_edit: canEditRiderSchedule(session.role, await loadRoleAccess(session.role)),
       riders: data.riders,
       logs: data.logs,
       cache,
@@ -134,7 +136,7 @@ export async function PUT(request: Request) {
   if (!session) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
-  if (!canManageOperations(session.role)) {
+  if (!canEditRiderSchedule(session.role, await loadRoleAccess(session.role))) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền sửa lịch rider" }, { status: 403 });
   }
 
@@ -147,102 +149,18 @@ export async function PUT(request: Request) {
     );
   }
 
-  const riderIds = Array.from(new Set(parsed.data.updates.map((item) => item.rider_id)));
-  const { data: riders, error: riderError } = await session.admin
-    .from("riders")
-    .select("id,rider_code,full_name").in("kv", OPERATING_AREAS)
-    .in("id", riderIds);
-
-  if (riderError) {
-    return NextResponse.json({ success: false, error: riderError.message }, { status: 400 });
+  const updates = [...new Map(parsed.data.updates.map(item => [
+    item.rider_id + ":" + item.work_date,
+    { ...item, status: item.status || "ON" },
+  ])).values()];
+  const { data: saved, error } = await session.admin.rpc("save_rider_schedule", { p_changes: updates });
+  if (error || !saved) {
+    return NextResponse.json({ success: false, error: "Chưa lưu được lịch rider. Kiểm tra rider và thử lại." }, { status: 400 });
   }
-
-  const riderCodes = new Map((riders ?? []).map((rider) => [rider.id, rider.rider_code]));
-  if (riderCodes.size !== riderIds.length) {
-    return NextResponse.json({ success: false, error: "Có rider không tồn tại" }, { status: 400 });
-  }
-
-  const clearItems = parsed.data.updates.filter((item) => !item.status || item.status === "ON");
-  const upsertItems = parsed.data.updates
-    .filter((item) => item.status && item.status !== "ON")
-    .map((item) => ({
-      rider_id: item.rider_id,
-      rider_code: riderCodes.get(item.rider_id),
-      work_date: item.work_date,
-      status: item.status,
-      shift: item.shift?.trim() || null,
-      note: item.note?.trim() || null,
-      raw_data: {
-        source: "schedule_ui",
-        status: item.status,
-      },
-    }));
-
-  for (const item of clearItems) {
-    const riderCode = riderCodes.get(item.rider_id);
-    const { error } = await session.admin
-      .from("attendance_logs")
-      .delete()
-      .eq("rider_code", riderCode)
-      .eq("work_date", item.work_date);
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-  }
-
-  let updatedLogs: unknown[] = [];
-  if (upsertItems.length > 0) {
-    const { data, error } = await session.admin
-      .from("attendance_logs")
-      .upsert(upsertItems, { onConflict: "rider_code,work_date" })
-      .select("*");
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-    updatedLogs = data ?? [];
-  }
-
-  // Populate outbox for Google Sheets sync
-  const outboxRows: Array<{
-    rider_code: string;
-    work_date: string;
-    attendance_status: string;
-    operation: "UPSERT" | "CLEAR";
-  }> = [];
-
-  for (const item of upsertItems) {
-    outboxRows.push({
-      rider_code: item.rider_code,
-      work_date: item.work_date,
-      attendance_status: item.status,
-      operation: "UPSERT",
-    });
-  }
-  for (const item of clearItems) {
-    outboxRows.push({
-      rider_code: riderCodes.get(item.rider_id) ?? "",
-      work_date: item.work_date,
-      attendance_status: "ON",
-      operation: "CLEAR",
-    });
-  }
-
-  if (outboxRows.length > 0) {
-    const { error: outboxError } = await session.admin
-      .from("attendance_sheet_sync_outbox")
-      .insert(outboxRows.map((row) => ({
-        ...row,
-        state: "PENDING",
-        attempts: 0,
-        next_attempt_at: new Date().toISOString(),
-      })));
-    if (outboxError) {
-      console.error("Failed to populate sync outbox:", outboxError);
-    }
-  }
-
-  const sheetSync = await processAttendanceSheetSync(300, parsed.data.sheet_url);
-
+  for (const month of new Set(updates.map(item => item.work_date.slice(0, 7)))) invalidateAttendanceCache(month);
+  const sheetSync = await processAttendanceSheetSync(300, parsed.data.sheet_url).catch(() => ({
+    success: false, synced: 0, queued: 0, error: "Thay đổi đã lưu và đang chờ gửi lên Google Sheet.",
+  }));
   await session.admin.from("activity_logs").insert({
     entity_type: "attendance_schedule",
     action: "updated",
@@ -254,15 +172,9 @@ export async function PUT(request: Request) {
     },
   });
 
-  parsed.data.updates.forEach((item) => invalidateAttendanceCache(item.work_date.slice(0, 7)));
-
   return NextResponse.json({
     success: true,
-    logs: updatedLogs,
-    cleared: clearItems.map((item) => ({
-      rider_id: item.rider_id,
-      work_date: item.work_date,
-    })),
+    ...saved,
     sheet_sync: sheetSync,
   });
 }

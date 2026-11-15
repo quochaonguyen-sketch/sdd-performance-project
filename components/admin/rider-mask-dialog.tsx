@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ShieldAlert, X, Check, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,10 @@ export function RiderMaskDialog({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const settings = JSON.stringify([open, initialFactor, initialScope, initialIsActive, initialNote]);
+  const [previousSettings, setPreviousSettings] = useState(settings);
+  if (previousSettings !== settings) {
+    setPreviousSettings(settings);
     if (open) {
       setPercent(Math.round((initialFactor ?? 0.5) * 100));
       setScope(initialScope ?? "all");
@@ -48,7 +51,7 @@ export function RiderMaskDialog({
       setNote(initialNote ?? "");
       setError(null);
     }
-  }, [open, initialFactor, initialScope, initialIsActive, initialNote]);
+  }
 
   if (!open) return null;
 
@@ -217,15 +220,15 @@ export function RiderMaskDialog({
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700">Phạm vi áp dụng</label>
             <div className="grid grid-cols-3 gap-1.5">
-              {[
+              {([
                 { key: "all", label: "Tất cả" },
                 { key: "delivery", label: "Chỉ Giao" },
                 { key: "pickup", label: "Chỉ Lấy" },
-              ].map((opt) => (
+              ] as const).map((opt) => (
                 <button
                   type="button"
                   key={opt.key}
-                  onClick={() => setScope(opt.key as any)}
+                  onClick={() => setScope(opt.key)}
                   className={`rounded-lg py-1.5 text-xs font-semibold border transition-all ${
                     scope === opt.key
                       ? "border-blue-600 bg-blue-50 text-blue-700 font-bold"

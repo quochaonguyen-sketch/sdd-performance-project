@@ -4,6 +4,7 @@ import { createOHArchiveClient } from "../lib/onhold/archive.ts";
 import type { OHData } from "../lib/onhold/model.ts";
 import { packOHPivot } from "../lib/onhold/transport.ts";
 import { syncOperationsArchive } from "./sync-operations-archive.mts";
+import { syncScheduleArchive } from "../lib/attendance/schedule-archive.ts";
 
 type ReportVersion = { report_date: string; fetched_at: string; finalized_at: string };
 
@@ -58,7 +59,10 @@ async function sync() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   const dryRun = process.argv.includes("--check");
-  const jobs = await Promise.allSettled([syncOnhold(primary, archive, dryRun), syncOperationsArchive(primary, archive, dryRun)]);
+  const riderSchedule = syncScheduleArchive(primary, archive, !dryRun).then(result => {
+    if (result) console.log(JSON.stringify({ kind: "rider_schedule", ...result }));
+  });
+  const jobs = await Promise.allSettled([syncOnhold(primary, archive, dryRun), syncOperationsArchive(primary, archive, dryRun), riderSchedule]);
   for (const job of jobs) if (job.status === "rejected") {
     console.error(job.reason instanceof Error ? job.reason.message : "Đồng bộ thất bại.");
     process.exitCode = 1;

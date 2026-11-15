@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { z } from "zod";
@@ -8,23 +10,40 @@ import { resolveWorkDateScope } from "../lib/ai/work-date.ts";
 import { analysisScopeForQuestion, isReturnOnlyAnalysis, needsOperationsAnalysis } from "../lib/ai/operations-analysis.ts";
 import { findMatchingRiders } from "../lib/ai/rider-matcher.ts";
 
-function fixture() {
+type ProviderPayload = { messages: Array<{ role: string; content: string }> };
+
+function fixture(reply?: (payload: ProviderPayload, init: RequestInit) => Promise<Response>) {
   let verified = true, legacyAllowed = false, briefingReads = 0, legacyReads = 0, analysisReads = 0;
-  let provider: { messages: Array<{ role: string; content: string }> } | null = null;
-  const preference = { select() { return preference; }, eq() { return preference; }, maybeSingle: async () => ({ data: { memory_enabled: false }, error: null }) };
-  const client = { auth: { getUser: async () => ({ data: { user: { id: "test" } } }) }, from(name: string) { assert.equal(name, "ai_user_preferences"); return preference; } };
+  let provider: ProviderPayload | null = null;
+  const account = new AsyncLocalStorage<string>();
+  function clientForAccount() {
+    const id = account.getStore()!;
+    const preference = {
+      select() { return preference; },
+      eq(column: string, value: string) {
+        assert.equal(column, "user_id");
+        assert.equal(value, id);
+        return preference;
+      },
+      maybeSingle: async () => ({ data: { memory_enabled: false }, error: null }),
+    };
+    return { auth: { getUser: async () => ({ data: { user: { id } } }) }, from(name: string) { assert.equal(name, "ai_user_preferences"); return preference; } };
+  }
   const exports: { POST?: (request: Request) => Promise<Response> } = {};
   const code = ts.transpileModule(readFileSync("app/api/ai/chat/route.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  runInNewContext(code, { exports, Response, TextDecoder, TextEncoder, ReadableStream, DOMException, AbortSignal, Date,
+  runInNewContext(code, { exports, Response, TextDecoder, TextEncoder, ReadableStream, DOMException, AbortSignal, AbortController, setTimeout, clearTimeout, Date,
     process: { env: { SHOPAIKEY_API_KEY: "test-key", SHOPAIKEY_BASE_URL: "https://example.invalid/v1" } },
     fetch: async (_url: string, init: RequestInit) => {
-      provider = JSON.parse(String(init.body));
+      const payload = JSON.parse(String(init.body)) as ProviderPayload;
+      provider = payload;
+      if (reply) return reply(payload, init);
       return new Response('data: {"choices":[{"delta":{"content":"27 FTE, ngày 2026-11-03."}}]}\n\ndata: [DONE]\n');
     },
     require(name: string) {
       if (name === "next/server") return { NextResponse: Response };
       if (name === "zod") return { z };
-      if (name === "@/lib/supabase/server") return { createClient: async () => client };
+      if (name === "@/lib/supabase/server") return { createClient: async () => clientForAccount() };
+      if (name === "node:timers/promises") return { setTimeout: sleep };
       if (name === "@/lib/supabase/admin") return { createAdminClient: () => ({ from: () => ({ insert: async () => ({ error: null }) }) }) };
       if (name === "@/lib/auth/current-user") return { getCurrentUserContext: async () => verified ? { user: { id: "test" }, profile: {} } : null };
       if (name === "@/lib/ai/source-access") return { canReadLegacyAiContext: () => legacyAllowed };
@@ -49,11 +68,68 @@ function fixture() {
       throw Error(name);
     },
   });
-  return { run: (body: unknown) => exports.POST!(new Request("http://localhost/api/ai/chat", { method: "POST", body: JSON.stringify(body) })),
+  return { run: (body: unknown, userId = "test", signal?: AbortSignal) => account.run(userId, () =>
+    exports.POST!(new Request("http://localhost/api/ai/chat", { method: "POST", body: JSON.stringify(body), signal }))),
     analysisReads: () => analysisReads,
     provider: () => provider, reads: () => ({ briefingReads, legacyReads }), revoke: () => { verified = false; }, allowLegacy: () => { legacyAllowed = true; } };
 }
 const body = { messages: [{ role: "user", content: "Ngày mai có bao nhiêu FTE đi làm?" }], includeData: true, contextMode: "operations" };
+
+test("two accounts overlap at the provider with independent prompts and cancellation", { timeout: 2_000 }, async () => {
+  const bothStarted = Promise.withResolvers<void>();
+  const active = new Map<string, AbortSignal>();
+  let attemptsA = 0;
+  const f = fixture(async (payload, init) => {
+    const question = payload.messages.at(-1)!.content;
+    if (question === "cau-hoi-A" && ++attemptsA === 1) {
+      return new Response(null, { status: 429, headers: { "Retry-After": "0" } });
+    }
+    active.set(question, init.signal!);
+    if (active.size === 2) bothStarted.resolve();
+    await bothStarted.promise;
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: question } }] })}\n\ndata: [DONE]\n`);
+  });
+  const first = new AbortController();
+  const ask = (content: string, user: string, signal?: AbortSignal) => f.run({
+    ...body, includeData: false, messages: [{ role: "user", content }],
+  }, user, signal);
+  const [replyA, replyB] = await Promise.all([ask("cau-hoi-A", "user-a", first.signal), ask("cau-hoi-B", "user-b")]);
+  assert.equal(attemptsA, 2);
+  first.abort();
+  assert.equal(active.get("cau-hoi-A")?.aborted, true);
+  assert.equal(active.get("cau-hoi-B")?.aborted, false);
+  const [answerA, answerB] = await Promise.all([replyA.text(), replyB.text()]);
+  assert.match(answerA, /cau-hoi-A/);
+  assert.doesNotMatch(answerA, /cau-hoi-B/);
+  assert.match(answerB, /cau-hoi-B/);
+  assert.doesNotMatch(answerB, /cau-hoi-A/);
+});
+
+test("AI retries a short rate limit once and stops when the provider is still busy", async () => {
+  let attempts = 0;
+  const f = fixture(async () => {
+    attempts++;
+    return new Response(null, { status: 429, headers: { "Retry-After": attempts === 1 ? "0" : "9" } });
+  });
+  const response = await f.run({ ...body, includeData: false });
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("Retry-After"), "9");
+  assert.equal(attempts, 2);
+});
+
+test("invalid server credentials fail once without trying the same key on other models", async () => {
+  let attempts = 0;
+  const f = fixture(async () => {
+    attempts++;
+    return Response.json({ error: { message: "Invalid token (request id: private)" } }, { status: 401 });
+  });
+  const response = await f.run({ ...body, includeData: false });
+  assert.equal(response.status, 502);
+  const message = await response.text();
+  assert.match(message, /Khóa ShopAIKey/);
+  assert.doesNotMatch(message, /request id/);
+  assert.equal(attempts, 1);
+});
 
 test("AI chat streams through the configured provider with server-loaded facts and only readable source headers", async () => {
   const f = fixture(), response = await f.run(body);

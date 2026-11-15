@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { canManageOperations } from "@/lib/auth/permissions";
+import { canEditRiderSchedule } from "@/lib/auth/page-access";
+import { loadRoleAccess } from "@/lib/auth/role-access-server";
+import { withAttendanceSheetWriter } from "@/lib/google/attendance-sheet-sync";
 import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
 import { resolveOffScheduleSpreadsheetId, syncScheduleUpdatesToGoogleSheet, type GoogleScheduleStatus } from "@/lib/google/off-schedule";
 
@@ -53,7 +55,7 @@ function normalizeGoogleScheduleStatus(value: string | null | undefined): Google
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  if (!canManageOperations(session.role)) {
+  if (!canEditRiderSchedule(session.role, await loadRoleAccess(session.role))) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền sửa lịch rider" }, { status: 403 });
   }
 
@@ -95,7 +97,9 @@ export async function POST(request: Request) {
     const spreadsheetId = resolveOffScheduleSpreadsheetId(parsed.data.sheet_url ?? null);
     if (!spreadsheetId) throw new Error("Chưa chọn Google Sheet lịch OFF để đồng bộ.");
 
-    const result = await syncScheduleUpdatesToGoogleSheet(spreadsheetId, updates, request.signal);
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
+    const result = await withAttendanceSheetWriter(session.admin, () => syncScheduleUpdatesToGoogleSheet(spreadsheetId, updates, signal));
+    if (!result) return NextResponse.json({ success: false, error: "Có lượt đồng bộ lịch OFF đang chạy." }, { status: 409 });
     invalidateAttendanceCache(parsed.data.month);
 
     await session.admin.from("activity_logs").insert({

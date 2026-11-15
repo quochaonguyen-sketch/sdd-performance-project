@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DATA_SOURCES, sourceAction, sourceAllowed } from "../lib/data-sources/catalog.ts";
-test("ten allowlisted sources; role and per-source permission enforced",()=>{
-  assert.equal(DATA_SOURCES.length,10);
+test("eleven allowlisted sources enforce role and per-source permissions",()=>{
+  assert.equal(DATA_SOURCES.length,11);
   assert.equal(sourceAllowed("member",{manage_pickup:true},"pickup_inventory"),false);
   assert.equal(sourceAllowed("leader",{manage_pickup:true},"performance"),false);
   assert.equal(sourceAllowed("leader",{manage_pickup:true},"pickup_inventory"),true);
@@ -11,6 +11,8 @@ test("ten allowlisted sources; role and per-source permission enforced",()=>{
   assert.equal(sourceAllowed("leader",{manage_return:true},"return_inventory"),true);
   assert.equal(sourceAllowed("leader",{manage_performance:true},"onhold_daily"),true);
   assert.equal(sourceAllowed("leader",{manage_pickup:true},"onhold_daily"),false);
+  assert.equal(sourceAllowed("leader",{manage_performance:true},"wh_tracking"),true);
+  assert.equal(sourceAllowed("leader",{manage_pickup:true},"wh_tracking"),false);
 });
 test("daily schedules validate wall-clock time, modes and report-day choices",()=>{
   const today="2026-10-25";

@@ -1,5 +1,7 @@
 "use client";
 
+import type { AttendanceSheetSyncResult } from "@/lib/google/attendance-sheet-sync";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,9 +50,7 @@ type RiderMonthResponse = {
   rider?: Rider;
   logs?: AttendanceLog[];
   error?: string;
-  sheet_sync?:
-    | { success: true; updated: number; appended: number; cleared: number }
-    | { success: false; error: string };
+  sheet_sync?: AttendanceSheetSyncResult;
 };
 
 type DayEditor = {
@@ -72,7 +72,9 @@ const statusOptions: Array<{ value: ScheduleStatus; label: string }> = [
 
 const weekdayLabels = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "CN"];
 
-export function RiderMonthView({ riderId, initialMonth }: { riderId: string; initialMonth: string }) {
+export function RiderMonthView({ riderId, initialMonth, staffCanEdit, offSheetUrl }: {
+  riderId: string; initialMonth: string; staffCanEdit?: boolean; offSheetUrl?: string;
+}) {
   const router = useRouter();
   const [month, setMonth] = useState(initialMonth);
   const [rider, setRider] = useState<Rider | null>(null);
@@ -96,10 +98,10 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
     } else {
       setRider(result.rider);
       setLogs(result.logs ?? []);
-      setCanEdit(Boolean(result.can_edit));
+      setCanEdit(staffCanEdit !== false && Boolean(result.can_edit));
     }
     setLoading(false);
-  }, [month, riderId]);
+  }, [month, riderId, staffCanEdit]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -139,7 +141,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
     setMonth(nextMonth);
     setEditor(null);
     setSuccess(null);
-    router.replace(`/attendance/riders/${riderId}?month=${nextMonth}`, { scroll: false });
+    router.replace(`/team/rider-schedule/${riderId}?month=${nextMonth}`, { scroll: false });
   }
 
   function openDay(date: string) {
@@ -163,7 +165,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sheet_url: window.localStorage.getItem("rider-ops-off-sheet-url") || null,
+        sheet_url: offSheetUrl ?? null,
         updates: [
           {
             rider_id: rider.id,
@@ -192,7 +194,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
     } else {
       setSuccess(
         `Đã cập nhật lịch ngày ${format(parseISO(editor.date), "dd/MM/yyyy")}.${
-          result.sheet_sync?.success ? " Đã đồng bộ Google Sheet." : ""
+          result.sheet_sync?.synced ? ` Đã gửi ${result.sheet_sync.synced} mục từ hàng đợi lên Sheet OFF.` : ""
         }`,
       );
     }
@@ -204,7 +206,7 @@ export function RiderMonthView({ riderId, initialMonth }: { riderId: string; ini
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between ops-page-header">
         <div className="flex items-start gap-3">
           <Link
-            href={`/attendance?month=${month}`}
+            href={`/team/rider-schedule?month=${month}`}
             className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft size={19} />

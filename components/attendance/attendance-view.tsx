@@ -42,11 +42,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
+import { ApprovedOffPanel } from "@/components/attendance/approved-off-panel";
 import {
   WeeklyAttendanceDashboard,
   type WeeklyScheduleValue,
 } from "@/components/attendance/weekly-attendance-dashboard";
 import { canonicalDistrictShortName, districtMatches } from "@/lib/locations/hcm";
+import type { AttendanceSheetSyncResult } from "@/lib/google/attendance-sheet-sync";
 
 type ScheduleStatus = "" | WeeklyScheduleValue;
 
@@ -56,9 +58,7 @@ type ScheduleResponse = {
   riders?: Rider[];
   logs?: AttendanceLog[];
   error?: string;
-  sheet_sync?:
-    | { success: true; updated: number; appended: number; cleared: number }
-    | { success: false; error: string };
+  sheet_sync?: AttendanceSheetSyncResult;
 };
 
 type ScheduleUpdate = {
@@ -100,12 +100,14 @@ const statusOptions: Array<{ value: ScheduleStatus; label: string }> = [
 const riderPageSizes = [25, 50, 100];
 const importIssuePageSize = 50;
 
-export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }: { initialMonth?: string }) {
+export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), initialDate, staffCanEdit, offSheetUrl, registrationConfigured }: {
+  initialMonth?: string; initialDate?: string; staffCanEdit?: boolean; offSheetUrl?: string; registrationConfigured?: boolean;
+}) {
   const [riders, setRiders] = useState<Rider[]>([]);
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [month, setMonth] = useState(initialMonth);
   const [selectedDate, setSelectedDate] = useState(
-    initialMonth === format(new Date(), "yyyy-MM") ? format(new Date(), "yyyy-MM-dd") : `${initialMonth}-01`,
+    initialDate ?? (initialMonth === format(new Date(), "yyyy-MM") ? format(new Date(), "yyyy-MM-dd") : `${initialMonth}-01`),
   );
   const [query, setQuery] = useState("");
   const [kv, setKv] = useRememberedState("attendance-view:kv", "all");
@@ -142,17 +144,21 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
   const suppressRealtimeUntilRef = useRef(0);
   const sheetSyncAbortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
+  const loadVersion = useRef(0);
   const deferredQuery = useDeferredValue(query);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
+    try {
     // Tuần đang xem có thể tràn sang tháng sau (ví dụ 31/08-06/09) nên phải tải cả 2 tháng để đủ dữ liệu cho WeekStrip/DistrictBreakdown
     const weekStart = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
     const weekEnd = addDays(weekStart, 6);
-    const months = Array.from(new Set([month, format(weekEnd, "yyyy-MM")].filter(Boolean)));
+    const months = Array.from(new Set([month, format(weekStart, "yyyy-MM"), format(weekEnd, "yyyy-MM")]));
     const responses = await Promise.all(months.map((m) => fetch(`/api/attendance/schedule?month=${m}`, { cache: "no-store" })));
     const results = await Promise.all(responses.map((r) => r.json().catch(() => null) as Promise<ScheduleResponse | null>));
+    if (version !== loadVersion.current) return;
     const firstError = responses.find((r, i) => !r.ok || !results[i]?.success);
     if (firstError) {
       const idx = responses.findIndex((r, i) => !r.ok || !results[i]?.success);
@@ -168,10 +174,14 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
       }
       setRiders(Array.from(riderMap.values()));
       setLogs(Array.from(logMapDedup.values()));
-      setCanEdit(Boolean(results[0]?.can_edit));
+      setCanEdit(staffCanEdit !== false && Boolean(results[0]?.can_edit));
     }
-    setLoading(false);
-  }, [month, selectedDate]);
+    } catch {
+      if (version === loadVersion.current) setError("Mất kết nối khi tải lịch rider.");
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
+    }
+  }, [month, selectedDate, staffCanEdit]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -180,7 +190,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
 
   const autoSyncedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (loading || !canEdit) return;
+    if (staffCanEdit !== undefined || loading || !canEdit) return;
     const sheetUrl = typeof window !== "undefined" ? window.localStorage.getItem("rider-ops-off-sheet-url") : null;
     if (!sheetUrl) return;
     const key = `auto-sheet-sync:${selectedDate}`;
@@ -230,7 +240,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
     return () => {
       cancelled = true;
     };
-  }, [loading, canEdit, selectedDate, load]);
+  }, [loading, canEdit, selectedDate, load, staffCanEdit]);
 
   useEffect(() => {
     busyRef.current = importing || savingCells.size > 0;
@@ -352,12 +362,12 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         updates,
-        sheet_url: window.localStorage.getItem("rider-ops-off-sheet-url") || null,
+        sheet_url: offSheetUrl ?? (staffCanEdit === undefined ? window.localStorage.getItem("rider-ops-off-sheet-url") : null),
       }),
-    });
-    const result = (await response.json().catch(() => null)) as ScheduleResponse & {
+    }).catch(() => null);
+    const result = (await response?.json().catch(() => null)) as (ScheduleResponse & {
       cleared?: Array<{ rider_id: string; work_date: string }>;
-    };
+    }) | null;
 
     setSavingCells((current) => {
       const next = new Set(current);
@@ -366,9 +376,8 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
     });
     busyRef.current = importing;
 
-    if (!response.ok || !result?.success) {
-      setError(result?.error ?? "Không thể cập nhật lịch");
-      await load();
+    if (!response?.ok || !result?.success) {
+      setError(result?.error ?? "Mất kết nối khi lưu lịch. Bấm Tải lại lịch rider để kiểm tra.");
       return false;
     }
 
@@ -387,7 +396,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
     } else {
       setSuccess(
         `${message ?? "Đã cập nhật lịch rider."}${
-          result.sheet_sync?.success ? " Đã đồng bộ Google Sheet." : ""
+          result.sheet_sync?.synced ? ` Đã gửi ${result.sheet_sync.synced} mục từ hàng đợi lên Sheet OFF.` : ""
         }`,
       );
     }
@@ -591,7 +600,23 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
 
   async function reconcileGoogleSheet() {
     if (!canEdit) return;
-    const targetSheet = window.localStorage.getItem("rider-ops-off-sheet-url") || sheetUrl || "";
+    if (staffCanEdit !== undefined) {
+      setBulkSyncingSheet(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        const response = await fetch("/api/attendance/schedule/sync", { method: "POST" });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success) throw Error(result?.error ?? "Chưa đồng bộ được lịch OFF.");
+        setSuccess(result.synced ? `Đã ghi ${result.synced} mục vào Google Sheet OFF.` : "Không có thay đổi đang chờ ghi vào Sheet OFF.");
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Chưa đồng bộ được lịch OFF.");
+      } finally {
+        setBulkSyncingSheet(false);
+      }
+      return;
+    }
+    const targetSheet = offSheetUrl ?? (staffCanEdit === undefined ? window.localStorage.getItem("rider-ops-off-sheet-url") || sheetUrl : "");
     if (!targetSheet) {
       setError("Bạn chưa lưu link Google Sheet OFF trong form Đồng bộ Sheet OFF.");
       setShowSheetSync(true);
@@ -634,15 +659,15 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
 
   async function openSheetSync() {
     setError(null);
-    const response = await fetch("/api/attendance/schedule/google-sheet", { cache: "no-store" });
-    const result = await response.json().catch(() => null) as { success?: boolean; configured?: boolean; service_account_email?: string | null; error?: string } | null;
-    if (!response.ok || !result?.success || !result.configured) {
-      setError(result?.error ?? "Máy chủ chưa cấu hình Google Service Account");
+    const response = await fetch("/api/attendance/schedule/google-sheet", { cache: "no-store" }).catch(() => null);
+    const result = await response?.json().catch(() => null) as { success?: boolean; configured?: boolean; service_account_email?: string | null; error?: string } | null;
+    if (!response?.ok || !result?.success || !result.configured) {
+      setError(result?.error ?? (response ? "Máy chủ chưa cấu hình Google Service Account" : "Mất kết nối khi mở đồng bộ Sheet OFF."));
       return;
     }
     setServiceAccountEmail(result.service_account_email ?? null);
     setSheetSyncRange("week");
-    setSheetUrl(window.localStorage.getItem("rider-ops-off-sheet-url") ?? "");
+    setSheetUrl(offSheetUrl ?? (staffCanEdit === undefined ? window.localStorage.getItem("rider-ops-off-sheet-url") ?? "" : ""));
     setShowSheetSync(true);
   }
 
@@ -656,6 +681,9 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
   }
 
   if (!showSheetSync && !editor) {
+    const weekStart = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
+    const from = format(weekStart, "yyyy-MM-dd");
+    const to = format(addDays(weekStart, 6), "yyyy-MM-dd");
     return (
       <>
         <WeeklyAttendanceDashboard
@@ -663,7 +691,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
           logs={logs}
           selectedDate={selectedDate}
           loading={loading}
-          canEdit={canEdit}
+          canEdit={canEdit && !loading && !syncingSheet && !bulkSyncingSheet}
           savingCells={savingCells}
           query={query}
           area={deliveryDistrict}
@@ -677,9 +705,14 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
           onTeamChange={(value) => { setCot(value); setRiderPage(1); }}
           onAttendanceFilterChange={(value) => { setRosterStatus(value); setRiderPage(1); }}
           onOnlyExceptionsChange={setOnlyWeeklyExceptions}
-          onSelectDate={setSelectedDate}
+          onSelectDate={changeWeek}
           onChangeWeek={changeWeek}
           onStatusChange={(rider, date, status) => void updateCell(rider, date, status)}
+          notice={<>
+            {success && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700" role="status">{success}</p>}
+            {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+            {canEdit && registrationConfigured && <ApprovedOffPanel key={from} start={from} end={to} onImported={load} />}
+          </>}
           actions={(
             <>
               <input
@@ -689,30 +722,28 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
                 className="hidden"
                 onChange={(event) => { const file = event.target.files?.[0]; if (file) void importExcel(file); }}
               />
-              <Button type="button" variant="secondary" disabled={!canEdit || syncingSheet} onClick={() => void openSheetSync()}>
+              <Button type="button" variant="secondary" disabled={!canEdit || !offSheetUrl || syncingSheet || savingCells.size > 0} onClick={() => void openSheetSync()}>
                 <FileSpreadsheet size={16} />
-                <span className="hidden sm:inline">Đồng bộ Sheet OFF</span>
+                Lấy lịch từ Sheet OFF
               </Button>
-              <Button type="button" variant="secondary" disabled={!canEdit || bulkSyncingSheet} onClick={() => void reconcileGoogleSheet()}>
+              <Button type="button" variant="secondary" disabled={!canEdit || bulkSyncingSheet || syncingSheet || savingCells.size > 0} onClick={() => void reconcileGoogleSheet()}>
                 <RefreshCcw className={bulkSyncingSheet ? "animate-spin" : ""} size={16} />
-                <span className="hidden sm:inline">{bulkSyncingSheet ? "Đang đồng bộ..." : "Đồng bộ lại tháng"}</span>
+                <span>{bulkSyncingSheet ? "Đang đồng bộ..." : "Gửi thay đổi lên Sheet"}</span>
               </Button>
-              <Button type="button" variant="secondary" disabled={!canEdit || downloadingTemplate} onClick={() => void downloadTemplate()}>
+              {staffCanEdit === undefined && <Button type="button" variant="secondary" disabled={!canEdit || downloadingTemplate} onClick={() => void downloadTemplate()}>
                 <Download size={16} />
                 <span className="hidden sm:inline">File mẫu</span>
-              </Button>
-              <Button type="button" disabled={!canEdit || importing} onClick={() => fileInputRef.current?.click()}>
+              </Button>}
+              {staffCanEdit === undefined && <Button type="button" disabled={!canEdit || importing} onClick={() => fileInputRef.current?.click()}>
                 <Upload size={16} />
                 {importing ? "Đang nhập…" : "Nhập Excel"}
-              </Button>
-              <Button type="button" variant="secondary" className="size-10 p-0" onClick={() => void load()} aria-label="Tải lại chấm công">
+              </Button>}
+              <Button type="button" variant="secondary" className="size-10 p-0" onClick={() => void load()} aria-label="Tải lại lịch rider">
                 <RefreshCcw className={loading ? "animate-spin" : ""} size={16} />
               </Button>
             </>
           )}
         />
-        {success ? <p className="mx-auto mt-4 max-w-[1600px] rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{success}</p> : null}
-        {error ? <p className="mx-auto mt-4 max-w-[1600px] rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
         {!canEdit && !loading ? <p className="mx-auto mt-4 max-w-[1600px] rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Tài khoản chỉ được xem lịch tuần. Cần quyền Admin hoặc Leader để chỉnh sửa.</p> : null}
       </>
     );
@@ -722,7 +753,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
     <div className="mx-auto max-w-[1600px] space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between ops-page-header">
         <div>
-          <h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Chấm công rider</h1>
+          <h1 className="text-xl font-bold text-slate-950 sm:text-2xl">Lịch rider</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2 ops-page-actions">
           <input
@@ -806,12 +837,13 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
           <button type="button" aria-label="Đóng" className="absolute inset-0" onClick={() => setShowSheetSync(false)} />
           <form onSubmit={syncGoogleSheet} className="app-modal-panel relative z-10 w-full max-w-lg space-y-4 rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl">
             <div className="flex items-start justify-between gap-3">
-              <div><h2 className="text-lg font-bold text-slate-950">Đồng bộ Google Sheet</h2><p className="mt-1 text-sm text-slate-500">Web đọc tab OFF; sau khi lưu link, mọi lần đổi lịch trên web cũng tự ghi ngược vào Sheet.</p></div>
+              <div><h2 className="text-lg font-bold text-slate-950">Lấy lịch từ Google Sheet OFF</h2><p className="mt-1 text-sm text-slate-500">Đọc tab OFF cho tuần hoặc tháng đã chọn.</p></div>
               <Button type="button" variant="ghost" className="size-9 p-0" onClick={() => setShowSheetSync(false)}><X size={18} /></Button>
             </div>
-            <label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Link Google Sheet</span><Input required type="url" value={sheetUrl} onChange={(event) => setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Link Google Sheet</span><Input required type="url" readOnly={staffCanEdit !== undefined} value={sheetUrl} onChange={(event) => setSheetUrl(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." /></label>
             <div className="grid gap-3 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Phạm vi</span><Select value={sheetSyncRange} onChange={(event) => setSheetSyncRange(event.target.value as "week" | "month")}><option value="week">1 tuần chứa ngày đã chọn</option><option value="month">Toàn bộ tháng đang xem</option></Select></label><label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Khoảng sẽ đồng bộ</span><Input readOnly value={sheetSyncRange === "week" ? `Tuần chứa ${formatSelectedDate(selectedDate)}` : `Tháng ${month}`} /></label></div>
             <p className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">Sheet vẫn để <strong>Private</strong>. Chia sẻ quyền <strong>Editor</strong> cho Service Account: <strong className="break-all">{serviceAccountEmail}</strong>. Hệ thống chỉ đọc/ghi tab <strong>OFF</strong>.</p>
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
             <div className="flex justify-end gap-2">{syncingSheet ? <Button type="button" variant="secondary" onClick={() => sheetSyncAbortRef.current?.abort()}>Dừng đồng bộ</Button> : <Button type="button" variant="secondary" onClick={() => setShowSheetSync(false)}>Hủy</Button>}<Button type="submit" disabled={syncingSheet || !sheetUrl}>{syncingSheet ? <RefreshCcw className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />}{syncingSheet ? "Đang đồng bộ..." : "Đồng bộ ngay"}</Button></div>
           </form>
         </div>
@@ -1018,7 +1050,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <Link
-                      href={`/attendance/riders/${rider.id}?month=${month}`}
+                      href={`/team/rider-schedule/${rider.id}?month=${month}`}
                       className="block truncate font-bold text-slate-950 underline-offset-4 hover:text-blue-700 hover:underline"
                     >
                       {rider.full_name ?? rider.rider_code}
@@ -1057,7 +1089,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM") }:
 
       <section className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
         <div className="border-b border-slate-200 px-4 py-3"><h2 className="font-semibold text-slate-950">Chi tiết chấm công · {formatSelectedDate(selectedDate)}</h2><p className="text-xs text-slate-500">Chọn một dòng để cập nhật lịch hoặc mở lịch sử rider.</p></div>
-        <div className="max-h-[620px] min-h-[420px] overflow-auto"><table className="w-full min-w-[1050px] table-fixed text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr><AttendanceSortHeader label="Rider" sortKey="name" current={attendanceSort} onSort={setAttendanceSort} className="w-[24%]" /><AttendanceSortHeader label="Ngày" sortKey="date" current={attendanceSort} onSort={setAttendanceSort} /><AttendanceSortHeader label="Ca" sortKey="shift" current={attendanceSort} onSort={setAttendanceSort} /><AttendanceSortHeader label="Trạng thái" sortKey="status" current={attendanceSort} onSort={setAttendanceSort} /><th className="px-4 py-3 font-semibold">Check-in</th><th className="px-4 py-3 font-semibold">Check-out</th><th className="px-4 py-3 font-semibold">Khu vực</th><th className="w-24" /></tr></thead><tbody className="divide-y divide-slate-100">{paginatedRiders.map((rider) => { const log = logMap.get(cellKey(rider.id, selectedDate)); return <tr key={rider.id} className="h-16 transition hover:bg-blue-50/50"><td className="px-4"><Link href={`/attendance/riders/${rider.id}?month=${month}`} className="font-semibold text-slate-950 hover:text-blue-700">{rider.full_name ?? rider.rider_code}</Link><p className="font-mono text-xs text-slate-500">{rider.rider_code}</p></td><td className="px-4 tabular-nums text-slate-700">{format(parseISO(selectedDate), "dd/MM/yyyy")}</td><td className="px-4 text-slate-700">{log?.shift ?? rider.current_shift ?? "—"}</td><td className="px-4"><AttendanceBadge category={attendanceCategory(log)} /></td><td className="px-4 tabular-nums text-slate-700">{attendanceTime(log, "check_in")}</td><td className="px-4 tabular-nums text-slate-700">{attendanceTime(log, "check_out")}</td><td className="px-4"><p className="truncate font-medium text-slate-700">{rider.delivery_district ?? "—"}</p><p className="truncate text-xs text-slate-500">{rider.delivery_ward ?? rider.kv ?? "—"}</p></td><td className="px-3 text-right"><Button type="button" variant="ghost" className="h-9 px-3" disabled={!canEdit} onClick={() => openEditor(rider, selectedDate)}><Pencil size={15} />Sửa</Button></td></tr>; })}{!loading && paginatedRiders.length === 0 ? <tr><td colSpan={8} className="h-72 text-center text-sm text-slate-500">Không có bản ghi phù hợp.</td></tr> : null}</tbody></table></div>
+        <div className="max-h-[620px] min-h-[420px] overflow-auto"><table className="w-full min-w-[1050px] table-fixed text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]"><tr><AttendanceSortHeader label="Rider" sortKey="name" current={attendanceSort} onSort={setAttendanceSort} className="w-[24%]" /><AttendanceSortHeader label="Ngày" sortKey="date" current={attendanceSort} onSort={setAttendanceSort} /><AttendanceSortHeader label="Ca" sortKey="shift" current={attendanceSort} onSort={setAttendanceSort} /><AttendanceSortHeader label="Trạng thái" sortKey="status" current={attendanceSort} onSort={setAttendanceSort} /><th className="px-4 py-3 font-semibold">Check-in</th><th className="px-4 py-3 font-semibold">Check-out</th><th className="px-4 py-3 font-semibold">Khu vực</th><th className="w-24" /></tr></thead><tbody className="divide-y divide-slate-100">{paginatedRiders.map((rider) => { const log = logMap.get(cellKey(rider.id, selectedDate)); return <tr key={rider.id} className="h-16 transition hover:bg-blue-50/50"><td className="px-4"><Link href={`/team/rider-schedule/${rider.id}?month=${month}`} className="font-semibold text-slate-950 hover:text-blue-700">{rider.full_name ?? rider.rider_code}</Link><p className="font-mono text-xs text-slate-500">{rider.rider_code}</p></td><td className="px-4 tabular-nums text-slate-700">{format(parseISO(selectedDate), "dd/MM/yyyy")}</td><td className="px-4 text-slate-700">{log?.shift ?? rider.current_shift ?? "—"}</td><td className="px-4"><AttendanceBadge category={attendanceCategory(log)} /></td><td className="px-4 tabular-nums text-slate-700">{attendanceTime(log, "check_in")}</td><td className="px-4 tabular-nums text-slate-700">{attendanceTime(log, "check_out")}</td><td className="px-4"><p className="truncate font-medium text-slate-700">{rider.delivery_district ?? "—"}</p><p className="truncate text-xs text-slate-500">{rider.delivery_ward ?? rider.kv ?? "—"}</p></td><td className="px-3 text-right"><Button type="button" variant="ghost" className="h-9 px-3" disabled={!canEdit} onClick={() => openEditor(rider, selectedDate)}><Pencil size={15} />Sửa</Button></td></tr>; })}{!loading && paginatedRiders.length === 0 ? <tr><td colSpan={8} className="h-72 text-center text-sm text-slate-500">Không có bản ghi phù hợp.</td></tr> : null}</tbody></table></div>
       </section>
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1188,7 +1220,7 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({
           <div className="min-w-0">
             <p className="max-w-44 truncate text-sm font-bold text-slate-950">
               <Link
-                href={`/attendance/riders/${rider.id}?month=${format(days[0], "yyyy-MM")}`}
+                href={`/team/rider-schedule/${rider.id}?month=${format(days[0], "yyyy-MM")}`}
                 className="underline-offset-4 hover:text-blue-700 hover:underline"
               >
                 {rider.full_name ?? rider.rider_code}

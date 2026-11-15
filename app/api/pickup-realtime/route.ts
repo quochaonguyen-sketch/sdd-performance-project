@@ -66,7 +66,7 @@ export async function GET(request: Request) {
       if (masks.size > 0) {
         for (const rider of built.riders) {
           if (rider.metrics) {
-            rider.metrics = maskPickupMetrics(rider.id, rider.metrics, masks) as any;
+            rider.metrics = { ...rider.metrics, ...maskPickupMetrics(rider.id, rider.metrics, masks) };
           }
           if (rider.groups && masks.has(rider.id.toLowerCase())) {
             const m = masks.get(rider.id.toLowerCase())!;

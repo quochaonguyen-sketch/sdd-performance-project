@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
 import headerStyles from "./workspace-header.module.css";
-import { Activity, BarChart3, Bike, ChevronDown, FolderKanban, LayoutGrid, Map, Settings2, Smartphone, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, Bike, CalendarDays, ChevronDown, FolderKanban, LayoutGrid, Map, Settings2, Smartphone, Table2, Columns2, ListChecks, LogOut, Menu, MessageSquarePlus, Moon, PackageOpen, PackagePlus, PackageSearch, PanelLeftClose, PanelLeftOpen, PencilRuler, Sun, Truck, UsersRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/utils/cn";
 import { APP_NAME, AppBrand, AppCopyright, SddMark } from "@/components/layout/app-brand";
@@ -30,6 +30,7 @@ const navItems = [
   { href: "/wh-dashboard", label: "iPhone / WH High Value", icon: Smartphone },
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
+  { href: "/team/rider-schedule", label: "Lịch rider", icon: CalendarDays },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/linehaul", label: "Linehaul Management", icon: Truck },
@@ -71,7 +72,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/lost", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder"];
+const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/lost", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder", "/team/rider-schedule"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "wh" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
@@ -103,7 +104,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
   const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
   const whPaths = ["/wh-dashboard"];
-  const teamPaths = ["/riders", "/team", "/notes"];
+  const teamPaths = ["/riders", "/team", "/team/rider-schedule", "/notes"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
   const moreNavItems = [
@@ -293,7 +294,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
 
       <nav className="app-taskbar" aria-label="Điều hướng nhanh">
         {mobileNavItems.filter(item=>allowedHref(item.href)).map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = isNavigationItemActive(item, pathname, null);
           const Icon = item.icon;
           return <Link key={item.href} href={rememberedHref(item.href)} aria-current={active ? "page" : undefined} className={cn("app-taskbar-link", active && "is-active")}><Icon size={19} aria-hidden="true" /><span>{item.label}</span><NavigationPendingIndicator /></Link>;
         })}
@@ -308,6 +309,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
 
 function isNavigationItemActive(item: { href: string; view?: string | null }, pathname: string, currentView: string | null) {
   const itemPath = item.href.split("?")[0];
+  if (itemPath === "/team") return pathname === itemPath;
   if (itemPath !== pathname && !pathname.startsWith(`${itemPath}/`)) return false;
   if (itemPath !== "/pickup-management" && itemPath !== "/return-orders") return true;
   return (item.view ?? null) === currentView;

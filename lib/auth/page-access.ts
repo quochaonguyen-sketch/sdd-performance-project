@@ -45,6 +45,10 @@ export function canViewPage(role:string,access:PageAccess|undefined,key:PageAcce
 export function canEditStaff(role:string,access?:PageAccess){
  return (role==="admin"||role==="leader")&&canViewPage(role,access,"team");
 }
+export function canEditRiderSchedule(role:string,access?:PageAccess){
+ return canEditStaff(role,access)||(["leader","member"].includes(role)&&
+  (canViewPage(role,access,"pickup_management")||canViewPage(role,access,"delivery_realtime")));
+}
 export function pageForPath(path:string):PageAccessKey|"admin"|null{
  const clean=path.split("?")[0].replace(/\/$/,"");
  if(["/role-permissions","/user-activity","/site-health"].some(p=>clean===p||clean.startsWith(p+"/")))return "admin";
@@ -69,6 +73,10 @@ const API_PAGES:Array<[string,PageAccessKey[]]>=[
 export function pagesForApi(path:string,method="GET"):PageAccessKey[]|"admin"|null{
  // Token-authenticated ingestion, public forms, auth and telemetry retain their own guards.
  if(path==="/api/attendance/schedule/google-webhook")return null;
+ if(path==="/api/attendance/schedule/sync")return method==="GET" ? null : ["team"];
+ if(path==="/api/attendance/schedule/approved-off")return ["team"];
+ if(["/api/attendance/schedule","/api/attendance/schedule/google-sheet","/api/attendance/schedule/reconcile"].includes(path)||
+    /^\/api\/attendance\/riders\/[^/]+$/.test(path))return ["pickup_management","delivery_realtime","team"];
  if(path==="/api/admin"||path.startsWith("/api/admin/"))return "admin";
  if(!["GET","HEAD","OPTIONS"].includes(method)&&(/^\/api\/riders(?:\/|$)/.test(path)))return ["riders"];
  return API_PAGES.find(([prefix])=>path===`/api/${prefix}`||path.startsWith(`/api/${prefix}/`))?.[1]??null;

@@ -17,10 +17,10 @@ export async function POST(request: Request) {
   const parsed = connectionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Cấu hình AI không hợp lệ." }, { status: 400 });
 
-  const apiKey = process.env.SHOPAIKEY_API_KEY;
+  const apiKey = process.env.SHOPAIKEY_API_KEY?.trim();
   if (!apiKey) return NextResponse.json({ success: false, error: "Chưa cấu hình SHOPAIKEY_API_KEY trên máy chủ." }, { status: 503 });
-  const baseUrl = (process.env.SHOPAIKEY_BASE_URL ?? "https://api.shopaikey.com/v1").replace(/\/$/, "");
-  const rawModel = process.env.SHOPAIKEY_MODEL || parsed.data.model;
+  const baseUrl = (process.env.SHOPAIKEY_BASE_URL?.trim() || "https://api.shopaikey.com/v1").replace(/\/+$/, "");
+  const rawModel = process.env.SHOPAIKEY_MODEL?.trim() || parsed.data.model;
   const model = (rawModel === "gpt-4.1-mini" || rawModel === "qwen3:4b-instruct") ? "gemini-2.5-flash" : rawModel;
   if (!baseUrl) return NextResponse.json({ success: false, error: "URL phải bắt đầu bằng http:// hoặc https:// và không chứa tài khoản trong URL." }, { status: 400 });
 

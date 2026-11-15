@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { canManageOperations } from "@/lib/auth/permissions";
+import { canEditRiderSchedule } from "@/lib/auth/page-access";
+import { loadRoleAccess } from "@/lib/auth/role-access-server";
+import { readScheduleArchive } from "@/lib/attendance/schedule-archive";
 
 const idSchema = z.string().uuid();
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -58,7 +60,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ success: false, error: "Không tìm thấy rider" }, { status: 404 });
   }
 
-  const { data: logs, error: logsError } = await session.admin
+  const archived = await readScheduleArchive(session.admin, parsedMonth.data, rider.rider_code);
+  const { data: logs, error: logsError } = archived !== null ? { data: archived, error: null } : await session.admin
     .from("attendance_logs")
     .select("*")
     .eq("rider_code", rider.rider_code)
@@ -73,7 +76,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   return NextResponse.json({
     success: true,
-    can_edit: canManageOperations(session.role),
+    can_edit: canEditRiderSchedule(session.role, await loadRoleAccess(session.role)),
     rider,
     logs: logs ?? [],
   });

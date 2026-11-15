@@ -5,11 +5,13 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { TtlCache } from "../lib/cache/ttl-cache.ts";
 
+type SampleRow = { shipment_id: string; area: string; district: string; ward: string };
+
 function fixture({ signedIn = true, allowed = true, snapshotId = "snap-123", rows = [], fail = false }: {
   signedIn?: boolean;
   allowed?: boolean;
   snapshotId?: string | null;
-  rows?: any[];
+  rows?: SampleRow[];
   fail?: boolean;
 } = {}) {
   let headReads = 0;
@@ -71,7 +73,7 @@ function fixture({ signedIn = true, allowed = true, snapshotId = "snap-123", row
       if (name === "next/server") {
         return {
           NextResponse: {
-            json: (body: any, init?: any) => new Response(JSON.stringify(body), {
+            json: (body: unknown, init?: ResponseInit) => new Response(JSON.stringify(body), {
               status: init?.status ?? 200,
               headers: new Headers(init?.headers ?? { "content-type": "application/json" }),
             }),
@@ -97,8 +99,8 @@ function fixture({ signedIn = true, allowed = true, snapshotId = "snap-123", row
         return {
           COLUMNS: "shipment_id,area,district,ward,cot_group,zone_id,order_type,status,received_time,snapshot_id,snapshot_at",
           PAGE_ROWS: 1000,
-          normalizeRow: (r: any) => r,
-          deliveryInventoryRows: (r: any) => r,
+          normalizeRow: (row: SampleRow) => row,
+          deliveryInventoryRows: (input: SampleRow[]) => input,
         };
       }
       throw new Error(`Unexpected require: ${name}`);
@@ -124,7 +126,7 @@ test("inventory-delivery head check returns snapshot info without fetching rows"
   const f = fixture({ snapshotId: "snap-abc" });
   const res = await f.run("http://localhost/api/inventory-delivery?head=1");
   assert.equal(res.status, 200);
-  const json = await res.json() as any;
+  const json = await res.json() as { success: boolean; snapshotId: string; rows?: SampleRow[] };
   assert.equal(json.success, true);
   assert.equal(json.snapshotId, "snap-abc");
   assert.equal(json.rows, undefined);
@@ -139,7 +141,7 @@ test("inventory-delivery caches snapshot payload and serves subsequent requests 
   const res1 = await f.run("http://localhost/api/inventory-delivery");
   assert.equal(res1.status, 200);
   assert.equal(res1.headers.get("X-Data-Cache"), "MISS");
-  const json1 = await res1.json() as any;
+  const json1 = await res1.json() as { success: boolean; rows: SampleRow[] };
   assert.equal(json1.success, true);
   assert.equal(json1.rows.length, 1);
 

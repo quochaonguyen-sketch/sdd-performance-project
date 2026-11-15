@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { buildPickupRealtime, readAllPages } from "../lib/pickup/realtime.ts";
+import { maskPickupMetrics } from "../lib/rider-volume-mask/calculations.ts";
 
 function fixture(current = true, aligned = true) {
   let signedIn = true, permitted = true, fail = "", clients = 0;
@@ -40,17 +41,18 @@ function fixture(current = true, aligned = true) {
       return Promise.resolve({ data: { rows: [], snapshotAt: stamp }, error: fail === "inventory" ? { message: "offline" } : null });
     },
   };
-  const exports: { GET?: () => Promise<Response> } = {};
+  const exports: { GET?: (request: Request) => Promise<Response> } = {};
   const source = ts.transpileModule(readFileSync("app/api/pickup-realtime/route.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  runInNewContext(source, { exports, Date, Intl, require: (name: string) => {
+  runInNewContext(source, { exports, Date, Intl, URL, require: (name: string) => {
     if (name === "next/server") return { NextResponse: Response };
     if (name === "@/lib/auth/current-user") return { getCurrentUserContext: async () => signedIn ? { profile: { role: "member", permissions: {} } } : null };
     if (name === "@/lib/auth/permissions") return { canAccessPickupManagement: () => permitted };
     if (name === "@/lib/supabase/admin") return { createAdminClient: () => { clients++; return db; } };
     if (name === "@/lib/pickup/realtime") return { buildPickupRealtime, readAllPages };
+    if (name === "@/lib/rider-volume-mask/service") return { getActiveVolumeMaskMap: async () => new Map(), maskPickupMetrics };
     throw Error(name);
   } });
-  return { run: () => exports.GET!(), release, calls, expected: () => buildPickupRealtime(profiles, live, groups, summary),
+  return { run: () => exports.GET!(new Request("http://localhost/api/pickup-realtime")), release, calls, expected: () => buildPickupRealtime(profiles, live, groups, summary),
     state: () => clients, signOut: () => { signedIn = false; }, deny: () => { permitted = false; }, fail: (table: string) => { fail = table; } };
 }
 

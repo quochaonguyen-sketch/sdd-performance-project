@@ -58,62 +58,78 @@ export function RiderVolumeMaskView({ currentUserEmail }: { currentUserEmail: st
   // Table filter
   const [tableFilter, setTableFilter] = useState("");
 
-  const loadMasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/admin/rider-volume-mask", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Không thể tải danh sách điều chỉnh");
-      }
-      setMasks(data.masks ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Lỗi kết nối");
-    } finally {
-      setLoading(false);
-    }
+  const loadMasks = useCallback((signal?: AbortSignal) => {
+    return fetch("/api/admin/rider-volume-mask", { cache: "no-store", signal })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Không thể tải danh sách điều chỉnh");
+        }
+        if (!signal?.aborted) setMasks(data.masks ?? []);
+      })
+      .catch((err: unknown) => {
+        if (!signal?.aborted) setError(err instanceof Error ? err.message : "Lỗi kết nối");
+      })
+      .finally(() => {
+        if (!signal?.aborted) setLoading(false);
+      });
   }, []);
 
-  useEffect(() => {
+  function refreshMasks() {
+    setLoading(true);
+    setError(null);
     void loadMasks();
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadMasks(controller.signal);
+    return () => controller.abort();
   }, [loadMasks]);
 
   // Debounced rider search for autocomplete
   useEffect(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      return;
-    }
+    if (searchQuery.trim().length < 2) return;
 
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
         const res = await fetch(
           `/api/admin/rider-volume-mask?search=${encodeURIComponent(searchQuery.trim())}`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: controller.signal }
         );
         const data = await res.json();
-        if (data.success && Array.isArray(data.riders)) {
+        if (!controller.signal.aborted && data.success && Array.isArray(data.riders)) {
           setSearchResults(data.riders);
           setShowDropdown(data.riders.length > 0);
         }
       } catch {
         // ignore search error
       } finally {
-        setSearching(false);
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 250);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [searchQuery]);
+
+  function updateSearchQuery(value: string) {
+    setSearchQuery(value);
+    if (value.trim().length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      setSearching(false);
+    }
+  }
 
   const handleSelectRider = (r: SearchRiderItem) => {
     setRiderCode(r.rider_code);
     setRiderName(r.full_name || r.rider_code);
-    setSearchQuery("");
-    setShowDropdown(false);
+    updateSearchQuery("");
   };
 
   const resetForm = () => {
@@ -124,8 +140,7 @@ export function RiderVolumeMaskView({ currentUserEmail }: { currentUserEmail: st
     setScope("all");
     setIsActive(true);
     setNote("");
-    setSearchQuery("");
-    setShowDropdown(false);
+    updateSearchQuery("");
   };
 
   const handleEdit = (mask: RiderVolumeMask) => {
@@ -180,7 +195,7 @@ export function RiderVolumeMaskView({ currentUserEmail }: { currentUserEmail: st
           : `Đã thêm điều chỉnh cho rider ${riderCode} (hiển thị ${percent}%).`
       );
       resetForm();
-      void loadMasks();
+      refreshMasks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lỗi lưu cấu hình");
     } finally {
@@ -354,7 +369,7 @@ export function RiderVolumeMaskView({ currentUserEmail }: { currentUserEmail: st
                     <Input
                       placeholder="Tìm theo tên hoặc mã rider (VD: 149603, Dũng...)"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => updateSearchQuery(e.target.value)}
                       className="pl-9"
                     />
                     {searching && (
@@ -541,7 +556,7 @@ export function RiderVolumeMaskView({ currentUserEmail }: { currentUserEmail: st
                   className="h-8 pl-8 text-xs w-48 sm:w-60"
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={loadMasks} title="Tải lại">
+              <Button variant="outline" size="sm" onClick={refreshMasks} title="Tải lại">
                 <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
               </Button>
             </div>

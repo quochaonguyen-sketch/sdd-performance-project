@@ -63,6 +63,7 @@ interface WeeklyAttendanceDashboardProps {
   onChangeWeek: (date: string) => void;
   onStatusChange: (rider: Rider, date: string, status: WeeklyScheduleValue) => void;
   actions: React.ReactNode;
+  notice?: React.ReactNode;
 }
 
 export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard({
@@ -88,6 +89,7 @@ export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard
   onChangeWeek,
   onStatusChange,
   actions,
+  notice,
 }: WeeklyAttendanceDashboardProps) {
   const [tablePage, setTablePage] = useState(1);
   const tablePageSize = 50;
@@ -129,10 +131,12 @@ export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard
     <div className="mx-auto max-w-[1600px] space-y-6">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between ops-page-header">
         <div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Chấm công · Theo tuần</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Lịch rider</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">{actions}</div>
       </header>
+
+      {notice}
 
       <section aria-label="Tuần và bộ lọc chấm công" className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -170,7 +174,7 @@ export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-semibold text-slate-950">Chi tiết chấm công rider</h2>
+            <h2 className="font-semibold text-slate-950">Lịch làm và nghỉ theo tuần</h2>
             <p className="mt-0.5 text-sm text-slate-500">{displayedRiders.length} rider · sắp xếp theo cột, quận, phường</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-600">
@@ -190,7 +194,7 @@ export const WeeklyAttendanceDashboard = memo(function WeeklyAttendanceDashboard
         />
         <div className="flex flex-col gap-3 border-t border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs font-semibold text-slate-500">
-            {(safeTablePage - 1) * tablePageSize + 1}–{Math.min(safeTablePage * tablePageSize, displayedRiders.length)} / {displayedRiders.length}
+            {displayedRiders.length ? (safeTablePage - 1) * tablePageSize + 1 : 0}–{Math.min(safeTablePage * tablePageSize, displayedRiders.length)} / {displayedRiders.length}
           </p>
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" className="size-9 p-0" disabled={safeTablePage <= 1} onClick={() => setTablePage((p) => p - 1)} aria-label="Trang trước">
@@ -223,7 +227,7 @@ function DistrictAttendanceBreakdown({ date, rows }: { date: string; rows: Array
 function StatLine({ label, value, dot }: { label: string; value: number; dot: string }) { return <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-slate-500"><span className={`size-1.5 rounded-full ${dot}`} />{label}</span><strong className="tabular-nums text-slate-800">{value}</strong></div>; }
 
 export const AttendanceTable = memo(function AttendanceTable({ riders, days, logMap, selectedDate, loading, canEdit, savingCells, onStatusChange }: { riders: Rider[]; days: Date[]; logMap: Map<string, AttendanceLog>; selectedDate: string; loading: boolean; canEdit: boolean; savingCells: Set<string>; onStatusChange: (rider: Rider, date: string, status: WeeklyScheduleValue) => void }) {
-  return <div className="max-h-[640px] overflow-auto"><table className="w-full min-w-[1240px] border-separate border-spacing-0 text-left"><thead className="sticky top-0 z-30 bg-slate-50"><tr><th className="sticky left-0 z-40 w-72 border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Rider · Cột · Quận · Phường</th>{days.map((day) => { const date = format(day, "yyyy-MM-dd"); return <th key={date} className={`min-w-36 border-b border-slate-200 px-2 py-3 text-center ${date === selectedDate ? "bg-blue-50" : ""}`}><p className="text-xs font-semibold uppercase text-slate-500">{format(day, "EEE", { locale: vi })}</p><p className="mt-0.5 text-sm font-bold text-slate-900">{format(day, "dd/MM")}</p></th>; })}</tr></thead><tbody>{loading ? <tr><td colSpan={8} className="h-48 text-center text-sm text-slate-500">Đang tải dữ liệu chấm công…</td></tr> : riders.length === 0 ? <tr><td colSpan={8} className="h-48 text-center text-sm text-slate-500">Không có rider phù hợp với bộ lọc.</td></tr> : riders.map((rider, index) => <tr key={rider.id} className="group"><td className={`sticky left-0 z-20 border-b border-r border-slate-200 px-4 py-3 ${index % 2 ? "bg-slate-50" : "bg-white"}`}><div className="flex items-start gap-2"><Link href={`/attendance/riders/${rider.id}?month=${format(days[0], "yyyy-MM")}`} className="block max-w-44 truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{rider.full_name ?? rider.rider_code}</Link>{hasWeekOff(rider, days, logMap) ? <span className="inline-flex shrink-0 rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-600" title="Tuần này có lịch OFF">OFF</span> : null}</div><p className="mt-0.5 font-mono text-[11px] text-slate-500">{rider.rider_code}</p><p className="mt-1 truncate text-[11px] text-slate-400">Cột {rider.cot ?? "—"} · {canonicalDistrictShortName(rider.delivery_district) || "Chưa xếp quận"} · {rider.delivery_ward ?? "Chưa xếp phường"}</p></td>{days.map((day) => { const date = format(day, "yyyy-MM-dd"); const key = `${rider.id}:${date}`; const log = logMap.get(key); const saving = savingCells.has(key); const currentStatus = scheduleValue(log); return <td key={date} className={`border-b border-slate-100 px-2 py-3 text-center ${date === selectedDate ? "bg-blue-50/50" : ""}`}><Select aria-label={`Trạng thái ${rider.full_name ?? rider.rider_code} ngày ${format(day, "dd/MM/yyyy")}`} title={statusTooltip(log)} className={`h-9 min-w-32 border font-semibold shadow-sm transition-colors ${saving ? "border-slate-200 bg-slate-100 text-slate-500" : scheduleToneClass(currentStatus)}`} value={currentStatus} disabled={!canEdit || saving} onChange={(event) => onStatusChange(rider, date, event.target.value as WeeklyScheduleValue)}>{WEEKLY_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{saving && option.value === currentStatus ? "Đang lưu…" : option.label}</option>)}</Select></td>; })}</tr>)}</tbody></table></div>;
+  return <div className="max-h-[640px] overflow-auto" role="region" aria-label="Bảng lịch rider theo tuần" tabIndex={0}><table className="w-full min-w-[1240px] border-separate border-spacing-0 text-left"><thead className="sticky top-0 z-30 bg-slate-50"><tr><th className="sticky left-0 z-40 w-36 sm:w-72 border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Rider · Cột · Quận · Phường</th>{days.map((day) => { const date = format(day, "yyyy-MM-dd"); return <th key={date} className={`min-w-36 border-b border-slate-200 px-2 py-3 text-center ${date === selectedDate ? "bg-blue-50" : ""}`}><p className="text-xs font-semibold uppercase text-slate-500">{format(day, "EEE", { locale: vi })}</p><p className="mt-0.5 text-sm font-bold text-slate-900">{format(day, "dd/MM")}</p></th>; })}</tr></thead><tbody>{loading ? <tr><td colSpan={8} className="h-48 text-center text-sm text-slate-500">Đang tải dữ liệu chấm công…</td></tr> : riders.length === 0 ? <tr><td colSpan={8} className="h-48 text-center text-sm text-slate-500">Không có rider phù hợp với bộ lọc.</td></tr> : riders.map((rider, index) => <tr key={rider.id} className="group"><td className={`sticky left-0 z-20 border-b border-r border-slate-200 px-4 py-3 ${index % 2 ? "bg-slate-50" : "bg-white"}`}><div className="flex items-start gap-2"><Link href={`/team/rider-schedule/${rider.id}?month=${format(days[0], "yyyy-MM")}`} className="block max-w-28 truncate sm:max-w-44 text-sm font-semibold text-slate-900 hover:text-blue-700">{rider.full_name ?? rider.rider_code}</Link>{hasWeekOff(rider, days, logMap) ? <span className="inline-flex shrink-0 rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-600" title="Tuần này có lịch OFF">OFF</span> : null}</div><p className="mt-0.5 font-mono text-[11px] text-slate-500">{rider.rider_code}</p><p className="mt-1 truncate text-[11px] text-slate-400">Cột {rider.cot ?? "—"} · {canonicalDistrictShortName(rider.delivery_district) || "Chưa xếp quận"} · {rider.delivery_ward ?? "Chưa xếp phường"}</p></td>{days.map((day) => { const date = format(day, "yyyy-MM-dd"); const key = `${rider.id}:${date}`; const log = logMap.get(key); const saving = savingCells.has(key); const currentStatus = scheduleValue(log); return <td key={date} className={`border-b border-slate-100 px-2 py-3 text-center ${date === selectedDate ? "bg-blue-50/50" : ""}`}><Select aria-label={`Trạng thái ${rider.full_name ?? rider.rider_code} ngày ${format(day, "dd/MM/yyyy")}`} title={statusTooltip(log)} className={`h-9 min-w-32 border font-semibold shadow-sm transition-colors ${saving ? "border-slate-200 bg-slate-100 text-slate-500" : scheduleToneClass(currentStatus)}`} value={currentStatus} disabled={!canEdit || saving} onChange={(event) => onStatusChange(rider, date, event.target.value as WeeklyScheduleValue)}>{WEEKLY_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{saving && option.value === currentStatus ? "Đang lưu…" : option.label}</option>)}</Select></td>; })}</tr>)}</tbody></table></div>;
 });
 
 export function StatusBadge({ status, saving = false }: { status: WeeklyAttendanceStatus; saving?: boolean }) {

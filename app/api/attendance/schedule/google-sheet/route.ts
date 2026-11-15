@@ -5,13 +5,15 @@ import { z } from "zod";
 import { createPrivateKey, createSign } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { canManageOperations } from "@/lib/auth/permissions";
+import { canEditRiderSchedule } from "@/lib/auth/page-access";
+import { loadRoleAccess } from "@/lib/auth/role-access-server";
 import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
+import { withAttendanceSheetWriter } from "@/lib/google/attendance-sheet-sync";
 
 const bodySchema = z.object({
   sheet_url: z.url().max(1000),
   range_mode: z.enum(["week", "month"]),
-  anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  anchor_date: z.iso.date(),
 });
 type Status =
   | "OFF_WEEKLY"
@@ -94,7 +96,7 @@ async function googleAccessToken() {
 export async function GET() {
   const session = await adminSession();
   if (!session) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!canManageOperations(session.role)) return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch" }, { status: 403 });
+  if (!canEditRiderSchedule(session.role, await loadRoleAccess(session.role))) return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch" }, { status: 403 });
   const email = cleanCredential(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) || null;
   return NextResponse.json({ success: true, configured: Boolean(email && cleanCredential(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)), service_account_email: email });
 }
@@ -102,13 +104,22 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await adminSession();
   if (!session) return NextResponse.json({ success: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!canManageOperations(session.role)) return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch" }, { status: 403 });
+  if (!canEditRiderSchedule(session.role, await loadRoleAccess(session.role))) return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch" }, { status: 403 });
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Link Google Sheet không hợp lệ" }, { status: 400 });
   const id = sheetId(parsed.data.sheet_url);
   if (!id) return NextResponse.json({ success: false, error: "Không đọc được ID từ link Google Sheet" }, { status: 400 });
   const range = syncRange(parsed.data.range_mode, parsed.data.anchor_date);
+  try {
+    const result = await withAttendanceSheetWriter(session.admin, () => pullOffSchedule(session, id, range, request));
+    return result ?? NextResponse.json({ success: false, error: "Có lượt đồng bộ đang chạy. Hãy thử lại sau." }, { status: 409 });
+  } catch {
+    return NextResponse.json({ success: false, error: "Chưa bắt đầu được lượt lấy lịch OFF." }, { status: 503 });
+  }
+}
 
+async function pullOffSchedule(session: NonNullable<Awaited<ReturnType<typeof adminSession>>>, id: string,
+  range: { start: string; end: string }, request: Request) {
   let rows: unknown[][];
   try {
     const token = await googleAccessToken();
@@ -116,40 +127,49 @@ export async function POST(request: Request) {
     const source = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]) });
     const result = await source.json().catch(() => null) as { values?: unknown[][]; error?: { message?: string } } | null;
     if (!source.ok) throw new Error(result?.error?.message ?? "Google Sheets API từ chối truy cập");
-    rows = result?.values ?? [];
+    if (!result?.values?.length) throw Error("Tab OFF không có tiêu đề hoặc không đọc được dữ liệu.");
+    rows = result.values;
   } catch (error) { return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Không đọc được sheet OFF" }, { status: 400 }); }
 
   const fallbackYear = Number(range.start.slice(0, 4));
   const issues: Array<{ row: number; error: string }> = [];
   const records = new Map<string, { rider_code: string; work_date: string; status: Status; source_row: number }>();
+  const seen = new Set<string>();
   rows.forEach((row, index) => {
     const code = String(row[0] ?? "").trim();
     if (!code || ["id", "rider id"].includes(normalize(code))) return;
-    const workDate = dateValue(row[2], fallbackYear); const status = statusValue(row[3]);
-    if (!workDate || !status) { if (row.slice(0, 4).some((cell) => String(cell ?? "").trim())) issues.push({ row: index + 1, error: !workDate ? "Ngày không hợp lệ" : "Trạng thái không hợp lệ" }); return; }
-    if (workDate >= range.start && workDate <= range.end) records.set(`${code}|${workDate}`, { rider_code: code, work_date: workDate, status, source_row: index + 1 });
+    const day = dateValue(row[2], fallbackYear);
+    if (!day || !z.iso.date().safeParse(day).success) { issues.push({ row: index + 1, error: "Ngày không hợp lệ" }); return; }
+    if (day < range.start || day > range.end) return;
+    const key = `${code}|${day}`;
+    seen.add(key);
+    const status = statusValue(row[3]);
+    if (!status) { issues.push({ row: index + 1, error: "Trạng thái không hợp lệ" }); return; }
+    records.set(key, { rider_code: code, work_date: day, status, source_row: index + 1 });
   });
 
   const codes = Array.from(new Set(Array.from(records.values(), (item) => item.rider_code)));
-  const { data: riders, error: riderError } = codes.length ? await session.admin.from("riders").select("id,rider_code").in("kv", OPERATING_AREAS).in("rider_code", codes) : { data: [], error: null };
-  if (riderError) return NextResponse.json({ success: false, error: riderError.message }, { status: 400 });
-  const riderMap = new Map((riders ?? []).map((rider) => [rider.rider_code, rider.id]));
+  const riderMap = new Map<string, string>();
+  for (let offset = 0; offset < codes.length; offset += 150) {
+    const { data: riders, error } = await session.admin.from("riders").select("id,rider_code").in("kv", OPERATING_AREAS)
+      .in("rider_code", codes.slice(offset, offset + 150));
+    if (error) return NextResponse.json({ success: false, error: "Chưa đối chiếu được rider." }, { status: 502 });
+    for (const rider of riders ?? []) riderMap.set(rider.rider_code, rider.id);
+  }
   const missing = codes.filter((code) => !riderMap.has(code));
   const missingSet = new Set(missing);
   for (const item of records.values()) {
     if (missingSet.has(item.rider_code)) issues.push({ row: item.source_row, error: `ID ${item.rider_code} chưa tồn tại trên web` });
   }
 
-  const syncedAt = new Date().toISOString();
-  const sheetKeys = new Set(records.keys());
   const payload = Array.from(records.values())
     .filter((item) => riderMap.has(item.rider_code))
-    .map((item) => ({ rider_code: item.rider_code, work_date: item.work_date, status: item.status, rider_id: riderMap.get(item.rider_code), raw_data: { source: "google_sheet_off", spreadsheet_id: id, synced_at: syncedAt } }));
-  for (let index = 0; index < payload.length; index += 500) { if (request.signal.aborted) return new NextResponse(null, { status: 499 }); const { error } = await session.admin.from("attendance_logs").upsert(payload.slice(index, index + 500), { onConflict: "rider_code,work_date" }); if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 }); }
-
-  const { data: previous } = await session.admin.from("attendance_logs").select("id,rider_code,work_date").contains("raw_data", { source: "google_sheet_off", spreadsheet_id: id }).gte("work_date", range.start).lte("work_date", range.end);
-  const staleIds = (previous ?? []).filter((item) => !sheetKeys.has(`${item.rider_code}|${String(item.work_date).slice(0, 10)}`)).map((item) => item.id);
-  for (let index = 0; index < staleIds.length; index += 500) { const { error } = await session.admin.from("attendance_logs").delete().in("id", staleIds.slice(index, index + 500)); if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 }); }
+    .map((item) => ({ rider_code: item.rider_code, work_date: item.work_date, status: item.status, rider_id: riderMap.get(item.rider_code) }));
+  if (request.signal.aborted) return new NextResponse(null, { status: 499 });
+  const { data: result, error } = await session.admin.rpc("import_google_rider_schedule", {
+    p_rows: payload, p_seen: [...seen], p_from: range.start, p_to: range.end, p_spreadsheet: id,
+  });
+  if (error || !result) return NextResponse.json({ success: false, error: "Chưa lưu được lịch từ Google Sheet." }, { status: 502 });
 
   // Xóa cache lịch để trang Attendance thấy ngay dữ liệu mới thay vì chờ 30s TTL
   {
@@ -159,6 +179,7 @@ export async function POST(request: Request) {
     if (endMonth !== startMonth) invalidateAttendanceCache(endMonth);
   }
 
-  await session.admin.from("activity_logs").insert({ entity_type: "attendance_schedule", action: "synced", message: `Synced OFF sheet: ${payload.length} rows`, raw_data: { spreadsheet_id: id, imported: payload.length, removed: staleIds.length, skipped: issues.length } });
-  return NextResponse.json({ success: true, imported: payload.length, removed: staleIds.length, skipped: issues.length, errors: issues, range });
+  const skipped = issues.length + Number(result.pending ?? 0);
+  await session.admin.from("activity_logs").insert({ entity_type: "attendance_schedule", action: "synced", message: `Synced OFF sheet: ${result.imported} rows`, raw_data: { spreadsheet_id: id, ...result, skipped } });
+  return NextResponse.json({ success: true, ...result, skipped, errors: issues, range });
 }

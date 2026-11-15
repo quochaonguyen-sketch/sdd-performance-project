@@ -21,19 +21,21 @@ const monthLabel = (m: string) =>
 
 export function WhDateRangePicker({ from, to, maxDate, onApply }: WhDateRangePickerProps) {
   const pickerRef = useRef<HTMLDetailsElement>(null);
-  const today = maxDate || new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-  const [currentMonth, setCurrentMonth] = useState(() => (to ? to.slice(0, 7) : from ? from.slice(0, 7) : today.slice(0, 7)));
+  const [currentMonth, setCurrentMonth] = useState(() => (
+    to || from || maxDate || new Date(Date.now() + 7 * 3600000).toISOString()
+  ).slice(0, 7));
   const [tempFrom, setTempFrom] = useState(from || "");
   const [tempTo, setTempTo] = useState(to || "");
   const [choosingEnd, setChoosingEnd] = useState(false);
 
-  // Sync internal state when external props change
-  useEffect(() => {
+  const [previousRange, setPreviousRange] = useState({ from, to });
+  if (previousRange.from !== from || previousRange.to !== to) {
+    setPreviousRange({ from, to });
     setTempFrom(from || "");
     setTempTo(to || "");
     if (to) setCurrentMonth(to.slice(0, 7));
     else if (from) setCurrentMonth(from.slice(0, 7));
-  }, [from, to]);
+  }
 
   // Click outside to close
   useEffect(() => {

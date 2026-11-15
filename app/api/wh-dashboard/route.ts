@@ -5,6 +5,7 @@ import { sourceAllowed, vietnamDay } from "@/lib/data-sources/catalog";
 import { counts, type WhDailySummary, type WhOrder } from "@/lib/wh/model";
 import { TtlCache } from "@/lib/cache/ttl-cache";
 import { operationsArchiveWindow, readOperationsArchive } from "@/lib/supabase/operations-archive";
+import { readWhSnapshots, whUsesArchive, type WhSnapshot } from "@/lib/wh/archive";
 
 interface WhRangePayload {
   day: string;
@@ -18,7 +19,6 @@ interface WhRangePayload {
   dailyBreakdown: WhDailySummary[];
 }
 
-type WhSnapshot = { report_date: string; snapshot_at: string; orders: WhOrder[] };
 const whRangeCache = new TtlCache<Omit<WhRangePayload, "canRefresh">>(30_000, 10);
 
 export async function GET(request: Request) {
@@ -78,13 +78,13 @@ export async function GET(request: Request) {
   const { yesterday } = operationsArchiveWindow();
 
   if (fromDate === toDate) {
-    const archive = fromDate < today ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate, request.signal) : null;
-    const { data, error } = archive
-      ? { data: archive[0], error: null }
-      : await admin.from("wh_tracking_snapshots").select("snapshot_at,orders")
-        .eq("station_id", "4232").eq("report_date", fromDate).maybeSingle();
-
-    if (error) {
+    let data: WhSnapshot | undefined;
+    try {
+      const archive = !whUsesArchive() && fromDate < today
+        ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate, request.signal)
+        : null;
+      data = (archive ?? await readWhSnapshots(admin, { from: fromDate, to: toDate }, request.signal))[0];
+    } catch {
       return Response.json(
         { error: "Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker." },
         { status: 503 }
@@ -133,23 +133,13 @@ export async function GET(request: Request) {
   try {
     const cacheKey = `${today}:${fromDate}:${toDate}:${mode}`;
     const result = await whRangeCache.load(cacheKey, async () => {
-      const readPrimary = async (start: string, end: string) => {
-        const { data, error } = await admin
-          .from("wh_tracking_snapshots")
-          .select("report_date, snapshot_at, orders")
-          .eq("station_id", "4232")
-          .gte("report_date", start)
-          .lte("report_date", end)
-          .order("report_date", { ascending: false });
-        if (error) throw new Error("Chưa đọc được dữ liệu WH. Kiểm tra nguồn WH / iPhone trên máy worker.");
-        return data ?? [];
-      };
-      const archive = fromDate < today
+      const read = (from: string, to: string) => readWhSnapshots(admin, { from, to });
+      const archive = !whUsesArchive() && fromDate < today
         ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate < today ? toDate : yesterday)
         : null;
       const snapshots = archive
-        ? [...(toDate >= today ? await readPrimary(today, toDate) : []), ...archive.reverse()]
-        : await readPrimary(fromDate, toDate);
+        ? [...(toDate >= today ? await read(today, toDate) : []), ...archive.reverse()]
+        : await read(fromDate, toDate);
 
       const orderMap = new Map<string, WhOrder>();
       const dailyBreakdown: WhDailySummary[] = [];

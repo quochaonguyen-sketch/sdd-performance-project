@@ -99,10 +99,10 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
 
   useEffect(() => {
     if (!open) return;
-    const initialPrompt = consumeInitialDraft();
-    if (initialPrompt) {
-      setDraft(initialPrompt);
-    }
+    const draftTimer = window.setTimeout(() => {
+      const initialPrompt = consumeInitialDraft();
+      if (initialPrompt) setDraft(initialPrompt);
+    }, 0);
     const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 50);
 
     function onKeyDown(event: KeyboardEvent) {
@@ -118,6 +118,7 @@ export function OllamaChatbox({ initialOpen = false }: { initialOpen?: boolean }
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
+      window.clearTimeout(draftTimer);
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);

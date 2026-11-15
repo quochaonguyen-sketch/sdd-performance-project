@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { operationsArchiveKinds, operationsArchiveWindow, readOperationsVersions, type OperationsArchiveKind } from "../lib/supabase/operations-archive.ts";
 import type { BacklogHourlyDay } from "../lib/dashboard/backlog-history.ts";
 import type { ReturnHistoryData } from "../lib/return-orders/history.ts";
+import { FULL_WH_VERSION, whUsesArchive } from "../lib/wh/archive.ts";
 
 async function readPayload(primary: SupabaseClient, kind: OperationsArchiveKind, day: string) {
   const signal = AbortSignal.timeout(25_000);
@@ -39,9 +40,13 @@ export async function syncOperationsArchive(primary: SupabaseClient, archive: Su
   const archived = new Map(target.data.map(row => [`${row.kind}:${row.report_date}`, row.version]));
   let failed = false;
   for (const kind of operationsArchiveKinds) {
+    if (kind === "wh" && whUsesArchive()) continue;
     try {
       const versions = await readOperationsVersions(primary, kind, since, yesterday, AbortSignal.timeout(15_000));
-      const pending = versions.filter(row => archived.get(`${kind}:${row.report_date}`) !== row.version);
+      const pending = versions.filter(row => {
+        const current = archived.get(`${kind}:${row.report_date}`);
+        return current !== row.version && !(kind === "wh" && current?.startsWith(FULL_WH_VERSION));
+      });
       let copied = 0;
       if (!dryRun) for (let i = 0; i < pending.length; i += 3) {
         const batch = pending.slice(i, i + 3);
@@ -50,9 +55,21 @@ export async function syncOperationsArchive(primary: SupabaseClient, archive: Su
         const fresh = new Map((await readOperationsVersions(primary, kind, dates[0], dates.at(-1)!, AbortSignal.timeout(15_000)))
           .map(row => [row.report_date, row.version]));
         if (rows.some(row => fresh.get(row.report_date) !== row.version)) throw Error("Nguồn vừa thay đổi. Thử lại lượt sau.");
-        const { error } = await archive.from("operations_archive_days").upsert(rows, { onConflict: "kind,report_date" })
-          .abortSignal(AbortSignal.timeout(25_000));
-        if (error) throw Error(`Không ghi được bản lưu trữ (${error.code}).`);
+        if (kind === "wh") {
+          for (const row of rows) {
+            const current = archived.get(`${kind}:${row.report_date}`);
+            const table = archive.from("operations_archive_days");
+            const write = current
+              ? table.update(row).eq("kind", kind).eq("report_date", row.report_date).eq("version", current)
+              : table.upsert(row, { onConflict: "kind,report_date", ignoreDuplicates: true });
+            const { error } = await write.abortSignal(AbortSignal.timeout(25_000));
+            if (error) throw Error(`Không ghi được bản lưu trữ WH (${error.code}).`);
+          }
+        } else {
+          const { error } = await archive.from("operations_archive_days").upsert(rows, { onConflict: "kind,report_date" })
+            .abortSignal(AbortSignal.timeout(25_000));
+          if (error) throw Error(`Không ghi được bản lưu trữ (${error.code}).`);
+        }
         copied += rows.length;
       }
       console.log(JSON.stringify({ kind, finalized: versions.length, pending: pending.length - copied, copied }));

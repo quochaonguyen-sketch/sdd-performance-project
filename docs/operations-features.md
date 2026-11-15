@@ -12,13 +12,19 @@
 - Hướng dẫn các API import tại `/imports`.
 - Excel / Google Sheet tại `/route-sheet`.
 
-Không thêm trang, menu hoặc luồng nhập điểm danh Attendance. Những bảng / API Attendance có sẵn vẫn được giữ vì lịch OFF và thế pick đang sử dụng dữ liệu này. Phạm vi dữ liệu hiện tại của dashboard và realtime KV1–KV5 được giữ.
+Mở **Lịch rider** từ mục **Workforce** ở thanh bên hoặc **Thêm** trên điện thoại. Trang tuần có bộ lọc rider, quận và COT. Bấm tên rider để xem lịch tháng.
 
 ## Đăng ký OFF
 
 Đặt `OFF_REGISTRATION_SPREADSHEET_ID` trên máy chủ và cấp quyền Editor cho Google Service Account của app trên file quản lý. Cấu hình này trỏ tới file khác với nguồn lịch OFF chấm công. Tạo tab bằng `node --env-file=.env --env-file=.env.local scripts/setup-off-registration.mts`.
 
-Mỗi ngày đăng ký có một dòng, nhiều ngày gửi cùng lượt dùng chung **Mã yêu cầu**. Quản lý cập nhật **Trạng thái** và **Ghi chú quản lý** trong Sheet. Nếu rider cần đổi ngày đã gửi, quản lý xử lý yêu cầu cũ trước khi nhận thay đổi. Duyệt trong file này là quyết định của quản lý, chưa cập nhật lịch chấm công hoặc file thế pick.
+Mỗi ngày đăng ký có một dòng, nhiều ngày gửi cùng lượt dùng chung **Mã yêu cầu**. Quản lý cập nhật **Trạng thái** và **Ghi chú quản lý** trong Sheet. Nếu rider cần đổi ngày đã gửi, quản lý xử lý yêu cầu cũ trước khi nhận thay đổi.
+
+Sau khi duyệt, vào **Lịch rider → Nhập đăng ký OFF đã duyệt**. Chọn khoảng ngày, bấm **Xem trước**, rồi **Nhập vào lịch rider**. Web bỏ qua các ngày đã có lịch và đánh dấu nghỉ theo ca để quản lý xử lý riêng vì tab OFF hiện ghi theo ngày.
+
+Khi sửa trên web, thay đổi được lưu cùng hàng đợi gửi sang Google Sheet lịch OFF. **Lấy lịch từ Sheet OFF** lấy dữ liệu vào web theo tuần hoặc tháng và giữ các thay đổi web đang chờ gửi. Nếu lần ghi không thành công, bấm **Gửi thay đổi lên Sheet** để thử lại.
+
+Trên Supabase chính, cài `prisma/approved-rider-off.sql` trước khi triển khai mã web. File Google Sheet lịch làm/nghỉ dùng `OFF_SCHEDULE_SPREADSHEET_ID` và tài khoản dịch vụ cần quyền sửa tab `OFF`.
 
 ## File Excel
 

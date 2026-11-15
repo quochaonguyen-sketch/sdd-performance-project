@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -124,7 +125,7 @@ const VOLUME_RULES = `Nếu dữ liệu chứa ward_volume hoặc câu hỏi nh�
   + Liệt kê các phường có sản lượng cao nhất (top_delivery_wards, top_pickup_wards) kèm số đơn cụ thể.
 - Trình bày dạng bảng Markdown gọn gàng, bôi đậm (**in đậm**) tên phường, quận và số lượng đơn.`;
 
-export function isGreetingOrCasual(text: string): boolean {
+function isGreetingOrCasual(text: string): boolean {
   if (!text) return false;
   const normalized = text
     .trim()
@@ -204,10 +205,10 @@ export async function POST(request: Request) {
     });
   }
 
-  const apiKey = process.env.SHOPAIKEY_API_KEY;
+  const apiKey = process.env.SHOPAIKEY_API_KEY?.trim();
   if (!apiKey) return NextResponse.json({ success: false, error: "Chưa cấu hình SHOPAIKEY_API_KEY trên máy chủ." }, { status: 503 });
-  const baseUrl = (process.env.SHOPAIKEY_BASE_URL ?? "https://api.shopaikey.com/v1").replace(/\/$/, "");
-  const rawModel = process.env.SHOPAIKEY_MODEL || parsed.data.aiConfig?.model || "gemini-2.5-flash";
+  const baseUrl = (process.env.SHOPAIKEY_BASE_URL?.trim() || "https://api.shopaikey.com/v1").replace(/\/+$/, "");
+  const rawModel = process.env.SHOPAIKEY_MODEL?.trim() || parsed.data.aiConfig?.model || "gemini-2.5-flash";
   const primaryModel = (rawModel === "gpt-4.1-mini" || rawModel === "qwen3:4b-instruct" || rawModel === "gpt-5-mini")
     ? "gemini-2.5-flash"
     : rawModel;
@@ -303,7 +304,7 @@ export async function POST(request: Request) {
       date_scope: { start: string; end: string; label: string };
       sources: string[];
       data: Record<string, unknown>;
-    } | null = rawDataContext as any;
+    } | null = rawDataContext;
     if (matchedRiders && matchedRiders.length > 0) {
       if (!dataContext) {
         dataContext = {
@@ -405,7 +406,7 @@ export async function POST(request: Request) {
     ])).filter(m => m !== "gpt-4.1-mini" && m !== "qwen3:4b-instruct");
 
     let upstream: Response | null = null;
-    let lastErrorDetail = "";
+    const providerSignal = AbortSignal.any([request.signal, AbortSignal.timeout(90_000)]);
 
     const messagesPayload = [
       { role: "system", content: `${SYSTEM_PROMPT}\n${analysis ? ANALYSIS_RULES : BRIEFING_RULES}\n${WH_RULES}\n${VOLUME_RULES}` },
@@ -415,9 +416,11 @@ export async function POST(request: Request) {
       ...parsed.data.messages,
     ];
 
-    for (const candidateModel of candidateModels) {
+    const fetchModel = async (model: string) => {
+      const headersDeadline = new AbortController();
+      const timer = setTimeout(() => headersDeadline.abort(), 15_000);
       try {
-        const res = await fetch(`${baseUrl}/chat/completions`, {
+        return await fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -425,34 +428,58 @@ export async function POST(request: Request) {
             Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            model: candidateModel,
+            model,
             stream: true,
             messages: messagesPayload,
             temperature: 0.2,
             max_tokens: maxTokens,
           }),
           cache: "no-store",
-          signal: AbortSignal.timeout(6_000),
+          signal: AbortSignal.any([providerSignal, headersDeadline.signal]),
         });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
+    for (const candidateModel of candidateModels) {
+      try {
+        let res = await fetchModel(candidateModel);
+        if (res.status === 429) {
+          const wait = retryAfterSeconds(res);
+          await res.body?.cancel().catch(() => undefined);
+          if (wait > 3) return providerBusy(wait);
+          await sleep(wait * 1000, undefined, { signal: providerSignal });
+          res = await fetchModel(candidateModel);
+          if (res.status === 429) {
+            await res.body?.cancel().catch(() => undefined);
+            return providerBusy(retryAfterSeconds(res));
+          }
+        }
         if (res.ok && res.body) {
           upstream = res;
           break;
         }
 
-        lastErrorDetail = await res.text().catch(() => "");
-        console.warn(`[AI Gateway] Model ${candidateModel} unavailable: ${lastErrorDetail.slice(0, 150)}. Retrying fallback model...`);
-      } catch (candidateErr) {
-        console.warn(`[AI Gateway] Model ${candidateModel} request threw:`, candidateErr);
+        await res.body?.cancel().catch(() => undefined);
+        if (res.status === 401) {
+          return NextResponse.json({
+            success: false,
+            error: "Khóa ShopAIKey của máy chủ bị từ chối. Hãy báo quản trị viên kiểm tra cấu hình Nova.",
+          }, { status: 502 });
+        }
+        console.warn(`[AI Gateway] Model ${candidateModel} failed with HTTP ${res.status}.`);
+      } catch (error) {
+        providerSignal.throwIfAborted();
+        console.warn(`[AI Gateway] Model ${candidateModel} could not be reached.`, error instanceof Error ? error.name : "");
       }
     }
 
     if (!upstream || !upstream.body) {
-      const providerError = getProviderError(lastErrorDetail);
       return NextResponse.json(
         {
           success: false,
-          error: providerError ?? "ShopAIKey không thể xử lý yêu cầu lúc này.",
+          error: "ShopAIKey không thể xử lý yêu cầu lúc này.",
         },
         { status: 502 },
       );
@@ -679,13 +706,18 @@ function normalizeForMemory(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase();
 }
 
-function getProviderError(detail: string) {
-  try {
-    const payload = JSON.parse(detail) as { error?: { message?: string } };
-    return payload.error?.message?.trim() || null;
-  } catch {
-    return detail.trim().slice(0, 300) || null;
-  }
+function retryAfterSeconds(response: Response) {
+  const header = response.headers.get("Retry-After")?.trim();
+  if (!header) return 1;
+  const seconds = /^\d+$/.test(header) ? Number(header) : Math.ceil((Date.parse(header) - Date.now()) / 1000);
+  return Number.isFinite(seconds) ? Math.max(0, seconds) : 1;
+}
+
+function providerBusy(seconds: number) {
+  return NextResponse.json({
+    success: false,
+    error: "Dịch vụ AI đang bận. Vui lòng thử lại sau ít phút.",
+  }, { status: 503, headers: { "Retry-After": String(seconds) } });
 }
 
 function getMaxTokens() {

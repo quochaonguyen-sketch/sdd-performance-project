@@ -69,7 +69,7 @@ export function resolveOffScheduleSpreadsheetId(sheetUrl?: string | null) {
   return null;
 }
 
-export async function googleSheetsAccessToken() {
+export async function googleSheetsAccessToken(signal?: AbortSignal) {
   const email = cleanGoogleCredential(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
   const privateKey = cleanGoogleCredential(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
   if (!email || !privateKey) {
@@ -106,6 +106,7 @@ export async function googleSheetsAccessToken() {
       assertion,
     }),
     cache: "no-store",
+    signal: signal ?? AbortSignal.timeout(12_000),
   });
   const result = await response.json().catch(() => null) as {
     access_token?: string;
@@ -151,23 +152,41 @@ async function googleJson<T>(response: Response, fallback: string) {
   return result;
 }
 
+async function readOffRows(baseUrl: string, headers: Record<string, string>, signal?: AbortSignal) {
+  const response = await fetch(
+    `${baseUrl}/${encodeURIComponent("'OFF'!A:D")}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    { headers, cache: "no-store", signal: signal ?? AbortSignal.timeout(20_000) },
+  );
+  const data = await googleJson<{ values?: unknown[][] }>(response, "Google Sheets API từ chối đọc tab OFF");
+  if (!data) throw Error("Không đọc được tab OFF.");
+  return data.values ?? [];
+}
+
+export async function readOffScheduleKeys(spreadsheetId: string, from: string, to: string, signal: AbortSignal) {
+  const token = await googleSheetsAccessToken(signal);
+  const rows = await readOffRows(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values`, { Authorization: `Bearer ${token}` }, signal);
+  const years = new Set([Number(from.slice(0, 4)), Number(to.slice(0, 4))]);
+  const keys = new Set<string>();
+  for (const row of rows.slice(1)) {
+    const code = String(row[0] ?? "").trim();
+    if (!code) continue;
+    for (const year of years) {
+      const day = dateValue(row[2], year);
+      if (day && day >= from && day <= to) keys.add(`${code}|${day}`);
+    }
+  }
+  return keys;
+}
+
 export async function syncScheduleUpdatesToGoogleSheet(
   spreadsheetId: string,
   updates: GoogleScheduleUpdate[],
   signal?: AbortSignal,
 ) {
-  const token = await googleSheetsAccessToken();
+  const token = await googleSheetsAccessToken(signal);
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values`;
-  const readResponse = await fetch(
-    `${baseUrl}/${encodeURIComponent("'OFF'!A:D")}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
-    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal },
-  );
-  const source = await googleJson<{ values?: unknown[][] }>(
-    readResponse,
-    "Google Sheets API từ chối đọc tab OFF",
-  );
-  const rows = source?.values ?? [];
+  const rows = await readOffRows(baseUrl, headers, signal);
   const rowNumbersByKey = new Map<string, number[]>();
   const blankRowNumbers: number[] = [];
 

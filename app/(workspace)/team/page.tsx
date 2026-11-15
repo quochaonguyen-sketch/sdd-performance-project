@@ -13,6 +13,7 @@ export default async function TeamPage() {
   const offSheet = canEdit ? offRegistrationSpreadsheetId() : null;
   return <ProtectedPage>
     <nav aria-label="Lịch OFF" className="mb-3 flex flex-wrap gap-2">
+      <Link href="/team/rider-schedule" className="inline-flex min-h-10 items-center rounded-md bg-[var(--color-accent)] px-3 text-sm font-semibold text-white">Lịch rider</Link>
       <Link href="/off-registration" className="inline-flex min-h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold">Đăng ký lịch OFF</Link>
       {offSheet && <a href={offRegistrationSpreadsheetLink(offSheet)} target="_blank" rel="noreferrer"
         className="inline-flex min-h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold">Quản lý đăng ký OFF ↗</a>}

@@ -59,6 +59,7 @@ let cachedRosterTime = 0;
 const ROSTER_TTL = 300_000; // 5 minutes
 
 import { fold, findMatchingRiders } from "./rider-matcher";
+import { readWhSnapshots } from "@/lib/wh/archive";
 export { fold, findMatchingRiders };
 
 export async function lookupRidersContext(
@@ -98,12 +99,7 @@ export async function lookupRidersContext(
       .select("snapshot_at, riders")
       .eq("id", 1)
       .maybeSingle(),
-    admin
-      .from("wh_tracking_snapshots")
-      .select("orders")
-      .eq("station_id", "4232")
-      .eq("report_date", day)
-      .maybeSingle(),
+    readWhSnapshots(admin, { from: day, to: day }).catch(() => []),
     admin
       .from("attendance_logs")
       .select("rider_code, status, work_date")
@@ -136,7 +132,7 @@ export async function lookupRidersContext(
     pickupRiders.filter((r) => codes.includes(r.driver_id)).map((r) => [r.driver_id, r])
   );
   const whOrders =
-    (whSnapshotRes.data?.orders as Array<{
+    (whSnapshotRes[0]?.orders as Array<{
       driver_id: string;
       driver_name?: string;
       shipment_id: string;

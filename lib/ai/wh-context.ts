@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { counts, sla, remaining, isUnassigned, isOnhold, type WhOrder, type WhStatus } from "@/lib/wh/model";
+import { readWhSnapshots, WH_STATION } from "@/lib/wh/archive";
 
 /**
  * Checks whether the user's message is asking about iPhone, WH (Kho 4232),
@@ -89,27 +90,8 @@ export async function loadWhOperationsContext(
   day: string
 ): Promise<WhAiContext | null> {
   try {
-    // 1. Fetch snapshot for station 4232 and day
-    let { data, error } = await admin
-      .from("wh_tracking_snapshots")
-      .select("station_id, report_date, snapshot_at, orders")
-      .eq("station_id", "4232")
-      .eq("report_date", day)
-      .maybeSingle();
-
-    // Fallback: If no snapshot for today, try fetching the most recent snapshot
-    if (!data && !error) {
-      const fallback = await admin
-        .from("wh_tracking_snapshots")
-        .select("station_id, report_date, snapshot_at, orders")
-        .eq("station_id", "4232")
-        .order("snapshot_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (fallback.data) {
-        data = fallback.data;
-      }
-    }
+    const [daySnapshot] = await readWhSnapshots(admin, { from: day, to: day });
+    const data = daySnapshot ?? (await readWhSnapshots(admin))[0];
 
     if (!data || !Array.isArray(data.orders)) {
       return null;
@@ -279,7 +261,7 @@ export async function loadWhOperationsContext(
     }
 
     return {
-      station_id: data.station_id || "4232",
+      station_id: WH_STATION,
       report_date: reportDate,
       snapshot_at: snapshotAt,
       is_stale: isStale,

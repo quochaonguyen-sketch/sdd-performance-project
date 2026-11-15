@@ -5,6 +5,7 @@ import { connectSeaTalk, SeaTalkError, seaTalkImage, seatalkBotConfig, seaTalkTe
 import { whSeatalkImage } from "@/lib/wh/seatalk-image";
 import { whSeatalkReport, type WhSeatalkReport } from "@/lib/wh/seatalk-report";
 import type { WhSeatalkSlot } from "@/lib/wh/seatalk-schedule";
+import { readWhSnapshots, type WhSnapshot } from "@/lib/wh/archive";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type Bot = NonNullable<ReturnType<typeof seatalkBotConfig>>;
@@ -22,9 +23,12 @@ export const whSeatalkFailure = (error: string, status: number) => json({ error 
 
 export async function loadWhSeatalkReport(admin: Admin) {
   const day = vietnamDay();
-  const { data, error } = await admin.from("wh_tracking_snapshots").select("snapshot_at,orders")
-    .eq("station_id", "4232").eq("report_date", day).maybeSingle();
-  if (error) return whSeatalkFailure("Chưa đọc được dữ liệu HV của Hub 4232.", 503);
+  let data: WhSnapshot | undefined;
+  try {
+    [data] = await readWhSnapshots(admin, { from: day, to: day });
+  } catch {
+    return whSeatalkFailure("Chưa đọc được dữ liệu HV của Hub 4232.", 503);
+  }
   if (!data) return whSeatalkFailure("Hôm nay chưa có dữ liệu HV. Hãy lấy dữ liệu WH rồi mở lại báo cáo.", 404);
   return whSeatalkReport((data.orders ?? []) as WhOrder[], day, data.snapshot_at);
 }
@@ -55,7 +59,7 @@ export async function sendWhSeatalkReport(admin: Admin, bot: Bot, latest: WhSeat
   const run = slot ? runs[slot.key] ?? { sent: 0, pending: false, failures: 0 } : undefined;
   const report = run?.report ?? latest;
   const imageCount = slot?.kind === "dashboard" ? 1 : report.riders.length + (slot ? 0 : 1);
-  const sameSnapshot = progress.snapshot_at === report.snapshotAt;
+  const sameSnapshot = Date.parse(progress.snapshot_at ?? "") === Date.parse(report.snapshotAt);
   let sent = run?.sent ?? (sameSnapshot ? progress.sent_count : 0);
   const initialSent = sent;
   let pending = false;

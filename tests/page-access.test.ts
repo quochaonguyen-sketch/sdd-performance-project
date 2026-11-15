@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {PAGE_ACCESS_OPTIONS,defaultPageAccess,normalizePageAccess,canViewPage,canEditStaff,pageForPath,pagesForApi,viewPermissions} from "../lib/auth/page-access.ts";
+import { readFileSync } from "node:fs";
+import {PAGE_ACCESS_OPTIONS,defaultPageAccess,normalizePageAccess,canViewPage,canEditStaff,canEditRiderSchedule,pageForPath,pagesForApi,viewPermissions} from "../lib/auth/page-access.ts";
 import {normalizePermissions} from "../lib/auth/permissions.ts";
 
 test("member defaults allow operational pages except restricted workspaces",()=>{
@@ -33,6 +34,22 @@ test("nested pages, query strings, APIs and prefix lookalikes map correctly",()=
  assert.deepEqual(pagesForApi("/api/riders/123/avatar","POST"),["riders"]);
  assert.equal(pagesForApi("/api/admin/role-permissions","PATCH"),"admin");
  for(const path of ["/api/import/riders","/api/public/off-requests","/api/auth/login","/api/attendance/schedule/google-webhook"])assert.equal(pagesForApi(path),null);
+});
+test("rider schedules inherit Staffing read access without giving a team-only member write access", () => {
+ assert.equal(pageForPath("/team/rider-schedule/rider-id"), "team");
+ assert.deepEqual(pagesForApi("/api/attendance/schedule/approved-off", "POST"), ["team"]);
+ assert.deepEqual(pagesForApi("/api/attendance/riders/1"), ["pickup_management", "delivery_realtime", "team"]);
+ assert.deepEqual(pagesForApi("/api/attendance/schedule/import", "POST"), ["pickup_management", "delivery_realtime"]);
+ const member = normalizePageAccess("member", { team: true, pickup_management: false, delivery_realtime: false });
+ assert.equal(canEditRiderSchedule("member", member), false);
+ assert.equal(canEditRiderSchedule("member", defaultPageAccess("member")), true);
+ assert.equal(canEditRiderSchedule("leader", normalizePageAccess("leader", { team: true, pickup_management: false, delivery_realtime: false })), true);
+});
+test("the rider schedule has its own Workforce navigation item", () => {
+ const shell = readFileSync(new URL("../components/layout/app-shell.tsx", import.meta.url), "utf8");
+ assert.match(shell, /\{ href: "\/team\/rider-schedule", label: "Lịch rider"/);
+ assert.match(shell, /const teamPaths = \[[^\]]*"\/team\/rider-schedule"/);
+ assert.match(shell, /const morePaths = \[[^\]]*"\/team\/rider-schedule"/);
 });
 test("role page visibility replaces legacy read flags without granting rider edits",()=>{
  const access=defaultPageAccess("member"),permissions=viewPermissions(normalizePermissions({},"member"),access);

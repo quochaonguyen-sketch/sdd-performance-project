@@ -50,6 +50,7 @@ import {
 import styles from "./wh.module.css";
 import { WhDateRangePicker } from "./wh-date-picker";
 import { WhSeatalkReport } from "./wh-seatalk-report";
+import { shiftCalendarDay } from "@/lib/performance/calendar";
 
 const fmt = (v: number) => v.toLocaleString("vi-VN");
 const vnDateFormatter = new Intl.DateTimeFormat("vi-VN", {
@@ -620,9 +621,9 @@ export function WhDashboard() {
   }
 
   // Active filter reference dates
-  const yesterday = new Date(Date.now() + 7 * 3600000 - 86400000).toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date(Date.now() + 7 * 3600000 - 6 * 86400000).toISOString().slice(0, 10);
-  const thirtyDaysAgo = new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+  const yesterday = shiftCalendarDay(currentDay, -1);
+  const sevenDaysAgo = shiftCalendarDay(currentDay, -6);
+  const thirtyDaysAgo = shiftCalendarDay(currentDay, -29);
 
   const isThirtyDays =
     filterMode === "range" && customFrom === thirtyDaysAgo && customTo === currentDay;

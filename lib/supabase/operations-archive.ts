@@ -1,5 +1,6 @@
 import { createOHArchiveClient } from "../onhold/archive.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { FULL_WH_VERSION } from "../wh/archive.ts";
 
 export const operationsArchiveKinds = ["return", "pickup_cot", "wh", "backlog_pickup", "backlog_delivery"] as const;
 export type OperationsArchiveKind = typeof operationsArchiveKinds[number];
@@ -11,6 +12,15 @@ export function operationsArchiveWindow() {
 }
 
 export type OperationsArchiveVersion = { report_date: string; version: string };
+
+function matchesVersion(kind: OperationsArchiveKind, row: { version: string; payload: unknown }, expected?: string) {
+  if (expected === undefined) return false;
+  if (row.version === expected) return true;
+  if (kind !== "wh" || !row.version.startsWith(FULL_WH_VERSION)) return false;
+  const [job, stamp] = JSON.parse(expected) as [string, string];
+  const snapshot = row.payload as { job_id?: string; snapshot_at?: string } | null;
+  return snapshot?.job_id === job && Date.parse(snapshot.snapshot_at ?? "") === Date.parse(stamp);
+}
 
 export async function readOperationsVersions(primary: SupabaseClient, kind: OperationsArchiveKind, from: string, to: string, signal: AbortSignal) {
   const { data, error } = await primary.rpc("read_operations_archive_versions", { p_kind: kind, p_from: from, p_to: to }).abortSignal(signal);
@@ -32,7 +42,7 @@ export async function readOperationsArchive<T>(primary: SupabaseClient, kind: Op
     const { data, error } = await archive.from("operations_archive_days").select("report_date,version,payload")
       .eq("kind", kind).in("report_date", versions.map(row => row.report_date)).order("report_date").abortSignal(request);
     const expected = new Map(versions.map(row => [row.report_date, row.version]));
-    if (error || data?.length !== expected.size || data.some(row => row.version !== expected.get(row.report_date))) return null;
+    if (error || data?.length !== expected.size || data.some(row => !matchesVersion(kind, row, expected.get(row.report_date)))) return null;
     return data.map(row => row.payload as T);
   } catch {
     return null;

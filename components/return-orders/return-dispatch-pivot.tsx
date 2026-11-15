@@ -26,22 +26,16 @@ function cotBadgeClass(cot: string) {
 }
 
 function useAging(value: string | null) {
-  const [aging, setAging] = useState<{ label: string; tone: "unknown" | "fresh" | "warning" | "danger" }>(() => {
-    if (!value) return { label: "—", tone: "unknown" as const };
-    // SSR: trả về placeholder để tránh lệch hydration, client sẽ tính lại sau mount
-    return { label: "—", tone: "unknown" as const };
-  });
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    if (!value) {
-      setAging({ label: "—", tone: "unknown" as const });
-      return;
-    }
-    const days = Math.max(0, (Date.now() - new Date(value).getTime()) / 86_400_000);
-    const label = days < 1 ? "<1 ngày" : `${days.toFixed(1)} ngày`;
-    const tone = (days <= 1 ? "fresh" : days <= 5 ? "warning" : "danger") as "fresh" | "warning" | "danger";
-    setAging({ label, tone });
+    const frame = requestAnimationFrame(() => setNow(Date.now()));
+    return () => cancelAnimationFrame(frame);
   }, [value]);
-  return aging;
+  if (!value || now === null) return { label: "—", tone: "unknown" };
+  const days = Math.max(0, (now - new Date(value).getTime()) / 86_400_000);
+  const label = days < 1 ? "<1 ngày" : `${days.toFixed(1)} ngày`;
+  const tone = days <= 1 ? "fresh" : days <= 5 ? "warning" : "danger";
+  return { label, tone };
 }
 
 function AgingBadge({ value }: { value: string | null }) {
@@ -102,11 +96,13 @@ export const ReturnPivotBoard = memo(function ReturnPivotBoard({ data }: ReturnP
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkUnassigning, setBulkUnassigning] = useState(false);
 
-  useEffect(() => {
+  const [previousData, setPreviousData] = useState(data);
+  if (previousData !== data) {
+    setPreviousData(data);
     setPivot(data);
     setSelected(new Set());
     setExpanded(new Set());
-  }, [data]);
+  }
 
   const baseRows = useMemo(
     () => pivot.rows.filter((rider) => rider.orders.cot1 + rider.orders.cot2 > 0),
