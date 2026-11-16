@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { BarChart, ChartHead, RiskStrip } from "@/components/lmhub-inventory/lmhub-inventory-charts";
 import { HeatLegend, Seg } from "@/components/lmhub-inventory/lmhub-inventory-boards";
 import { DeliveryInventoryBoard } from "@/components/lmhub-inventory/delivery-inventory-board";
+import { CopyBacklogOrders, SpxOrderLink } from "./backlog-order-actions";
 import "./delivery-inventory.css";
 import {
   COLUMNS,
@@ -323,8 +324,8 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
           </div>
           {selected ? <DeliveryOrderDialog
               selected={selected}
-              orders={pageOrders}
-              total={selectedOrders.length}
+              orders={selectedOrders}
+              pageOrders={pageOrders}
               cot1={selectedOrders.filter((row) => cotBucket(row.cot_group) === "cot1").length}
               page={safePage}
               pageCount={pageCount}
@@ -348,7 +349,7 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
 function DeliveryOrderDialog({
   selected,
   orders,
-  total,
+  pageOrders,
   cot1,
   page,
   pageCount,
@@ -358,7 +359,7 @@ function DeliveryOrderDialog({
 }: {
   selected: InventoryFocus;
   orders: InventoryRow[];
-  total: number;
+  pageOrders: InventoryRow[];
   cot1: number;
   page: number;
   pageCount: number;
@@ -368,6 +369,7 @@ function DeliveryOrderDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const total = orders.length;
   useEffect(()=>{const node=dialog.current;node?.showModal();return()=>node?.close();},[]);
 
   return (
@@ -391,14 +393,17 @@ function DeliveryOrderDialog({
           <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800">COT 2 <strong className="float-right tabular-nums">{(total - cot1).toLocaleString("vi-VN")}</strong></div>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 px-4 py-3 text-[11px] text-[var(--color-muted)]">
-        <h3 className="font-semibold text-[var(--color-ink)]">Danh sách vận đơn</h3>
-        <span>Mới về hub trước</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[11px] text-[var(--color-muted)]">
+        <div>
+          <h3 className="font-semibold text-[var(--color-ink)]">Danh sách vận đơn</h3>
+          <span>Mới về hub trước</span>
+        </div>
+        <CopyBacklogOrders disabled={!total} loadCodes={() => orders.map((row) => row.shipment_id)} />
       </div>
       <div className="delivery-order-list max-h-[min(55vh,36rem)] overflow-y-auto px-4" tabIndex={0} role="region" aria-label="Danh sách vận đơn">
-        {!orders.length ? <p className="py-8 text-center text-xs text-[var(--color-muted)]">Không có đơn khớp bộ lọc trong dữ liệu cập nhật gần nhất.</p> : (
+        {!pageOrders.length ? <p className="py-8 text-center text-xs text-[var(--color-muted)]">Không có đơn khớp bộ lọc trong dữ liệu cập nhật gần nhất.</p> : (
           <ul className="divide-y divide-[var(--color-rule)]">
-            {orders.map((row) => (
+            {pageOrders.map((row) => (
               <li key={row.shipment_id} className="py-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 break-all font-mono text-xs font-semibold text-[var(--color-ink)]">{row.shipment_id}</p>
@@ -410,6 +415,7 @@ function DeliveryOrderDialog({
                   <dt className="text-[var(--color-muted)]">Trạng thái</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.status || "—"}</dd>
                   <dt className="text-[var(--color-muted)]">Về hub</dt><dd className="text-right tabular-nums text-[var(--color-ink-2)]">{formatDateTime(row.received_time)}</dd>
                 </dl>
+                <SpxOrderLink shipmentId={row.shipment_id} />
               </li>
             ))}
           </ul>

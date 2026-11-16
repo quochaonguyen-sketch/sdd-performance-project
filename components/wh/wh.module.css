@@ -106,7 +106,7 @@
 .summaryActive{color:var(--color-accent)}
 .summaryDanger{color:var(--color-error)}
 .summaryWarning{color:var(--color-warning)}
-.summaryMinor,.summaryCompletion,.summarySla{margin-top:auto!important;padding-top:12px;border-top:1px solid var(--color-rule);min-height:43px}
+.summaryMinor,.summaryCompletion{margin-top:auto!important;padding-top:12px;border-top:1px solid var(--color-rule);min-height:43px}
 .summaryMinor{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .summaryMinor>div{display:flex;align-items:baseline;justify-content:space-between;gap:5px;flex-wrap:wrap}
 .summaryMinor dt{font-size:12px;line-height:18px;color:var(--color-muted)}
@@ -117,14 +117,15 @@
 .summaryCompletion progress::-webkit-progress-bar{background:var(--color-paper-3);border-radius:3px}
 .summaryCompletion progress::-webkit-progress-value{background:var(--color-success);border-radius:3px}
 .summaryCompletion progress::-moz-progress-bar{background:var(--color-success);border-radius:3px}
-.summarySla{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.summarySla>span{font-size:12px;font-weight:600;color:var(--color-ink-2);white-space:nowrap}
-.summarySla dl{display:flex;gap:8px;flex-wrap:wrap}
-.summarySla dl>div{display:flex;align-items:baseline;gap:8px;padding:3px 8px;border-radius:5px}
-.summarySla dt{font-size:12px;line-height:18px;white-space:nowrap}
-.summarySla dd{font-size:16px;line-height:20px;font-weight:650;font-variant-numeric:tabular-nums}
-.summaryLate{background:var(--color-error-soft);color:var(--color-error)}
-.summaryOntime{background:var(--color-success-soft);color:var(--color-success)}
+.handoverReport{container-type:inline-size;display:grid;gap:10px;min-width:0}
+.handoverReport p{margin:4px 0 0;color:var(--color-muted);font-size:12px;line-height:1.5}
+.handoverGrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.handoverCard h3{margin:0;padding:13px 14px;border-bottom:1px solid var(--color-rule);color:var(--color-ink);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.handoverCard tbody tr:last-child>*{border-bottom:0}
+.handoverTotal{background:var(--color-accent-soft);color:var(--color-ink);font-weight:700}
+.handoverOntime{color:var(--color-success);font-weight:650}
+.handoverLate{color:var(--color-error);font-weight:650}
+@container(min-width:760px){.handoverGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container(min-width:660px){.summaryGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.summaryCard:first-child{grid-column:1/-1}}
 @container(min-width:1000px){.summaryGrid{grid-template-columns:1.12fr 1fr 1fr}.summaryCard:first-child{grid-column:auto}}
 .panel{min-width:0;overflow:hidden;border:1px solid var(--color-rule,#dce5ed);border-radius:10px;background:var(--color-paper,#fff);display:flex;flex-direction:column}
@@ -153,6 +154,7 @@
 .page tbody tr{transition:background 100ms ease}
 .page tbody tr:hover{background:var(--color-paper-2,#f5f8fb)}
 .page td small,.page th small{display:block;font-weight:400;font-size:11px;color:var(--color-ink-2,#52677d);margin-top:2px}
+.handoverCard th,.handoverCard td{padding:7px clamp(6px,2cqw,12px)}
 .colRight{text-align:right!important}
 .colCenter{text-align:center!important}
 .areaPill{display:inline-flex;align-items:center;gap:6px;font-weight:650;color:var(--color-ink)}
@@ -378,55 +380,6 @@
   font-weight: 700;
   color: var(--color-accent, #0284c7);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.summarySlaHeader {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.slaTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-ink, #0f172a);
-}
-
-.slaRatioText {
-  font-size: 11px;
-  color: var(--color-muted, #64748b);
-  font-weight: 500;
-}
-
-.slaPercent {
-  font-size: 12px;
-  font-weight: 650;
-  opacity: 0.9;
-}
-
-.slaRatioBar {
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--color-paper-3, #e2e8f0);
-  overflow: hidden;
-  display: flex;
-  margin-top: 6px;
-}
-
-.slaRatioOntime {
-  height: 100%;
-  background: var(--color-success, #087b64);
-  transition: width 200ms ease;
-}
-
-.slaRatioLate {
-  height: 100%;
-  background: var(--color-error, #b42318);
-  transition: width 200ms ease;
 }
 
 /* Near Late (Chuẩn bị trễ) Styling */

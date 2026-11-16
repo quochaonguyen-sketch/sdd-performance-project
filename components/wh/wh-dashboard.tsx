@@ -30,6 +30,7 @@ import {
   getMonthRange,
   getOrderEffectiveNow,
   getSundayOfWeek,
+  emptyHandoverCounts,
   isNearLate,
   isOverdue,
   isOnhold,
@@ -44,6 +45,7 @@ import {
   type DateFilterMode,
   type Sla,
   type WhData,
+  type WhHandoverCounts,
   type WhOrder,
   type WhSortOption,
 } from "@/lib/wh/model";
@@ -53,6 +55,28 @@ import { WhSeatalkReport } from "./wh-seatalk-report";
 import { shiftCalendarDay } from "@/lib/performance/calendar";
 
 const fmt = (v: number) => v.toLocaleString("vi-VN");
+
+function HandoverCells({ stats }: { stats: WhHandoverCounts }) {
+  const slaTotal = stats.ontime + stats.late;
+
+  return <>
+    <td className={styles.colRight}>{fmt(stats.received)}</td>
+    <td className={styles.colRight}>{fmt(stats.delivered)}</td>
+    {(["ontime", "late"] as const).map((key) => (
+      <td key={key} className={styles.colRight}>
+        {slaTotal ? (
+          <>
+            <span className={key === "ontime" ? styles.handoverOntime : styles.handoverLate}>
+              {(stats[key] / slaTotal * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%
+            </span>
+            <small>{fmt(stats[key])} đơn</small>
+          </>
+        ) : <span className={styles.cellMuted}>—</span>}
+      </td>
+    ))}
+  </>;
+}
+
 const vnDateFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
   day: "2-digit",
@@ -795,7 +819,6 @@ export function WhDashboard() {
         <p className={styles.notice}>Dữ liệu đã hơn 10 phút chưa cập nhật. Kiểm tra lịch và kết nối worker.</p>
       )}
 
-      {/* Summary Cards with SLA 4H On-time / Late Rates (Created -> Delivered) */}
       <section className={styles.summary} aria-label="Tổng quan WH">
         <div className={styles.summaryGrid}>
           <article className={styles.summaryCard} aria-labelledby="wh-volume-title">
@@ -853,7 +876,6 @@ export function WhDashboard() {
             </div>
           </article>
 
-          {/* Attention & SLA SDD 3H (SOC Pending -> Delivered) Card with exact Ontime / Late rates */}
           <article className={styles.summaryCard} aria-labelledby="wh-attention-title">
             <h2 id="wh-attention-title">
               <CircleAlert size={16} aria-hidden="true" />
@@ -870,49 +892,66 @@ export function WhDashboard() {
               </div>
             </dl>
 
-            <div className={styles.summarySla}>
-              <div className={styles.summarySlaHeader}>
-                <span className={styles.slaTitle}>SLA SDD (SOC Pending → Delivered)</span>
-                <span className={styles.slaRatioText}>
-                  {c.slaTotal > 0 ? `${fmt(c.slaTotal)} đơn đã giao` : "Chưa có đơn giao"}
-                </span>
-              </div>
-              <dl>
-                <div
-                  className={styles.summaryOntime}
-                  title="Đơn giao đúng hạn trong 3 giờ từ lúc SOC nhận hàng (SOC Pending → Delivered)"
-                >
-                  <dt>On time (3H)</dt>
-                  <dd>
-                    {fmt(c.ontime)}{" "}
-                    <span className={styles.slaPercent}>({c.ontimeRate.toFixed(1)}%)</span>
-                  </dd>
-                </div>
-                <div
-                  className={styles.summaryLate}
-                  title="Đơn giao trễ hơn 3 giờ từ lúc SOC nhận hàng (SOC Pending → Delivered)"
-                >
-                  <dt>Late (3H)</dt>
-                  <dd>
-                    {fmt(c.late)}{" "}
-                    <span className={styles.slaPercent}>({c.lateRate.toFixed(1)}%)</span>
-                  </dd>
-                </div>
-              </dl>
-              {c.slaTotal > 0 && (
-                <div
-                  className={styles.slaRatioBar}
-                  aria-hidden="true"
-                  title={`On time: ${c.ontimeRate.toFixed(1)}% | Late: ${c.lateRate.toFixed(1)}%`}
-                >
-                  <div className={styles.slaRatioOntime} style={{ width: `${c.ontimeRate}%` }} />
-                  <div className={styles.slaRatioLate} style={{ width: `${c.lateRate}%` }} />
-                </div>
-              )}
-            </div>
           </article>
         </div>
       </section>
+
+      {data && !expired && (
+        <section className={styles.handoverReport} aria-labelledby="wh-handover-title">
+          <header>
+            <h2 id="wh-handover-title" className={styles.panelTitle}>Tiến độ theo khung bàn giao</h2>
+            <p>Chia theo giờ SOC Pending (giờ Việt Nam). Receive là số đơn đã được LM Hub nhận. Tỷ lệ SLA 3H tính trên các đơn đã giao có đủ mốc thời gian trong từng dòng.</p>
+          </header>
+          {data.handoverWindows ? (
+            <div className={styles.handoverGrid}>
+              {data.handoverWindows.map((window) => {
+                const areas = AREAS.filter((key) => area === "all" || area === key);
+                const total = emptyHandoverCounts();
+                for (const key of areas) {
+                  const stats = window.areas[key];
+                  total.received += stats.received;
+                  total.delivered += stats.delivered;
+                  total.ontime += stats.ontime;
+                  total.late += stats.late;
+                }
+                return (
+                  <section className={`${styles.panel} ${styles.handoverCard}`} key={window.label}>
+                    <h3>{window.label}</h3>
+                    <div className={styles.scroll}>
+                      <table>
+                        <caption className={styles.caption}>Tiến độ bàn giao {window.label} theo khu vực</caption>
+                        <thead><tr>
+                          <th scope="col">Khu vực</th>
+                          {["Receive", "Đã giao", "On-time", "Late"].map((label) => (
+                            <th key={label} scope="col" className={styles.colRight}>{label}</th>
+                          ))}
+                        </tr></thead>
+                        <tbody>
+                          <tr className={styles.handoverTotal}>
+                            <th scope="row">Tổng</th>
+                            <HandoverCells stats={total} />
+                          </tr>
+                          {areas.map((key) => (
+                            <tr key={key}>
+                              <th scope="row">
+                                <span className={styles.areaPill} data-area={key}>
+                                  <span className={styles.areaDot} aria-hidden="true" />
+                                  {key === "UNRESOLVED" ? areaName(key) : key}
+                                </span>
+                              </th>
+                              <HandoverCells stats={window.areas[key]} />
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ) : <p>Chưa có bản dữ liệu đầy đủ để tính Receive và Đã giao theo khung bàn giao.</p>}
+        </section>
+      )}
 
       {/* Orders by Area Table */}
       <section className={styles.panel}>

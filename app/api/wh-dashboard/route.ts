@@ -2,7 +2,7 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canViewPage } from "@/lib/auth/page-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sourceAllowed, vietnamDay } from "@/lib/data-sources/catalog";
-import { counts, type WhDailySummary, type WhOrder } from "@/lib/wh/model";
+import { counts, handoverSla, type WhDailySummary, type WhHandoverWindow, type WhOrder } from "@/lib/wh/model";
 import { TtlCache } from "@/lib/cache/ttl-cache";
 import { operationsArchiveWindow, readOperationsArchive } from "@/lib/supabase/operations-archive";
 import { readWhSnapshots, whUsesArchive, type WhSnapshot } from "@/lib/wh/archive";
@@ -17,6 +17,7 @@ interface WhRangePayload {
   canRefresh: boolean;
   availableDates: string[];
   dailyBreakdown: WhDailySummary[];
+  handoverWindows: WhHandoverWindow[] | null;
 }
 
 const whRangeCache = new TtlCache<Omit<WhRangePayload, "canRefresh">>(30_000, 10);
@@ -76,11 +77,33 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const canRefresh = sourceAllowed(context.profile.role, context.profile.permissions, "wh_tracking");
   const { yesterday } = operationsArchiveWindow();
+  const dates = { from: fromDate, to: toDate };
+
+  async function summarizeHandover(snapshots: WhSnapshot[], legacyArchive: WhSnapshot[] | null) {
+    const deliveryOnly = legacyArchive?.filter((snapshot) => !("job_id" in snapshot));
+    if (!deliveryOnly?.length) return handoverSla(snapshots, dates.from, dates.to);
+
+    // Legacy archive payloads may only contain delivered orders. Read those dates from the full source.
+    try {
+      const full = await readWhSnapshots(admin, {
+        from: dates.from,
+        to: dates.to < today ? dates.to : yesterday,
+      });
+      const byDate = new Map(full.map((snapshot) => [snapshot.report_date, snapshot]));
+      if (deliveryOnly.some((snapshot) => !byDate.has(snapshot.report_date))) return null;
+      const deliveryOnlyDates = new Set(deliveryOnly.map((snapshot) => snapshot.report_date));
+      return handoverSla(snapshots.map((snapshot) =>
+        deliveryOnlyDates.has(snapshot.report_date) ? byDate.get(snapshot.report_date)! : snapshot), dates.from, dates.to);
+    } catch {
+      return null;
+    }
+  }
 
   if (fromDate === toDate) {
     let data: WhSnapshot | undefined;
+    let archive: WhSnapshot[] | null;
     try {
-      const archive = !whUsesArchive() && fromDate < today
+      archive = !whUsesArchive() && fromDate < today
         ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate, request.signal)
         : null;
       data = (archive ?? await readWhSnapshots(admin, { from: fromDate, to: toDate }, request.signal))[0];
@@ -96,6 +119,7 @@ export async function GET(request: Request) {
     // Historical snapshots strictly retain Delivered orders; active in-flight orders are fetched fresh today
     const orders = isHistorical ? rawOrders.filter((o) => o.raw_status === "Delivered") : rawOrders;
     const dayC = counts(orders, fromDate);
+    const handoverWindows = await summarizeHandover(data ? [data] : [], archive);
 
     return Response.json(
       {
@@ -105,6 +129,7 @@ export async function GET(request: Request) {
         mode,
         snapshotAt: data?.snapshot_at ?? null,
         orders,
+        handoverWindows,
         canRefresh,
         availableDates: [fromDate],
         dailyBreakdown: data
@@ -138,8 +163,9 @@ export async function GET(request: Request) {
         ? await readOperationsArchive<WhSnapshot>(admin, "wh", fromDate, toDate < today ? toDate : yesterday)
         : null;
       const snapshots = archive
-        ? [...(toDate >= today ? await read(today, toDate) : []), ...archive.reverse()]
+        ? [...(toDate >= today ? await read(today, toDate) : []), ...[...archive].reverse()]
         : await read(fromDate, toDate);
+      const handoverWindows = await summarizeHandover(snapshots, archive);
 
       const orderMap = new Map<string, WhOrder>();
       const dailyBreakdown: WhDailySummary[] = [];
@@ -183,6 +209,7 @@ export async function GET(request: Request) {
         mode,
         snapshotAt: latestSnapshotAt,
         orders,
+        handoverWindows,
         availableDates: dailyBreakdown.map((d) => d.date),
         dailyBreakdown,
       };

@@ -25,6 +25,7 @@ export type WhData = {
   canRefresh: boolean;
   availableDates?: string[];
   dailyBreakdown?: WhDailySummary[];
+  handoverWindows: WhHandoverWindow[] | null;
 };
 export const AREAS=["KV1","KV2","KV3","KV4","KV5","UNRESOLVED"];
 export const areaName=(area:string)=>area==="UNRESOLVED"?"Chưa rõ KV":area.replace("KV","Khu vực ");
@@ -38,6 +39,7 @@ export const riderOrder=(r:WhOrder)=>["Onhold","Delivering","Delivered"].include
 export const isUnassigned=(r:WhOrder)=>r.raw_status==="LMhub_received"&&!r.delivering_at&&!r.driver_name;
 export const isOnhold=(r:WhOrder)=>r.raw_status==="Onhold"||(r.raw_status==="LMhub_received"&&!!r.delivering_at);
 export type Sla={state:"Late"|"On time"|"Need recheck"|"N/A"|"Pending";minutes:number|null};
+const SDD_SLA_MINUTES = 180;
 function elapsed(start:string|null,end:string|null,limit:number):Sla{
  if(!start||!end)return {state:"Pending",minutes:null};
  const duration=(Date.parse(end)-Date.parse(start))/60000;
@@ -53,8 +55,47 @@ export function sla(r:WhOrder,kind:"4h"|"wh"|"sdd"):Sla{
  }
  if(!r.delivered_at)return {state:"Pending",minutes:null};
  const start = kind === "4h" ? r.created_at : (r.soc_pending_at || r.created_at);
- return elapsed(start, r.delivered_at, kind === "4h" ? 240 : 180);
+ return elapsed(start, r.delivered_at, kind === "4h" ? 240 : SDD_SLA_MINUTES);
 }
+
+export type WhHandoverCounts = { received: number; delivered: number; ontime: number; late: number };
+export type WhHandoverWindow = { label: string; areas: Record<string, WhHandoverCounts> };
+export const emptyHandoverCounts = (): WhHandoverCounts => ({ received: 0, delivered: 0, ontime: 0, late: 0 });
+
+export function handoverSla(snapshots: readonly { orders: WhOrder[] }[], from: string, to: string): WhHandoverWindow[] {
+  const windows = ["06:00–12:59", "13:00–23:59"].map((label) => ({
+    label,
+    areas: Object.fromEntries(AREAS.map((area) => [area, emptyHandoverCounts()])),
+  }));
+  const latest = new Map<string, WhOrder>();
+  for (const { orders } of snapshots) {
+    for (const order of orders) {
+      if (!latest.has(order.shipment_id)) latest.set(order.shipment_id, order);
+    }
+  }
+
+  for (const order of latest.values()) {
+    const handover = Date.parse(order.soc_pending_at ?? "");
+    if (!Number.isFinite(handover)) continue;
+    const local = new Date(handover + 7 * 3600000);
+    const day = local.toISOString().slice(0, 10);
+    const hour = local.getUTCHours();
+    if (day < from || day > to || hour < 6) continue;
+
+    const area = AREAS.includes(order.area) ? order.area : "UNRESOLVED";
+    const counts = windows[hour < 13 ? 0 : 1].areas[area];
+    if (Number.isFinite(Date.parse(order.received_at ?? ""))) counts.received++;
+    if (order.raw_status !== "Delivered") continue;
+    counts.delivered++;
+    const duration = (Date.parse(order.delivered_at ?? "") - handover) / 60000;
+    if (!Number.isFinite(duration) || duration < 0) continue;
+    if (duration > SDD_SLA_MINUTES) counts.late++;
+    else counts.ontime++;
+  }
+
+  return windows;
+}
+
 export function remaining(r:WhOrder,now:number,kind:"4h"|"sdd"="sdd"):number|null{
  if (kind === "4h") {
   if (!r.created_at) return null;

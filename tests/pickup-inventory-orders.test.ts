@@ -1,6 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickupOrderParams } from "../lib/pickup/inventory-orders.ts";
+import { collectPickupOrderCodes, pickupOrderParams } from "../lib/pickup/inventory-orders.ts";
+
+test("copying all Pickup orders preserves page order and uses each displayed code", async () => {
+  const page = (ids: string[]) => ({
+    total: 5, pageSize: 2, snapshotAt: "2026-11-16T08:00:00Z",
+    rows: ids.map((id) => ({ shipment_id: id, sls_tracking_number: id === "VN3" ? " SPX3 " : null })),
+  });
+  const pages = [page(["VN1", "VN2"]), page(["VN3", "VN4"]), page(["VN5"])];
+  const requested: number[] = [];
+  const codes = await collectPickupOrderCodes(pages[1], 1, async (offset) => {
+    requested.push(offset);
+    return pages[offset];
+  });
+  assert.deepEqual(requested, [0, 2]);
+  assert.deepEqual(codes, ["VN1", "VN2", "SPX3", "VN4", "VN5"]);
+});
+
+test("copying all Pickup orders rejects changed snapshots and missing orders", async () => {
+  const current = { total: 2, pageSize: 1, snapshotAt: "2026-11-16T08:00:00Z",
+    rows: [{ shipment_id: "VN1", sls_tracking_number: null }] };
+  await assert.rejects(collectPickupOrderCodes(current, 0, async () =>
+    ({ ...current, snapshotAt: "2026-11-16T08:01:00Z" })), /vừa thay đổi/);
+  await assert.rejects(collectPickupOrderCodes(current, 0, async () => current), /Chưa tải đủ/);
+});
 test("zone details preserve area, order COT and literal query",()=>{
   const result=pickupOrderParams(new URLSearchParams({p_area:"KV2",p_status:"Assigned",p_zone:"BTH_P1301_SDD",p_cot:"cot2",q:"SPX_01%",page:"2"}));
   assert.equal(result.p_zone,"BTH_P1301_SDD");assert.equal(result.p_cot,"cot2");assert.equal(result.p_offset,200);assert.equal(result.p_query,"SPX_01%");

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compareWhOrders,
   getOrderEffectiveNow,
+  handoverSla,
   orderAgeMinutes,
   riderOrder,
   sla,
@@ -35,6 +36,40 @@ function makeOrder(id: string, raw_status: WhOrder["raw_status"], overrides: Par
     ...overrides,
   };
 }
+
+test("handover report counts received, delivered and valid SLA by Vietnam handover window and area", () => {
+  const delivered = (id: string, handover: string | null, end: string | null) =>
+    makeOrder(id, "Delivered", { soc_pending_at: handover, delivered_at: end });
+  const rows = [
+    delivered("06h", "2026-11-05T23:00:00Z", "2026-11-06T09:00:00+07:00"),
+    delivered("12h59", "2026-11-06T12:59:59+07:00", "2026-11-06T16:00:00+07:00"),
+    delivered("13h", "2026-11-06T06:00:00Z", "2026-11-06T15:00:00+07:00"),
+    delivered("evening", "2026-11-06T23:59:00+07:00", "2026-11-07T04:00:00+07:00"),
+    { ...delivered("afternoon", "2026-11-06T14:00:00+07:00", "2026-11-06T19:00:00+07:00"), area: "KV2", received_at: null },
+    delivered("early", "2026-11-06T05:59:59+07:00", "2026-11-06T06:30:00+07:00"),
+    delivered("no-handover", null, "2026-11-06T16:00:00+07:00"),
+    delivered("invalid", "invalid", "2026-11-06T16:00:00+07:00"),
+    delivered("no-delivery", "2026-11-06T13:00:00+07:00", null),
+    delivered("reversed", "2026-11-06T16:00:00+07:00", "2026-11-06T15:00:00+07:00"),
+    makeOrder("active", "Delivering"),
+    makeOrder("received", "LMhub_received", { area: "KV2", soc_pending_at: "2026-11-06T06:00:00+07:00" }),
+    makeOrder("other-day", "LMhub_received", { soc_pending_at: "2026-11-05T14:00:00+07:00" }),
+    makeOrder("unknown-area", "Onhold", { area: "", soc_pending_at: "2026-11-06T12:00:00+07:00" }),
+  ];
+
+  const [morning, afternoon] = handoverSla([
+    { orders: rows },
+    { orders: [makeOrder("13h", "LMhub_received")] },
+  ], "2026-11-06", "2026-11-06");
+  assert.equal(morning.label, "06:00–12:59");
+  assert.equal(afternoon.label, "13:00–23:59");
+  assert.deepEqual(morning.areas.KV1, { received: 2, delivered: 2, ontime: 1, late: 1 });
+  assert.deepEqual(morning.areas.KV2, { received: 1, delivered: 0, ontime: 0, late: 0 });
+  assert.deepEqual(morning.areas.UNRESOLVED, { received: 1, delivered: 0, ontime: 0, late: 0 });
+  assert.deepEqual(afternoon.areas.KV1, { received: 5, delivered: 4, ontime: 1, late: 1 });
+  assert.deepEqual(afternoon.areas.KV2, { received: 0, delivered: 1, ontime: 0, late: 1 });
+  assert.deepEqual(afternoon.areas.KV5, { received: 0, delivered: 0, ontime: 0, late: 0 });
+});
 
 test("statusRank puts Delivering and Onhold at top, and Delivered at bottom", () => {
   const delivering = makeOrder("1", "Delivering");

@@ -2,6 +2,36 @@ export type PickupOrderScope = {
   area: string; status: string; cot: "all" | "cot1" | "cot2";
   zone?: string; district?:string; ward?:string; wards?:string[]; rider?: string; riderCot?: string; title: string;
 };
+type PickupOrderCode = { shipment_id: string; sls_tracking_number: string | null };
+type PickupOrderPage = { rows: PickupOrderCode[]; total: number; pageSize: number; snapshotAt: string | null };
+
+export const pickupDisplayCode = (order: PickupOrderCode) => order.sls_tracking_number?.trim() || order.shipment_id;
+
+export async function collectPickupOrderCodes(
+  current: PickupOrderPage,
+  currentPage: number,
+  readPage: (page: number) => Promise<PickupOrderPage>,
+) {
+  const codes = new Map<string, string>();
+  const pageCount = Math.ceil(current.total / current.pageSize);
+  for (let start = 0; start < pageCount; start += 4) {
+    const pages = await Promise.all(Array.from({ length: Math.min(4, pageCount - start) }, (_, index) => {
+      const page = start + index;
+      return page === currentPage ? current : readPage(page);
+    }));
+    for (const page of pages) {
+      if (page.snapshotAt !== current.snapshotAt || page.total !== current.total || page.pageSize !== current.pageSize) {
+        throw new Error("Tồn Pickup vừa thay đổi. Hãy làm mới bảng rồi sao chép lại.");
+      }
+      for (const order of page.rows) codes.set(order.shipment_id, pickupDisplayCode(order));
+    }
+  }
+  if (codes.size !== current.total || [...codes.values()].some((code) => !code.trim())) {
+    throw new Error("Chưa tải đủ mã đơn Pickup. Hãy làm mới bảng rồi thử lại.");
+  }
+  return [...codes.values()];
+}
+
 export function pickupOrderParams(params: URLSearchParams) {
   const area = (params.get("p_area") ?? "all").trim();
   const status = (params.get("p_status") ?? "").trim();
