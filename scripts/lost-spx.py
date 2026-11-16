@@ -79,7 +79,7 @@ def failure_logs(client, shipment):
         data = get(client, LOG_URL, {'shipment_id': shipment, 'pageno': page, 'count': 10, 'tdflag': 0})
         batch, size = data.get('list'), str(data.get('total'))
         if page == 1 and size == '0' and batch in (None, []):
-            return {'items': []}
+            return {'items': [], 'latestOperation': None}
         if str(data.get('pageno')) != str(page) or not size.isdigit() or not isinstance(batch, list):
             raise ValueError('invalid log page')
         if total is not None and total != int(size):
@@ -92,17 +92,21 @@ def failure_logs(client, shipment):
             raise ValueError('incomplete log pages')
     else:
         raise ValueError('log page limit')
-    items = []
+    items, latest_operation = [], None
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError('invalid log record')
-        if str(row.get('app') or '').strip().casefold() != 'driver app':
-            continue
+        app = str(row.get('app') or '').strip()
         operator = re.sub(r'^\s*\[\d+\]\s*', '', str(row.get('operator') or '')).strip()
         at = str(row.get('operate_time') or '')
-        if operator and at.isdigit() and int(at):
-            items.append({'at': int(at), 'rider': operator[:200], 'error': str(row.get('error') or '')[:2000]})
-    return {'items': items}
+        if not at.isdigit() or not int(at):
+            continue
+        entry = {'at': int(at), 'rider': operator[:200], 'error': str(row.get('error') or '')[:2000], 'app': app[:100]}
+        if latest_operation is None or entry['at'] > latest_operation['at']:
+            latest_operation = entry
+        if operator and app.casefold() == 'driver app':
+            items.append(entry)
+    return {'items': items, 'latestOperation': latest_operation}
 
 
 def main():

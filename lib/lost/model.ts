@@ -5,16 +5,19 @@ export type LostSourceRow = {
   compensationRate?: number | null; codCogs?: number | null;
 };
 export type LostEvent = { status: number; at: number; station: number; code?: string; rider?: string };
-export type LostLog = { at: number; rider: string; error: string };
+export type LostLog = { at: number; rider: string; error: string; app?: string };
 export type LostCheck = {
   shipment_id: string;
   tracking: LostEvent[] | { events: LostEvent[]; displayStatus: number } | null;
-  logs: { items: LostLog[]; matchedCount?: number } | null;
+  logs: { items: LostLog[]; matchedCount?: number; latestOperation?: LostLog | null } | null;
 };
 export type LostRow = LostSourceRow & {
   event: LostEvent | null; eventLabel: string; logs: LostLog[]; logCount: number;
   trackingChecked: boolean; logsChecked: boolean;
   lastStatus?: string | null;
+  statusBeforeLost?: string | null;
+  operationalStatusBeforeLost?: string | null;
+  logSourcesChecked?: boolean;
   incidentType?: "Pickup" | "Lost tại Hub/SOC";
   latestLog?: LostLog | null;
 };
@@ -33,9 +36,18 @@ const statusLabels: Record<number, string> = {
 
 export const lostDisplayStatus = (row: Pick<LostRow, "lastStatus" | "status">) => row.lastStatus ?? row.status;
 
+export function lostLogRole(log: Pick<LostLog, "app" | "rider">) {
+  const source = lostNameKey(log.app ?? "Driver APP");
+  const operator = lostNameKey(log.rider);
+  if (["system", "system operator", "spx system"].includes(operator)) return "Hệ thống";
+  if (source === "driver app") return "Rider";
+  if (["ops", "ops app", "ops portal", "fms portal", "station app", "hub app", "soc app", "wms", "wms portal"].includes(source)) return "Ops";
+  return "Chưa rõ vai trò";
+}
+
 export function lostDisplayLogs(row: Pick<LostRow, "latestLog" | "logs">) {
   const latestLog = row.latestLog;
-  if (!latestLog || row.logs.some(log => log.at === latestLog.at && log.rider === latestLog.rider)) return row.logs;
+  if (!latestLog || row.logs.some(log => log.at === latestLog.at && log.rider === latestLog.rider && log.app === latestLog.app && log.error === latestLog.error)) return row.logs;
   return [latestLog, ...row.logs];
 }
 
@@ -113,7 +125,14 @@ export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow
     socpendingreceive: [7, "SOC Pending Receive"],
   };
   const lost = status === "lost" || lastStatus === "Lost";
-  const lostAt = lost ? latest(11)?.at ?? until : until;
+  const lostEvent = latest(11) ?? (lastStatus === "Lost" ? latest(11, Infinity) : undefined);
+  const lostAt = lost ? lostEvent?.at ?? until : until;
+  const previousStatusEvent = lostEvent && events.reduce<LostEvent | undefined>((previous, event) =>
+    event.status !== 11 && event.at < lostEvent.at && (!previous || event.at > previous.at) ? event : previous, undefined);
+  const statusBeforeLost = previousStatusEvent ? statusLabels[previousStatusEvent.status] ?? `SPX ${previousStatusEvent.status}` : null;
+  const previousOperation = lostEvent && events.reduce<LostEvent | undefined>((previous, event) =>
+    event.status !== 11 && statusLabels[event.status] && event.at < lostEvent.at && (!previous || event.at > previous.at) ? event : previous, undefined);
+  const operationalStatusBeforeLost = previousOperation ? statusLabels[previousOperation.status] : null;
   const beforeLost = lost ? events.filter(event => event.at <= lostAt && [1, 2, 4, 5, 7, 39, 591].includes(event.status))
     .sort((a, b) => b.at - a.at)[0] : undefined;
   const pickup = matchesLostGroup(row, "pickup") || lastStatus === "Pickup Done" || lastStatus === "Pickup Handedover" ||
@@ -128,12 +147,15 @@ export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow
   let event = code ? latest(code, hold ? hold.at + 1 : lostAt) ?? null : null;
   if (event && ![2, 4, 39].includes(event.status)) event = { ...event, rider: undefined, code: undefined };
   const allLogs = check?.logs?.items ?? [];
-  const latestLog = allLogs.reduce<LostLog | null>((newest, log) => !newest || log.at > newest.at ? log : newest, null);
+  const logSourcesChecked = check?.logs?.latestOperation !== undefined;
+  const latestLog = logSourcesChecked ? check?.logs?.latestOperation ?? null
+    : allLogs.reduce<LostLog | null>((newest, log) => !newest || log.at > newest.at ? log : newest, null);
   const matched = allLogs.filter(log => !event || (log.at > event.at && (!event.rider || lostNameKey(log.rider) !== lostNameKey(event.rider))))
     .sort((a, b) => b.at - a.at);
   const byRider = new Map<string, LostLog>();
   for (const log of matched) if (!byRider.has(lostNameKey(log.rider))) byRider.set(lostNameKey(log.rider), log);
   const logs = [...byRider.values()];
-  return { ...row, event, eventLabel, lastStatus, incidentType, latestLog, logs, logCount: check?.logs?.matchedCount ?? matched.length,
+  return { ...row, event, eventLabel, lastStatus, statusBeforeLost, operationalStatusBeforeLost, incidentType, latestLog, logs, logSourcesChecked,
+    logCount: check?.logs?.matchedCount ?? matched.length,
     trackingChecked: tracking != null, logsChecked: check?.logs != null };
 }

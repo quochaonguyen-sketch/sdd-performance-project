@@ -1,0 +1,64 @@
+.panel {
+  min-width: 0;
+  padding: clamp(14px, 2.3vw, 24px);
+  border: 1px solid var(--color-rule);
+  border-radius: 16px;
+  background: var(--color-paper);
+  box-shadow: var(--shadow-panel);
+}
+.header h2 { margin: 0; font-size: clamp(20px, 2.2vw, 26px); font-weight: 700; letter-spacing: -.025em; }
+.header p { margin: 3px 0 0; color: var(--color-muted); font-size: 13px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 16px 0; }
+.metrics > div { min-width: 0; padding: 13px 15px; border: 1px solid var(--color-rule); border-radius: 11px; background: var(--color-paper-2); }
+.metrics > .currentMetric { background: var(--color-accent-soft); border-color: color-mix(in srgb, var(--color-accent) 25%, var(--color-rule)); }
+.metrics dt { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--color-ink-2); font-size: 13px; font-weight: 650; }
+.metrics dt span { color: var(--color-muted); font-weight: 500; }
+.metrics dd {
+  display: flex; gap: 6px; align-items: center; margin: 4px 0;
+  font-size: clamp(19px, 2vw, 27px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; font-variant-numeric: tabular-nums;
+}
+.metrics dd svg { flex: none; }
+.metrics .metricNote { display: block; margin: 0; color: var(--color-muted); font-size: 12px; font-weight: 400; line-height: 1.4; letter-spacing: normal; }
+.delta[data-trend="up"] dd:not(.metricNote) { color: var(--color-warning); }
+.delta[data-trend="down"] dd:not(.metricNote) { color: var(--color-success); }
+.chart { --plot-height: 182px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--color-rule); }
+.chartHeader, .legend, .selected { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.chartHeader { justify-content: space-between; }
+.chartHeader h3 { margin: 0; font-size: 15px; font-weight: 650; }
+.legend { color: var(--color-ink-2); font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.currentBar { background: var(--color-accent); }
+.previousBar {
+  background: repeating-linear-gradient(135deg, var(--color-muted) 0 2px, var(--color-paper-3) 2px 5px);
+  border: 1px solid var(--color-muted);
+}
+.unit { margin: 11px 0 8px; font-size: 12px; color: var(--color-muted); }
+.chartBody { display: grid; grid-template-columns: 43px minmax(0, 1fr); }
+.axis { position: relative; height: var(--plot-height); margin-top: 8px; color: var(--color-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.axis span { position: absolute; right: 8px; transform: translateY(-50%); white-space: nowrap; }
+.scroll { min-width: 0; overflow-x: auto; padding-block: 8px 2px; }
+.plot { display: grid; position: relative; width: max-content; min-width: 100%; }
+.gridlines { position: absolute; inset: 0 0 auto; height: var(--plot-height); pointer-events: none; }
+.gridlines > div { position: absolute; width: 100%; border-top: 1px solid var(--color-rule); }
+.gridlines [data-zero="true"] { border-color: var(--color-rule-strong); }
+.day { min-width: 0; }
+.day button {
+  display: flex; justify-content: center; gap: 3px; position: relative; width: 100%; height: var(--plot-height);
+  padding: 0 4px; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+}
+.day button:hover, .day button[aria-pressed="true"] { background: color-mix(in srgb, var(--color-accent-soft) 56%, transparent); }
+.day button:focus-visible, .scroll:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.barTrack { position: relative; width: min(45%, 16px); height: 100%; }
+.barTrack span { position: absolute; inset-inline: 0; border-radius: 3px 3px 0 0; min-height: 1px; }
+.dayLabel { display: block; margin-top: 7px; text-align: center; color: var(--color-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.selected { min-height: 42px; margin-top: 9px; padding: 8px 11px; border-radius: 8px; background: var(--color-paper-2); font-size: 13px; }
+.selected span { color: var(--color-muted); }
+.selected b { margin-left: 4px; color: var(--color-ink); font-weight: 650; }
+.empty { margin: 0; padding: 16px; border-radius: 8px; background: var(--color-paper-2); color: var(--color-muted); font-size: 13px; }
+@media (max-width: 640px) {
+  .chart { --plot-height: 145px; }
+  .metrics > div { padding: 11px 13px; }
+  .selected { align-items: flex-start; gap: 4px 12px; }
+  .selected > strong { flex-basis: 100%; }
+}

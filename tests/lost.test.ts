@@ -1,12 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildLostAnalysis, parseLostAnalysisFilters, recentLostDays } from "../lib/lost/analysis.ts";
-import { lostDisplayLogs, matchesLostGroup, parseLostSheet, reconcileLostRow, type LostSourceRow } from "../lib/lost/model.ts";
+import { buildLostAnalysis, buildLostCompensation, parseLostAnalysisFilters, recentLostDays } from "../lib/lost/analysis.ts";
+import { lostDisplayLogs, lostLogRole, matchesLostGroup, parseLostSheet, reconcileLostRow, type LostSourceRow } from "../lib/lost/model.ts";
 import { defaultLostFilters, parseLostFilters, prepareLostSnapshot, selectLostPage } from "../lib/lost/list.ts";
 
 const row: LostSourceRow = { row: 2, date: "2026-11-12", shipment: "VN12345", status: "OnHold", reason: "Quá hạn tại Hub", reasonType: "Lost", result: "Chốt đền bù", amount: 0 };
 const time = (clock: string) => Date.parse(`2026-11-12T${clock}+07:00`) / 1000;
 const log = (clock: string, rider: string) => ({ at: time(clock), rider, error: "SPX error" });
+
+test("LOST compensation compares through the latest current date and keeps the full prior month total", () => {
+  const data = buildLostCompensation([
+    { date: "2026-01-03", amount: 200_000 },
+    { date: "2026-01-03", amount: 100_000 },
+    { date: "2026-01-04", amount: null },
+    { date: "2026-01-21", amount: 700_000 },
+    { date: "2025-12-01", amount: 200_000 },
+    { date: "2025-12-03", amount: 0 },
+    { date: "2025-12-05", amount: 600_000 },
+  ], "2026-01-20");
+  assert.equal(data.currentEnd, "2026-01-04");
+  assert.equal(data.previousMonth, "2025-12");
+  assert.equal(data.currentTotal, 300_000);
+  assert.equal(data.previousTotal, 200_000);
+  assert.equal(data.previousMonthTotal, 800_000);
+  assert.equal(data.delta, 100_000);
+  assert.equal(data.change, 0.5);
+  assert.deepEqual(data.points[2], { day: 3, current: 300_000, previous: 0 });
+  assert.deepEqual(data.points[3], { day: 4, current: null, previous: null });
+});
+
+test("LOST compensation handles empty periods, zero comparison bases and shorter months", () => {
+  const data = buildLostCompensation([
+    { date: "2026-02-28", amount: 0 },
+    { date: "2026-03-28", amount: -50_000 },
+    { date: "2026-03-31", amount: 100_000 },
+  ], "2026-03-31");
+  assert.equal(data.previousDays, 28);
+  assert.equal(data.currentTotal, 50_000);
+  assert.equal(data.delta, -50_000);
+  assert.equal(data.change, null);
+  assert.equal(data.points.at(-1)?.previous, null);
+  const empty = buildLostCompensation([{ date: "2026-02-01", amount: 50_000 }], "2026-03-05");
+  assert.equal(empty.currentTotal, null);
+  assert.equal(empty.previousTotal, 50_000);
+  assert.equal(empty.delta, null);
+});
 
 test("LOST analysis accepts inclusive report date ranges and validates calendar days", () => {
   assert.deepEqual(recentLostDays(row.date), { from: "2026-10-14", to: "2026-11-12" });
@@ -208,4 +246,34 @@ test("LOST uses SPX Last Status, the stage before loss and the latest Driver APP
   assert.equal(hub.incidentType, "Lost tại Hub/SOC");
   assert.equal(hub.event?.status, 1);
   assert.equal(hub.event?.rider, undefined);
+});
+
+test("LOST distinguishes the event before loss from current status and reports the latest operator from any source", () => {
+  const driver = { ...log("09:00:00", "Rider A"), app: "Driver APP" };
+  const ops = { ...log("10:10:00", "Nhân viên B"), app: "FMS Portal" };
+  const check = {
+    shipment_id: row.shipment,
+    tracking: { displayStatus: 11, events: [
+      { status: 11, at: time("10:00:00"), station: 0 },
+      { status: 650, at: time("09:50:00"), station: 4232 },
+      { status: 5, at: time("09:45:00"), station: 0 },
+      { status: 648, at: time("10:02:00"), station: 0 },
+    ] },
+    logs: { items: [driver], latestOperation: ops },
+  };
+  const lost = reconcileLostRow({ ...row, status: "Lost" }, check);
+  assert.equal(lost.lastStatus, "Lost");
+  assert.equal(lost.statusBeforeLost, "SPX 650");
+  assert.equal(lost.operationalStatusBeforeLost, "On Hold");
+  assert.equal(lost.logSourcesChecked, true);
+  assert.deepEqual(lostDisplayLogs(lost), [ops, driver]);
+  const snapshot = prepareLostSnapshot([lost], null, null);
+  const { rows } = selectLostPage(snapshot, { ...defaultLostFilters, withLogs: true, q: "nhan vien b" });
+  assert.equal(rows[0].logRider, "Nhân viên B");
+  assert.equal(rows[0].logRole, "Ops");
+  assert.equal(rows[0].logSource, "FMS Portal");
+  assert.equal(lostLogRole(driver), "Rider");
+  assert.equal(lostLogRole({ ...ops, rider: "System Operator" }), "Hệ thống");
+  assert.equal(lostLogRole({ ...ops, app: "" }), "Chưa rõ vai trò");
+  assert.equal(reconcileLostRow(row, { ...check, tracking: { displayStatus: 4, events: [] } }).statusBeforeLost, null);
 });

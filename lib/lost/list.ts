@@ -1,4 +1,4 @@
-import { lostDisplayStatus, lostNameKey, matchesLostGroup, type LostGroup, type LostRow } from "./model.ts";
+import { lostDisplayStatus, lostLogRole, lostNameKey, matchesLostGroup, type LostGroup, type LostRow } from "./model.ts";
 
 const groupIds = ["all", "pickup", "not-received", "shortage", "other"] as const satisfies readonly LostGroup[];
 const sortOrders = ["date-desc", "date-asc", "rider-asc", "rider-desc"] as const;
@@ -67,12 +67,13 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
       const log = latestLog ?? logs[0];
       const error = log?.error ?? "";
       return {
-        ...row, logRider: log?.rider ?? null, logAt: log?.at ?? null,
+        ...row, logRider: log ? log.rider || "Chưa rõ người ghi" : null, logAt: log?.at ?? null,
+        logRole: log ? lostLogRole(log) : null, logSource: log?.app || null,
         logError: error.length > 120 ? `${error.slice(0, 120)}…` : error,
       };
     }),
     group: selected.id, statuses: selected.statuses, counts: snapshot.counts, total, page, last, sort,
-    checked: matching.filter(({ row }) => row.logsChecked && row.trackingChecked).length,
+    checked: matching.filter(({ row }) => (row.logSourcesChecked ?? row.logsChecked) && row.trackingChecked).length,
     logRows: matching.filter(({ row }) => row.latestLog || row.logs.length > 0).length,
     syncedAt: snapshot.syncedAt, error: snapshot.error,
   };

@@ -1,4 +1,4 @@
-import { shiftCalendarDay } from "../performance/calendar.ts";
+import { shiftCalendarDay, shiftCalendarMonth } from "../performance/calendar.ts";
 import { lostNameKey, matchesLostGroup, type LostRow } from "./model.ts";
 
 type LostCase = "pickup" | "notReceived";
@@ -78,3 +78,48 @@ export function buildLostAnalysis(rows: Iterable<LostRow>, filters: LostAnalysis
 }
 
 export type LostAnalysisData = ReturnType<typeof buildLostAnalysis>;
+
+export function buildLostCompensation(rows: Iterable<Pick<LostRow, "date" | "amount">>, today: string) {
+  const currentMonth = today.slice(0, 7);
+  const previousMonth = shiftCalendarMonth(currentMonth, -1);
+  const previousEnd = shiftCalendarDay(`${currentMonth}-01`, -1);
+  const byDay = new Map<string, number>();
+  let latestDate: string | null = null;
+
+  for (const { date, amount } of rows) {
+    if (date < `${previousMonth}-01` || date > today || !validDay(date)) continue;
+    if (date.startsWith(currentMonth) && (latestDate === null || date > latestDate)) latestDate = date;
+    if (amount !== null && Number.isFinite(amount)) byDay.set(date, (byDay.get(date) ?? 0) + amount);
+  }
+
+  const currentEnd = latestDate ?? today;
+  const currentDays = Number(currentEnd.slice(-2));
+  const previousDays = Math.min(currentDays, Number(previousEnd.slice(-2)));
+  const sum = (amounts: Iterable<number | null>) => {
+    let total: number | null = null;
+    for (const amount of amounts) if (amount !== null) total = (total ?? 0) + amount;
+    return total;
+  };
+  const points = Array.from({ length: currentDays }, (_, index) => {
+    const day = index + 1;
+    const suffix = String(day).padStart(2, "0");
+    return {
+      day,
+      current: byDay.get(`${currentMonth}-${suffix}`) ?? null,
+      previous: day <= previousDays ? byDay.get(`${previousMonth}-${suffix}`) ?? null : null,
+    };
+  });
+  const currentTotal = sum(points.map(point => point.current));
+  const currentComparisonTotal = sum(points.slice(0, previousDays).map(point => point.current));
+  const previousTotal = sum(points.map(point => point.previous));
+  const previousMonthTotal = sum([...byDay].filter(([date]) => date.startsWith(previousMonth)).map(([, amount]) => amount));
+  const delta = currentComparisonTotal === null || previousTotal === null ? null : currentComparisonTotal - previousTotal;
+
+  return {
+    currentMonth, previousMonth, currentEnd, previousDays, currentTotal, previousTotal, previousMonthTotal, delta,
+    change: delta !== null && previousTotal !== null && previousTotal > 0 ? delta / previousTotal : null,
+    points,
+  };
+}
+
+export type LostCompensationData = ReturnType<typeof buildLostCompensation>;

@@ -6,9 +6,10 @@ import {
   PackageCheck, PackageOpen, PackageSearch, Search, Truck,
 } from "lucide-react";
 import { defaultLostFilters, lostPageSize, type LostFilters, type LostPageData, type LostSort } from "@/lib/lost/list";
-import { lostDisplayStatus, matchesLostGroup, type LostLog } from "@/lib/lost/model";
-import type { LostAnalysisData } from "@/lib/lost/analysis";
+import { lostLogRole, matchesLostGroup, type LostLog } from "@/lib/lost/model";
+import type { LostAnalysisData, LostCompensationData } from "@/lib/lost/analysis";
 import { LostAnalysis } from "./lost-analysis";
+import { LostCompensation } from "./lost-compensation";
 import styles from "./lost.module.css";
 
 const sheet = "https://docs.google.com/spreadsheets/d/1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU/edit?gid=1396828508#gid=1396828508";
@@ -57,22 +58,26 @@ function LostLogDetails({ row }: { row: LostPageData["rows"][number] }) {
 
   return <details onToggle={event => { if (event.currentTarget.open) void load(); }}>
     <summary>
-      <ChevronRight size={15} aria-hidden="true" />
-      <span>
-        {row.logRider}
-        {row.logError && <small className={styles.logPreview}>{row.logError}</small>}
-        {row.logAt != null && <small>{displayTime(row.logAt)}</small>}
-      </span>
+      <ChevronRight size={14} aria-hidden="true" />
+      <span>{row.logRider}<small>
+        {row.logRole}{row.logRole === "Chưa rõ vai trò" && row.logSource && ` · ${row.logSource}`}
+        {row.logSourcesChecked === false && " · Chưa đối chiếu Ops"}
+      </small></span>
     </summary>
+    {!row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
     {error ? <div className={styles.log} role="alert">{error} <button className={styles.clear} type="button" onClick={() => void load()}>Thử lại</button></div>
       : !logs ? <small role="status">Đang tải log…</small> : logs.length === 0 ? <small>Đơn này không còn log trong bản đối soát hiện tại.</small>
-        : logs.map(log => <div className={styles.log} key={`${log.rider}:${log.at}`}>
-          <strong>{log.rider}</strong><small>{displayTime(log.at)}</small>{log.error && <p>{log.error}</p>}
+        : logs.map(log => <div className={styles.log} key={`${log.rider}:${log.at}:${log.app ?? ""}:${log.error}`}>
+          <strong>{log.rider || "Chưa rõ người ghi"}</strong>
+          <small>{[lostLogRole(log), log.app, displayTime(log.at)].filter(Boolean).join(" · ")}</small>
+          {log.error && <p>{log.error}</p>}
         </div>)}
   </details>;
 }
 
-export function LostView({ initial, initialAnalysis }: { initial: LostPageData; initialAnalysis: LostAnalysisData }) {
+export function LostView({ initial, initialAnalysis, compensation }: {
+  initial: LostPageData; initialAnalysis: LostAnalysisData; compensation: LostCompensationData;
+}) {
   const [data, setData] = useState(initial);
   const [filters, setFilters] = useState(defaultLostFilters);
   const [loading, setLoading] = useState(false);
@@ -128,7 +133,7 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
       <span className={styles.mobileSortHeading}>Ngày chốt đền bù</span>
       <button type="button" className={styles.sortButton} aria-label="Sắp xếp theo ngày chốt đền bù"
         onClick={() => changeFilters({ ...filters, sort: filters.sort === "date-desc" ? "date-asc" : "date-desc", page: 0 })}>
-        Ngày chốt đền bù<Icon size={14} aria-hidden="true" />
+        Ngày chốt<Icon size={13} aria-hidden="true" />
       </button>
     </th>;
   }
@@ -150,7 +155,7 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
       </div>
     </header>
     {error && <p role="alert" className={styles.warning}>{error}</p>}
-    <LostAnalysis initial={initialAnalysis} />
+    <LostCompensation data={compensation} />
     <div className={styles.groups} role="group" aria-label="Nhóm đối soát">
       {groups.map(option => <button key={option.id} type="button" className={styles.group} data-group={option.id}
         aria-pressed={group === option.id}
@@ -165,7 +170,7 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
     <section className={styles.board} aria-label="Danh sách Lost & Compensated">
       <div className={styles.boardHeader}>
         <div><h2>{data.group === "all" ? "Danh sách đơn" : selected.label}</h2>
-          <p aria-live="polite">{loading ? "Đang tải danh sách…" : <>{number.format(total)} dòng <span>·</span> {number.format(checked)} đã kiểm tra SPX <span>·</span> {number.format(logRows)} có log rider</>}</p>
+          <p aria-live="polite">{loading ? "Đang tải danh sách…" : <>{number.format(total)} dòng <span>·</span> {number.format(checked)} đã kiểm tra SPX <span>·</span> {number.format(logRows)} có log SPX</>}</p>
         </div>
         {hasFilters && <button className={styles.clear} type="button" onClick={clearFilters}>Xóa bộ lọc</button>}
       </div>
@@ -174,13 +179,13 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
           <span className={styles.search}><Search size={17} aria-hidden="true" />
             <input type="search" maxLength={120} value={q} onChange={event => changeFilters({ ...filters, q: event.target.value, page: 0 }, true)}
               placeholder="Mã đơn, tên hoặc mã rider" /></span></label>
-        <label><span>Last Status</span>
+        <label><span>Trạng thái hiện tại</span>
           <select value={status} disabled={loading && data.group !== group} onChange={event => changeFilters({ ...filters, status: event.target.value, page: 0 })}>
             <option value="all">Tất cả trạng thái</option>
             {data.statuses.map(value => <option key={value} value={value}>{displayStatus(value)}</option>)}
           </select></label>
         <label className={styles.checkbox}>
-          <input type="checkbox" checked={withLogs} onChange={event => changeFilters({ ...filters, withLogs: event.target.checked, page: 0 })} /> Chỉ đơn có log rider
+          <input type="checkbox" checked={withLogs} onChange={event => changeFilters({ ...filters, withLogs: event.target.checked, page: 0 })} /> Chỉ đơn có log SPX
         </label>
         <label><span>Sắp xếp danh sách</span>
           <select value={filters.sort} onChange={event => changeFilters({ ...filters, sort: event.target.value as LostSort, page: 0 })}>
@@ -197,42 +202,46 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
         <table role="table">
           <thead role="rowgroup"><tr role="row">
             {dateHeader()}
-            <th scope="col" role="columnheader">Month</th>
-            <th scope="col" role="columnheader">SPX tracking</th>
-            <th scope="col" role="columnheader">Last Status</th>
-            <th scope="col" role="columnheader" className={styles.money}>% đền bù</th>
-            <th scope="col" role="columnheader" className={styles.money}>COD/COGS</th>
-            <th scope="col" role="columnheader" className={styles.money}>Số tiền đền bù</th>
-            <th scope="col" role="columnheader">Phân loại</th>
+            <th scope="col" role="columnheader" className={styles.identity}>Mã SPX</th>
+            <th scope="col" role="columnheader" className={styles.statusCol}>Trạng thái trước LOST</th>
+            <th scope="col" role="columnheader" className={styles.typeCol}>Phân loại</th>
+            <th scope="col" role="columnheader" className={styles.money}>Tiền đền bù</th>
             <th scope="col" role="columnheader">Lý do</th>
-            <th scope="col" role="columnheader">Tên rider</th>
-            <th scope="col" role="columnheader">Log lỗi gần nhất</th>
+            <th scope="col" role="columnheader" className={styles.riderCol}>Rider</th>
+            <th scope="col" role="columnheader" className={styles.logCell}>Log lỗi gần nhất</th>
           </tr></thead>
           <tbody role="rowgroup">
             {rows.map(row => <tr role="row" key={`${row.row}:${row.shipment}:${syncedAt}`}>
               <td role="cell" className={styles.date}><span className={styles.mobileLabel}>Ngày chốt đền bù</span><time dateTime={row.date}>{row.date}</time></td>
-              <td role="cell"><span className={styles.mobileLabel}>Month</span>{row.month ?? Number(row.date.slice(5, 7))}</td>
               <td role="cell" className={styles.identity}>
-                <span className={styles.mobileLabel}>SPX tracking</span>
+                <span className={styles.mobileLabel}>Mã SPX</span>
                 <strong>{row.shipment}</strong>
               </td>
-              <td role="cell"><span className={styles.mobileLabel}>Last Status</span>
-                <span className={styles.statusBadge} data-pickup={matchesLostGroup(row, "pickup")} title={lostDisplayStatus(row)}>{displayStatus(lostDisplayStatus(row))}</span>
-                {!row.lastStatus && <small>Theo Google Sheet</small>}
+              <td role="cell"><span className={styles.mobileLabel}>Trạng thái trước LOST</span>
+                {row.statusBeforeLost ? <span className={styles.statusBadge} data-pickup={matchesLostGroup(row, "pickup")}>
+                  {row.operationalStatusBeforeLost || row.statusBeforeLost}
+                </span>
+                  : <span className={styles.muted}>—</span>}
+                {row.operationalStatusBeforeLost && row.operationalStatusBeforeLost !== row.statusBeforeLost && <small>Mốc ngay trước: {row.statusBeforeLost}</small>}
               </td>
-              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>% đền bù</span>{row.compensationRate == null ? "—" : percent.format(row.compensationRate)}</td>
-              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>COD/COGS</span>{row.codCogs == null ? "—" : number.format(row.codCogs)}</td>
-              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>Số tiền đền bù</span>{row.amount === null ? "—" : number.format(row.amount)}</td>
               <td role="cell"><span className={styles.mobileLabel}>Phân loại</span>{row.incidentType || "—"}</td>
+              <td role="cell" className={styles.money}>
+                <span className={styles.mobileLabel}>Tiền đền bù</span>
+                <strong>{row.amount === null ? "—" : `${number.format(row.amount)} ₫`}</strong>
+                {(row.codCogs != null || row.compensationRate != null) && <small>
+                  {[row.codCogs != null && `COD/COGS ${number.format(row.codCogs)}`, row.compensationRate != null && percent.format(row.compensationRate)]
+                    .filter(Boolean).join(" · ")}
+                </small>}
+              </td>
               <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Lý do</span>{row.reason || "—"}{row.reasonType && <small>{row.reasonType}</small>}</td>
               <td role="cell"><span className={styles.mobileLabel}>Tên rider</span>
-                <strong>{row.event?.rider || "—"}</strong>
-                {row.event && <small>{[row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>}
-                {!row.trackingChecked && <small>Chưa đọc được tracking</small>}
+                {row.event ? <details>
+                  <summary><ChevronRight size={14} aria-hidden="true" /><span>{row.event.rider || row.eventLabel || "Xem mốc SPX"}</span></summary>
+                  <small>{[row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>
+                </details> : <span className={styles.muted}>{row.trackingChecked ? "—" : "Chưa đọc được tracking"}</span>}
               </td>
               <td role="cell" className={styles.logCell}><span className={styles.mobileLabel}>Log lỗi gần nhất</span>
-                {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logsChecked ? "Không có log khớp" : "Chưa đọc được log"}</span>}
-                {row.logRider && !row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
+                {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logSourcesChecked ? "Không có log" : "Chưa đối chiếu log"}</span>}
               </td>
             </tr>)}
           </tbody>
@@ -249,5 +258,9 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
         </div>
       </footer>}
     </section>
+    <details className={styles.riderAnalysis}>
+      <summary><ChevronRight size={16} aria-hidden="true" /> Phân tích đơn và rider</summary>
+      <LostAnalysis initial={initialAnalysis} />
+    </details>
   </div>;
 }

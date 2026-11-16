@@ -123,7 +123,7 @@ async function lookupMissing(jobs, checks) {
       if (!check || seen.has(result.shipment_id)) throw Error('Worker SPX trả kết quả trùng hoặc sai mã.');
       seen.add(result.shipment_id);
       if (Array.isArray(result.tracking?.events) && Number.isInteger(result.tracking.displayStatus)) check.tracking = result.tracking;
-      if (Array.isArray(result.logs?.items)) check.logs = result.logs;
+      if (Array.isArray(result.logs?.items) && Object.hasOwn(result.logs, 'latestOperation')) check.logs = result.logs;
       if (result.errors?.length) {
         failures += 1;
         for (const reason of result.errors) reasons[reason] = (reasons[reason] ?? 0) + 1;
@@ -170,7 +170,8 @@ async function main() {
     }
     const seeded = seedPath ? await importPrevious(path.resolve(seedPath), checks) : 0;
     const jobs = [...checks.values()].map(check => ({
-      shipment_id: check.shipment_id, tracking: !Number.isInteger(check.tracking?.displayStatus), logs: check.logs === null,
+      shipment_id: check.shipment_id, tracking: !Number.isInteger(check.tracking?.displayStatus),
+      logs: !check.logs || !Object.hasOwn(check.logs, 'latestOperation'),
     })).filter(job => job.tracking || job.logs);
     console.log(JSON.stringify({ rows: source.length, seeded, alreadyChecked: shipments.length - jobs.length, requests: { tracking: jobs.filter(job => job.tracking).length, logs: jobs.filter(job => job.logs).length } }));
     const lookup = await lookupMissing(jobs, checks);
@@ -179,7 +180,7 @@ async function main() {
       lease_id: null, lease_until: null, last_error: lookup.failures ? `${lookup.failures} đơn còn phần tra cứu SPX chưa hoàn tất.` : null,
     }).eq('id', true).eq('lease_id', lease).select('id').maybeSingle(), 'Chưa đăng được dữ liệu LOST');
     if (!data) throw Error('Lượt đồng bộ LOST đã hết hiệu lực.');
-    console.log(JSON.stringify({ published: rows.length, completed: rows.filter(row => row.lastStatus && row.logsChecked).length,
+    console.log(JSON.stringify({ published: rows.length, completed: rows.filter(row => row.lastStatus && row.logSourcesChecked).length,
       eventMatched: rows.filter(row => row.event).length, withLogs: rows.filter(row => row.latestLog).length, ...lookup }));
   } catch (error) {
     await report().update({ lease_id: null, lease_until: null, last_error: 'Lượt đồng bộ gần nhất gặp lỗi. Kiểm tra log đồng bộ trên máy worker.' }).eq('id', true).eq('lease_id', lease);
