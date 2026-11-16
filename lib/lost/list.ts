@@ -1,4 +1,4 @@
-import { lostDisplayStatus, lostLogRole, lostNameKey, matchesLostGroup, type LostGroup, type LostRow } from "./model.ts";
+import { lostDisplayStatus, lostLogRole, lostNameKey, matchesLostGroup, validLostDay, type LostGroup, type LostRow } from "./model.ts";
 
 const groupIds = ["all", "pickup", "not-received", "shortage", "other"] as const satisfies readonly LostGroup[];
 const sortOrders = ["date-desc", "date-asc", "rider-asc", "rider-desc"] as const;
@@ -6,14 +6,21 @@ const vietnamese = new Intl.Collator("vi", { sensitivity: "accent" });
 export const noLostClassification = "Không có phân loại LOST";
 export const lostPageSize = 30;
 export type LostSort = typeof sortOrders[number];
-export type LostFilters = { group: LostGroup; incident: string | null; status: string; q: string; withLogs: boolean; page: number; sort: LostSort };
-export const defaultLostFilters: LostFilters = { group: "all", incident: null, status: "all", q: "", withLogs: false, page: 0, sort: "date-desc" };
+export type LostFilters = { group: LostGroup; incident: string | null; status: string; q: string; withLogs: boolean; page: number; sort: LostSort; from: string; to: string };
+export const defaultLostFilters: LostFilters = { group: "all", incident: null, status: "all", q: "", withLogs: false, page: 0, sort: "date-desc", from: "", to: "" };
 
 export function parseLostFilters(params: URLSearchParams): LostFilters {
   const requestedGroup = params.get("group");
   const requestedSort = params.get("sort");
   const page = Number(params.get("page") ?? 0);
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  if ((from && !validLostDay(from)) || (to && !validLostDay(to)) || (from && to && from > to)) {
+    throw new Error("Khoảng ngày chốt đền bù không hợp lệ.");
+  }
   return {
+    from,
+    to,
     group: groupIds.find(group => group === requestedGroup) ?? "all",
     incident: params.get("incident"),
     status: params.get("status") ?? "all",
@@ -53,6 +60,7 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
   const selected = snapshot.groups.find(group => group.id === filters.group) ?? snapshot.groups[0];
   const term = lostNameKey(filters.q);
   const matching = selected.entries.filter(({ row, terms, incidentKey }) =>
+    (!filters.from || row.date >= filters.from) && (!filters.to || row.date <= filters.to) &&
     (filters.incident === null || incidentKey === filters.incident) &&
     (filters.status === "all" || lostDisplayStatus(row) === filters.status) && (!filters.withLogs || row.latestLog || row.logs.length > 0) &&
     (!term || terms.some(value => value.includes(term))));

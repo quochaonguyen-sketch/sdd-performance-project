@@ -1,3 +1,6 @@
+export const validLostDay = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(day)) &&
+  new Date(day).toISOString().slice(0, 10) === day;
+
 export type LostSourceRow = {
   row: number; date: string; shipment: string; status: string; reason: string; reasonType: string;
   result: string; amount: number | null;

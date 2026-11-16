@@ -1,13 +1,11 @@
 import { shiftCalendarDay, shiftCalendarMonth } from "../performance/calendar.ts";
-import { lostNameKey, matchesLostGroup, type LostRow } from "./model.ts";
+import { lostNameKey, matchesLostGroup, validLostDay, type LostRow } from "./model.ts";
 
 type LostCase = "pickup" | "notReceived";
 export type LostRank = "total" | LostCase;
 export type LostAnalysisFilters = { from: string; to: string; rank: LostRank };
 
 const dayMs = 86_400_000;
-const validDay = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(day)) &&
-  new Date(day).toISOString().slice(0, 10) === day;
 
 export function recentLostDays(today: string) {
   return { from: shiftCalendarDay(today, -29), to: today };
@@ -18,7 +16,7 @@ export function parseLostAnalysisFilters(params: URLSearchParams, today: string)
   const from = params.get("from") ?? defaults.from;
   const to = params.get("to") ?? defaults.to;
   const rank = params.get("rank");
-  if (!validDay(from) || !validDay(to) || from > to || to > today) return null;
+  if (!validLostDay(from) || !validLostDay(to) || from > to || to > today) return null;
   return { from, to, rank: rank === "pickup" || rank === "notReceived" ? rank : "total" };
 }
 
@@ -26,7 +24,7 @@ export function buildLostAnalysis(rows: Iterable<LostRow>, filters: LostAnalysis
   const { from, to, rank } = filters;
   const unique = new Map<string, { row: LostRow; kind: LostCase }>();
   for (const row of rows) {
-    if (row.date < from || row.date > to || !validDay(row.date)) continue;
+    if (row.date < from || row.date > to || !validLostDay(row.date)) continue;
     const kind = matchesLostGroup(row, "not-received") ? "notReceived" : matchesLostGroup(row, "pickup") ? "pickup" : null;
     if (!kind) continue;
     const previous = unique.get(row.shipment);
@@ -87,7 +85,7 @@ export function buildLostCompensation(rows: Iterable<Pick<LostRow, "date" | "amo
   let latestDate: string | null = null;
 
   for (const { date, amount } of rows) {
-    if (date < `${previousMonth}-01` || date > today || !validDay(date)) continue;
+    if (date < `${previousMonth}-01` || date > today || !validLostDay(date)) continue;
     if (date.startsWith(currentMonth) && (latestDate === null || date > latestDate)) latestDate = date;
     if (amount !== null && Number.isFinite(amount)) byDay.set(date, (byDay.get(date) ?? 0) + amount);
   }

@@ -9,6 +9,7 @@ import { lostLogRole, matchesLostGroup, type LostLog } from "@/lib/lost/model";
 import type { LostAnalysisData, LostCompensationData } from "@/lib/lost/analysis";
 import { LostAnalysis } from "./lost-analysis";
 import { LostCompensation } from "./lost-compensation";
+import { WhDateRangePicker } from "@/components/wh/wh-date-picker";
 import styles from "./lost.module.css";
 
 const sheet = "https://docs.google.com/spreadsheets/d/1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU/edit?gid=1396828508#gid=1396828508";
@@ -80,10 +81,10 @@ export function LostView({ initial, initialAnalysis, compensation }: {
     pending.current?.abort();
     if (timer.current !== null) clearTimeout(timer.current);
   }, []);
-  const { incident, q, status, withLogs } = filters;
+  const { incident, q, status, withLogs, from, to } = filters;
   const selectedIncident = data.incidents.find(option => option.key === data.incident);
   const { rows, syncedAt, error, total, page: current, last, checked, logRows } = data;
-  const hasFilters = incident !== null || !!q.trim() || status !== "all" || withLogs;
+  const hasFilters = incident !== null || !!q.trim() || status !== "all" || withLogs || !!from || !!to;
 
   function changeFilters(next: LostFilters, debounce = false) {
     setFilters(next);
@@ -96,6 +97,8 @@ export function LostView({ initial, initialAnalysis, compensation }: {
     async function load() {
       const params = new URLSearchParams({ group: next.group, status: next.status, q: next.q, page: String(next.page), withLogs: next.withLogs ? "1" : "0", sort: next.sort });
       if (next.incident !== null) params.set("incident", next.incident);
+      if (next.from) params.set("from", next.from);
+      if (next.to) params.set("to", next.to);
       try {
         const response = await fetch(`/api/lost?${params}`, { signal: request.signal });
         if (!response.ok) throw Error("Chưa tải được danh sách đơn.");
@@ -165,7 +168,14 @@ export function LostView({ initial, initialAnalysis, compensation }: {
         <div><h2>{selectedIncident?.label ?? "Danh sách đơn"}</h2>
           <p aria-live="polite">{loading ? "Đang tải danh sách…" : <>{number.format(total)} dòng <span>·</span> {number.format(checked)} đã kiểm tra SPX <span>·</span> {number.format(logRows)} có log SPX</>}</p>
         </div>
-        {hasFilters && <button className={styles.clear} type="button" onClick={clearFilters}>Xóa bộ lọc</button>}
+        <div className={styles.boardActions}>
+          {hasFilters && <button className={styles.clear} type="button" onClick={clearFilters}>Xóa bộ lọc</button>}
+          <div className={styles.dateFilter} role="group" aria-labelledby="lost-date-filter">
+            <span id="lost-date-filter">Ngày chốt đền bù</span>
+            <WhDateRangePicker from={from} to={to} maxDate={initialAnalysis.today}
+              onApply={(start, end) => changeFilters({ ...filters, from: start, to: end, page: 0 })} />
+          </div>
+        </div>
       </div>
       <div className={styles.filters}>
         <label className={styles.searchLabel}><span>Tìm đơn, rider hoặc phân loại</span>

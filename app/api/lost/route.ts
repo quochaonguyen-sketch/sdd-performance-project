@@ -27,13 +27,19 @@ export async function GET(request: Request) {
       const snapshot = await readLostSnapshot();
       return reply(buildLostAnalysis(snapshot.rowsByNumber.values(), filters, today));
     }
-    const snapshot = await readLostSnapshot();
     if (params.has("row")) {
+      const snapshot = await readLostSnapshot();
       const row = snapshot.rowsByNumber.get(rowNumber);
       if (!row || row.shipment !== params.get("shipment")) return reply({ error: "Không tìm thấy đơn trong bản đối soát hiện tại." }, 404);
       return reply({ logs: lostDisplayLogs(row) });
     }
-    return reply(selectLostPage(snapshot, parseLostFilters(params)));
+    let filters;
+    try {
+      filters = parseLostFilters(params);
+    } catch {
+      return reply({ error: "Khoảng ngày chốt đền bù không hợp lệ." }, 400);
+    }
+    return reply(selectLostPage(await readLostSnapshot(), filters));
   } catch {
     return reply({ error: "Chưa đọc được dữ liệu Lost & Compensated. Hãy thử lại." }, 503);
   }

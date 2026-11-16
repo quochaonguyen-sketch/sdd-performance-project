@@ -132,6 +132,27 @@ test("LOST chips count incident classifications and filter together with status 
   assert.equal(query({ q: "qua han tai hub" }).total, 0);
 });
 
+test("LOST list filters inclusively by compensation date before pagination", () => {
+  const rows = Array.from({ length: 34 }, (_, index) => ({
+    ...reconcileLostRow(row),
+    row: index + 2,
+    shipment: `VN${index}`,
+    date: index === 0 ? "2026-11-09" : index === 33 ? "2026-11-13" : index === 1 ? "2026-11-10" : "2026-11-12",
+  }));
+  const snapshot = prepareLostSnapshot(rows, null, null);
+  const filters = parseLostFilters(new URLSearchParams({ from: "2026-11-10", to: "2026-11-12", page: "1" }));
+  const result = selectLostPage(snapshot, filters);
+  assert.equal(result.total, 32);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows.at(-1)?.date, "2026-11-10");
+  const sameDay = selectLostPage(snapshot, { ...filters, from: "2026-11-12", page: 0 });
+  assert.equal(sameDay.total, 31);
+  assert.ok(sameDay.rows.every(({ date }) => date === "2026-11-12"));
+  for (const dates of [{ from: "2026-02-30" }, { from: "2026-11-12", to: "2026-11-10" }]) {
+    assert.throws(() => parseLostFilters(new URLSearchParams(dates as Record<string, string>)), /Khoảng ngày chốt/);
+  }
+});
+
 test("LOST sorts filtered rows before pagination and places missing SPX riders last in both directions", () => {
   const base = reconcileLostRow(row);
   const withRider = (index: number, rider: string, date = row.date) => ({
