@@ -2,11 +2,12 @@ import { lostDisplayStatus, lostLogRole, lostNameKey, matchesLostGroup, type Los
 
 const groupIds = ["all", "pickup", "not-received", "shortage", "other"] as const satisfies readonly LostGroup[];
 const sortOrders = ["date-desc", "date-asc", "rider-asc", "rider-desc"] as const;
-const riderNames = new Intl.Collator("vi", { sensitivity: "accent" });
+const vietnamese = new Intl.Collator("vi", { sensitivity: "accent" });
+export const noLostClassification = "Không có phân loại LOST";
 export const lostPageSize = 30;
 export type LostSort = typeof sortOrders[number];
-export type LostFilters = { group: LostGroup; status: string; q: string; withLogs: boolean; page: number; sort: LostSort };
-export const defaultLostFilters: LostFilters = { group: "all", status: "all", q: "", withLogs: false, page: 0, sort: "date-desc" };
+export type LostFilters = { group: LostGroup; incident: string | null; status: string; q: string; withLogs: boolean; page: number; sort: LostSort };
+export const defaultLostFilters: LostFilters = { group: "all", incident: null, status: "all", q: "", withLogs: false, page: 0, sort: "date-desc" };
 
 export function parseLostFilters(params: URLSearchParams): LostFilters {
   const requestedGroup = params.get("group");
@@ -14,6 +15,7 @@ export function parseLostFilters(params: URLSearchParams): LostFilters {
   const page = Number(params.get("page") ?? 0);
   return {
     group: groupIds.find(group => group === requestedGroup) ?? "all",
+    incident: params.get("incident"),
     status: params.get("status") ?? "all",
     q: (params.get("q") ?? "").slice(0, 120),
     withLogs: params.get("withLogs") === "1",
@@ -23,17 +25,25 @@ export function parseLostFilters(params: URLSearchParams): LostFilters {
 }
 
 export function prepareLostSnapshot(rows: LostRow[], syncedAt: string | null, error: string | null) {
-  const indexed = rows.map(row => ({
-    row,
-    terms: [row.shipment, row.reason, row.event?.rider, row.event?.code, row.latestLog?.rider, ...row.logs.map(log => log.rider)]
-      .filter((term): term is string => !!term).map(lostNameKey),
-  }));
+  const incidents = new Map<string, { key: string; label: string; count: number }>();
+  const indexed = rows.map(row => {
+    const key = row.incidentType ?? "";
+    const incident = incidents.get(key) ?? { key, label: key || noLostClassification, count: 0 };
+    incident.count += 1;
+    incidents.set(key, incident);
+    return {
+      row, incidentKey: key,
+      terms: [row.shipment, incident.label, row.event?.rider, row.event?.code, row.latestLog?.rider, ...row.logs.map(log => log.rider)]
+        .filter((term): term is string => !!term).map(lostNameKey),
+    };
+  });
   const groups = groupIds.map(id => {
     const entries = indexed.filter(({ row }) => matchesLostGroup(row, id));
     return { id, entries, statuses: [...new Set(entries.map(({ row }) => lostDisplayStatus(row)))].sort() };
   });
   return {
     groups, syncedAt, error,
+    incidents: [...incidents.values()].sort((a, b) => b.count - a.count || vietnamese.compare(a.label, b.label)),
     counts: Object.fromEntries(groups.map(group => [group.id, group.entries.length])) as Record<LostGroup, number>,
     rowsByNumber: new Map(rows.map(row => [row.row, row])),
   };
@@ -42,7 +52,8 @@ export function prepareLostSnapshot(rows: LostRow[], syncedAt: string | null, er
 export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>, filters: LostFilters) {
   const selected = snapshot.groups.find(group => group.id === filters.group) ?? snapshot.groups[0];
   const term = lostNameKey(filters.q);
-  const matching = selected.entries.filter(({ row, terms }) =>
+  const matching = selected.entries.filter(({ row, terms, incidentKey }) =>
+    (filters.incident === null || incidentKey === filters.incident) &&
     (filters.status === "all" || lostDisplayStatus(row) === filters.status) && (!filters.withLogs || row.latestLog || row.logs.length > 0) &&
     (!term || terms.some(value => value.includes(term))));
   const { sort } = filters;
@@ -51,7 +62,7 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
       const left = a.event?.rider?.trim();
       const right = b.event?.rider?.trim();
       if (left && right) {
-        const order = riderNames.compare(left, right);
+        const order = vietnamese.compare(left, right);
         if (order) return sort === "rider-asc" ? order : -order;
       } else if (left || right) {
         return left ? -1 : 1;
@@ -72,7 +83,8 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
         logError: error.length > 120 ? `${error.slice(0, 120)}…` : error,
       };
     }),
-    group: selected.id, statuses: selected.statuses, counts: snapshot.counts, total, page, last, sort,
+    group: selected.id, incident: filters.incident, incidents: snapshot.incidents, statuses: selected.statuses,
+    counts: snapshot.counts, total, page, last, sort,
     checked: matching.filter(({ row }) => (row.logSourcesChecked ?? row.logsChecked) && row.trackingChecked).length,
     logRows: matching.filter(({ row }) => row.latestLog || row.logs.length > 0).length,
     syncedAt: snapshot.syncedAt, error: snapshot.error,

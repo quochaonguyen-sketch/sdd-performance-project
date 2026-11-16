@@ -18,7 +18,7 @@ export type LostRow = LostSourceRow & {
   statusBeforeLost?: string | null;
   operationalStatusBeforeLost?: string | null;
   logSourcesChecked?: boolean;
-  incidentType?: "Pickup" | "Lost tại Hub/SOC";
+  incidentType?: LostIncidentType | "Pickup" | "Lost tại Hub/SOC" | "Mất tại hub sau bàn giao Pickup";
   latestLog?: LostLog | null;
 };
 
@@ -29,9 +29,25 @@ export const lostSerialEpoch = (serial: number) => Math.round((serial - 25569 - 
 
 export type LostGroup = "all" | "pickup" | "not-received" | "shortage" | "other";
 
+const lmHubUnloaded = 650;
 const statusLabels: Record<number, string> = {
-  1: "LMHub Received", 2: "Delivering", 4: "Delivered", 5: "On Hold", 7: "SOC Pending Receive",
-  11: "Lost", 39: "Pickup Done", 591: "Pickup Handedover",
+  1: "LMHub Received", 2: "Delivering", 3: "Cancelled", 4: "Delivered", 5: "On Hold", 7: "SOC Pending Receive",
+  10: "Return LMHub Received", 11: "Lost", 26: "Return_SOC_Received", 39: "Pickup Done", 40: "Pickup Handedover",
+  67: "Return FMHub Received", 72: "Return FMHub Returning", 73: "Return_FMHub_Returned", 591: "Pickup Handedover",
+  [lmHubUnloaded]: "LMHub_LHUnloaded",
+};
+
+const pickupNotHandedOver = "Rider pickup chưa bàn giao";
+const riderLost = "Rider làm mất đơn";
+const hubLost = "Đơn hàng mất tại hub";
+const returnLost = "Đơn Return mất tại hub";
+const unclassifiedLost = "Chưa xác định";
+type LostIncidentType = typeof pickupNotHandedOver | typeof riderLost |
+  typeof hubLost | typeof returnLost | typeof unclassifiedLost | `${string} (Theo Sheet)`;
+
+const lossByStatus: Partial<Record<number, LostIncidentType>> = {
+  1: hubLost, 2: riderLost, 5: riderLost, 10: returnLost, 26: returnLost, 39: pickupNotHandedOver,
+  40: pickupNotHandedOver, 67: returnLost, 72: returnLost, 73: returnLost, 591: pickupNotHandedOver,
 };
 
 export const lostDisplayStatus = (row: Pick<LostRow, "lastStatus" | "status">) => row.lastStatus ?? row.status;
@@ -55,7 +71,9 @@ export function matchesLostGroup(row: Pick<LostRow, "status" | "reason" | "incid
   if (group === "all") return true;
   const status = statusKey(row.status);
   const reason = lostNameKey(row.reason);
-  const pickup = row.incidentType === "Pickup" || ["pickupdone", "fmhubpickupdone", "fmhubpickuphandedovertostation", "fmhubpickuphandedover", "pickuphandover", "pickuphandedover"].includes(status);
+  const pickup = row.incidentType
+    ? [pickupNotHandedOver, "Pickup", "Mất tại hub sau bàn giao Pickup"].includes(row.incidentType)
+    : ["pickupdone", "fmhubpickupdone", "fmhubpickuphandedovertostation", "fmhubpickuphandedover", "pickuphandover", "pickuphandedover"].includes(status);
   const notReceived = /\bchua nhan(?: duoc)? hang\b/.test(reason);
   const shortage = /\b(?:thieu hang|rong ruot)\b/.test(reason);
   if (group === "pickup") return pickup;
@@ -131,20 +149,25 @@ export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow
     event.status !== 11 && event.at < lostEvent.at && (!previous || event.at > previous.at) ? event : previous, undefined);
   const statusBeforeLost = previousStatusEvent ? statusLabels[previousStatusEvent.status] ?? `SPX ${previousStatusEvent.status}` : null;
   const previousOperation = lostEvent && events.reduce<LostEvent | undefined>((previous, event) =>
-    event.status !== 11 && statusLabels[event.status] && event.at < lostEvent.at && (!previous || event.at > previous.at) ? event : previous, undefined);
+    event.status !== 11 && event.status !== lmHubUnloaded && statusLabels[event.status] &&
+      event.at < lostEvent.at && (!previous || event.at > previous.at) ? event : previous, undefined);
   const operationalStatusBeforeLost = previousOperation ? statusLabels[previousOperation.status] : null;
-  const beforeLost = lost ? events.filter(event => event.at <= lostAt && [1, 2, 4, 5, 7, 39, 591].includes(event.status))
-    .sort((a, b) => b.at - a.at)[0] : undefined;
-  const pickup = matchesLostGroup(row, "pickup") || lastStatus === "Pickup Done" || lastStatus === "Pickup Handedover" ||
-    [39, 591].includes(beforeLost?.status ?? 0);
-  const incidentType = pickup ? "Pickup" : lost && (beforeLost?.status === 1 || /\bqua han tai (?:hub|soc)\b/.test(lostNameKey(row.reason)))
-    ? "Lost tại Hub/SOC" : undefined;
+  const classifiedOperation = previousOperation && lossByStatus[previousOperation.status] ? previousOperation : undefined;
+  const sheetStatus = row.status.trim();
+  const incidentType: LostIncidentType | undefined = lostEvent || lost
+    ? lossByStatus[classifiedOperation?.status ?? -1] ?? (sheetStatus ? `${sheetStatus} (Theo Sheet)` : unclassifiedLost)
+    : undefined;
   let [code, eventLabel] = cases[status] ?? [0, ""];
-  if (!code && pickup) [code, eventLabel] = [39, "Pickup Done"];
-  if (!code && incidentType === "Lost tại Hub/SOC" && beforeLost?.status === 1) [code, eventLabel] = [1, "LMHub Received"];
+  if (classifiedOperation) {
+    code = incidentType === riderLost ? 2 : incidentType === pickupNotHandedOver ? 39 : classifiedOperation.status;
+    eventLabel = statusLabels[code];
+  } else if (!code && (matchesLostGroup(row, "pickup") || lastStatus === "Pickup Done" || lastStatus === "Pickup Handedover")) {
+    [code, eventLabel] = [39, "Pickup Done"];
+  }
   if (!code && /\bchua\s+nhan\b/.test(lostNameKey(row.reason))) [code, eventLabel] = [4, "Delivered"];
   const hold = status === "onhold" ? latest(5) : undefined;
-  let event = code ? latest(code, hold ? hold.at + 1 : lostAt) ?? null : null;
+  const through = classifiedOperation ? classifiedOperation.at + 1 : hold ? hold.at + 1 : lostAt;
+  let event = classifiedOperation?.status === code ? classifiedOperation : code ? latest(code, through) ?? null : null;
   if (event && ![2, 4, 39].includes(event.status)) event = { ...event, rider: undefined, code: undefined };
   const allLogs = check?.logs?.items ?? [];
   const logSourcesChecked = check?.logs?.latestOperation !== undefined;

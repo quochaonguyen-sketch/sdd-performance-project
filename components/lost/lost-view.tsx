@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowDown, ArrowUp, ArrowUpDown, CalendarClock, ChevronLeft, ChevronRight, ClipboardList, ExternalLink, Grid2X2,
-  PackageCheck, PackageOpen, PackageSearch, Search, Truck,
+  ArrowDown, ArrowUp, ArrowUpDown, CalendarClock, ChevronLeft, ChevronRight, ExternalLink, ListFilter, PackageSearch, Search,
 } from "lucide-react";
-import { defaultLostFilters, lostPageSize, type LostFilters, type LostPageData, type LostSort } from "@/lib/lost/list";
+import { defaultLostFilters, lostPageSize, noLostClassification, type LostFilters, type LostPageData, type LostSort } from "@/lib/lost/list";
 import { lostLogRole, matchesLostGroup, type LostLog } from "@/lib/lost/model";
 import type { LostAnalysisData, LostCompensationData } from "@/lib/lost/analysis";
 import { LostAnalysis } from "./lost-analysis";
@@ -17,14 +16,6 @@ const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh"
 const number = new Intl.NumberFormat("vi-VN");
 const percent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 });
 const displayTime = (seconds: number) => dateTime.format(seconds * 1000);
-
-const groups = [
-  { id: "all", label: "Tất cả", icon: Grid2X2 },
-  { id: "pickup", label: "Pickup Done / Handedover", icon: PackageCheck },
-  { id: "not-received", label: "Buyer/Seller chưa nhận hàng", icon: Truck },
-  { id: "shortage", label: "Ticket thiếu hàng", icon: PackageOpen, hint: "Thiếu hàng · Rỗng ruột" },
-  { id: "other", label: "Trường hợp khác", icon: ClipboardList },
-] as const;
 
 function displayStatus(value: string) {
   if (value.toLowerCase() === "fmhub_pickup_handedover_to_station") return "Pickup Handedover";
@@ -89,10 +80,10 @@ export function LostView({ initial, initialAnalysis, compensation }: {
     pending.current?.abort();
     if (timer.current !== null) clearTimeout(timer.current);
   }, []);
-  const { group, q, status, withLogs } = filters;
-  const selected = groups.find(option => option.id === data.group) ?? groups[0];
+  const { incident, q, status, withLogs } = filters;
+  const selectedIncident = data.incidents.find(option => option.key === data.incident);
   const { rows, syncedAt, error, total, page: current, last, checked, logRows } = data;
-  const hasFilters = group !== "all" || !!q.trim() || status !== "all" || withLogs;
+  const hasFilters = incident !== null || !!q.trim() || status !== "all" || withLogs;
 
   function changeFilters(next: LostFilters, debounce = false) {
     setFilters(next);
@@ -104,6 +95,7 @@ export function LostView({ initial, initialAnalysis, compensation }: {
     pending.current = request;
     async function load() {
       const params = new URLSearchParams({ group: next.group, status: next.status, q: next.q, page: String(next.page), withLogs: next.withLogs ? "1" : "0", sort: next.sort });
+      if (next.incident !== null) params.set("incident", next.incident);
       try {
         const response = await fetch(`/api/lost?${params}`, { signal: request.signal });
         if (!response.ok) throw Error("Chưa tải được danh sách đơn.");
@@ -156,31 +148,32 @@ export function LostView({ initial, initialAnalysis, compensation }: {
     </header>
     {error && <p role="alert" className={styles.warning}>{error}</p>}
     <LostCompensation data={compensation} />
-    <div className={styles.groups} role="group" aria-label="Nhóm đối soát">
-      {groups.map(option => <button key={option.id} type="button" className={styles.group} data-group={option.id}
-        aria-pressed={group === option.id}
-        onClick={() => changeFilters({ ...filters, group: option.id, status: "all", page: 0 })}>
-        <span className={styles.groupIcon}><option.icon size={18} aria-hidden="true" /></span>
-        <span className={styles.groupText}><strong>{option.label}</strong>
-          {"hint" in option && <small>{option.hint}</small>}</span>
-        <span className={styles.groupCount}>{number.format(data.counts[option.id])}</span>
-      </button>)}
-    </div>
+    <section className={styles.incidentFilters} aria-labelledby="lost-incident-label">
+      <h2 id="lost-incident-label"><ListFilter size={16} aria-hidden="true" /> Phân loại LOST</h2>
+      <div className={styles.incidentChips} role="group" aria-labelledby="lost-incident-label">
+        {[{ key: null, label: "Tất cả", count: data.counts.all }, ...data.incidents].map(option =>
+          <button key={option.key === null ? "all" : `incident:${option.key}`} type="button" className={styles.incidentChip}
+            aria-pressed={incident === option.key}
+            onClick={() => { if (incident !== option.key) changeFilters({ ...filters, incident: option.key, page: 0 }); }}>
+            <span>{option.label}</span><span className={styles.incidentCount}>{number.format(option.count)}</span>
+          </button>)}
+      </div>
+    </section>
 
     <section className={styles.board} aria-label="Danh sách Lost & Compensated">
       <div className={styles.boardHeader}>
-        <div><h2>{data.group === "all" ? "Danh sách đơn" : selected.label}</h2>
+        <div><h2>{selectedIncident?.label ?? "Danh sách đơn"}</h2>
           <p aria-live="polite">{loading ? "Đang tải danh sách…" : <>{number.format(total)} dòng <span>·</span> {number.format(checked)} đã kiểm tra SPX <span>·</span> {number.format(logRows)} có log SPX</>}</p>
         </div>
         {hasFilters && <button className={styles.clear} type="button" onClick={clearFilters}>Xóa bộ lọc</button>}
       </div>
       <div className={styles.filters}>
-        <label className={styles.searchLabel}><span>Tìm đơn hoặc rider</span>
+        <label className={styles.searchLabel}><span>Tìm đơn, rider hoặc phân loại</span>
           <span className={styles.search}><Search size={17} aria-hidden="true" />
             <input type="search" maxLength={120} value={q} onChange={event => changeFilters({ ...filters, q: event.target.value, page: 0 }, true)}
-              placeholder="Mã đơn, tên hoặc mã rider" /></span></label>
+              placeholder="Mã đơn, rider hoặc phân loại LOST" /></span></label>
         <label><span>Trạng thái hiện tại</span>
-          <select value={status} disabled={loading && data.group !== group} onChange={event => changeFilters({ ...filters, status: event.target.value, page: 0 })}>
+          <select value={status} onChange={event => changeFilters({ ...filters, status: event.target.value, page: 0 })}>
             <option value="all">Tất cả trạng thái</option>
             {data.statuses.map(value => <option key={value} value={value}>{displayStatus(value)}</option>)}
           </select></label>
@@ -204,9 +197,8 @@ export function LostView({ initial, initialAnalysis, compensation }: {
             {dateHeader()}
             <th scope="col" role="columnheader" className={styles.identity}>Mã SPX</th>
             <th scope="col" role="columnheader" className={styles.statusCol}>Trạng thái trước LOST</th>
-            <th scope="col" role="columnheader" className={styles.typeCol}>Phân loại</th>
+            <th scope="col" role="columnheader">Phân loại LOST</th>
             <th scope="col" role="columnheader" className={styles.money}>Tiền đền bù</th>
-            <th scope="col" role="columnheader">Lý do</th>
             <th scope="col" role="columnheader" className={styles.riderCol}>Rider</th>
             <th scope="col" role="columnheader" className={styles.logCell}>Log lỗi gần nhất</th>
           </tr></thead>
@@ -222,9 +214,8 @@ export function LostView({ initial, initialAnalysis, compensation }: {
                   {row.operationalStatusBeforeLost || row.statusBeforeLost}
                 </span>
                   : <span className={styles.muted}>—</span>}
-                {row.operationalStatusBeforeLost && row.operationalStatusBeforeLost !== row.statusBeforeLost && <small>Mốc ngay trước: {row.statusBeforeLost}</small>}
               </td>
-              <td role="cell"><span className={styles.mobileLabel}>Phân loại</span>{row.incidentType || "—"}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Phân loại LOST</span>{row.incidentType || <span className={styles.muted}>{noLostClassification}</span>}</td>
               <td role="cell" className={styles.money}>
                 <span className={styles.mobileLabel}>Tiền đền bù</span>
                 <strong>{row.amount === null ? "—" : `${number.format(row.amount)} ₫`}</strong>
@@ -233,7 +224,6 @@ export function LostView({ initial, initialAnalysis, compensation }: {
                     .filter(Boolean).join(" · ")}
                 </small>}
               </td>
-              <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Lý do</span>{row.reason || "—"}{row.reasonType && <small>{row.reasonType}</small>}</td>
               <td role="cell"><span className={styles.mobileLabel}>Tên rider</span>
                 {row.event ? <details>
                   <summary><ChevronRight size={14} aria-hidden="true" /><span>{row.event.rider || row.eventLabel || "Xem mốc SPX"}</span></summary>

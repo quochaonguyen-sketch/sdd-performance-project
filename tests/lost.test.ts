@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildLostAnalysis, buildLostCompensation, parseLostAnalysisFilters, recentLostDays } from "../lib/lost/analysis.ts";
 import { lostDisplayLogs, lostLogRole, matchesLostGroup, parseLostSheet, reconcileLostRow, type LostSourceRow } from "../lib/lost/model.ts";
-import { defaultLostFilters, parseLostFilters, prepareLostSnapshot, selectLostPage } from "../lib/lost/list.ts";
+import { defaultLostFilters, noLostClassification, parseLostFilters, prepareLostSnapshot, selectLostPage } from "../lib/lost/list.ts";
 
 const row: LostSourceRow = { row: 2, date: "2026-11-12", shipment: "VN12345", status: "OnHold", reason: "Quá hạn tại Hub", reasonType: "Lost", result: "Chốt đền bù", amount: 0 };
 const time = (clock: string) => Date.parse(`2026-11-12T${clock}+07:00`) / 1000;
@@ -106,6 +106,30 @@ test("LOST pages send 30 summaries and still search rider names from unloaded lo
   assert.equal(matches.rows[0].logRider, "Rider mới nhất");
   assert.equal(matches.rows[0].logError, "SPX error");
   assert.equal(snapshot.rowsByNumber.get(matches.rows[0].row)?.logs.length, 2);
+});
+
+test("LOST chips count incident classifications and filter together with status before pagination", () => {
+  const hub = "Đơn hàng mất tại hub";
+  const incidents = [hub, hub, "Rider làm mất đơn", "Chưa xác định", undefined] as const;
+  const rows = incidents.map((incidentType, index) => ({
+    ...reconcileLostRow(row), row: index + 2, incidentType, status: index === 1 ? "Delivered" : "Lost",
+  }));
+  const snapshot = prepareLostSnapshot(rows, null, null);
+  const query = (params: Record<string, string>) => selectLostPage(snapshot, parseLostFilters(new URLSearchParams(params)));
+  const all = query({});
+  assert.equal(all.incident, null);
+  assert.equal(all.incidents.length, 4);
+  assert.equal(all.incidents.reduce((total, incident) => total + incident.count, 0), all.total);
+  assert.deepEqual(all.incidents[0], { key: hub, label: hub, count: 2 });
+  assert.ok(all.incidents.some(incident => incident.key === "" && incident.label === noLostClassification));
+  const selected = query({ incident: hub, status: "Delivered", page: "2" });
+  assert.equal(selected.total, 1);
+  assert.equal(selected.rows[0].row, 3);
+  assert.equal(selected.page, 0);
+  assert.deepEqual(selected.incidents, all.incidents);
+  assert.equal(query({ incident: "" }).rows[0].incidentType, undefined);
+  assert.equal(query({ incident: "Chưa xác định" }).total, 1);
+  assert.equal(query({ q: "qua han tai hub" }).total, 0);
 });
 
 test("LOST sorts filtered rows before pagination and places missing SPX riders last in both directions", () => {
@@ -229,7 +253,7 @@ test("LOST uses SPX Last Status, the stage before loss and the latest Driver APP
     shipment_id: row.shipment, tracking, logs: { items: [latestLog] },
   });
   assert.equal(pickup.lastStatus, "Lost");
-  assert.equal(pickup.incidentType, "Pickup");
+  assert.equal(pickup.incidentType, "Rider pickup chưa bàn giao");
   assert.equal(matchesLostGroup(pickup, "pickup"), true);
   assert.equal(pickup.event?.rider, latestLog.rider);
   assert.deepEqual(pickup.logs, []);
@@ -243,13 +267,13 @@ test("LOST uses SPX Last Status, the stage before loss and the latest Driver APP
       ...tracking, events: [...tracking.events, { status: 1, at: time("09:45:00"), station: 4232 }],
     }, logs: null,
   });
-  assert.equal(hub.incidentType, "Lost tại Hub/SOC");
+  assert.equal(hub.incidentType, "Đơn hàng mất tại hub");
   assert.equal(hub.event?.status, 1);
   assert.equal(hub.event?.rider, undefined);
 });
 
 test("LOST distinguishes the event before loss from current status and reports the latest operator from any source", () => {
-  const driver = { ...log("09:00:00", "Rider A"), app: "Driver APP" };
+  const driver = { ...log("09:40:00", "Rider A"), app: "Driver APP" };
   const ops = { ...log("10:10:00", "Nhân viên B"), app: "FMS Portal" };
   const check = {
     shipment_id: row.shipment,
@@ -257,14 +281,17 @@ test("LOST distinguishes the event before loss from current status and reports t
       { status: 11, at: time("10:00:00"), station: 0 },
       { status: 650, at: time("09:50:00"), station: 4232 },
       { status: 5, at: time("09:45:00"), station: 0 },
+      { status: 2, at: time("09:35:00"), station: 0, rider: "Rider giao" },
       { status: 648, at: time("10:02:00"), station: 0 },
     ] },
     logs: { items: [driver], latestOperation: ops },
   };
   const lost = reconcileLostRow({ ...row, status: "Lost" }, check);
   assert.equal(lost.lastStatus, "Lost");
-  assert.equal(lost.statusBeforeLost, "SPX 650");
+  assert.equal(lost.statusBeforeLost, "LMHub_LHUnloaded");
   assert.equal(lost.operationalStatusBeforeLost, "On Hold");
+  assert.equal(lost.incidentType, "Rider làm mất đơn");
+  assert.equal(lost.event?.rider, "Rider giao");
   assert.equal(lost.logSourcesChecked, true);
   assert.deepEqual(lostDisplayLogs(lost), [ops, driver]);
   const snapshot = prepareLostSnapshot([lost], null, null);
@@ -276,4 +303,48 @@ test("LOST distinguishes the event before loss from current status and reports t
   assert.equal(lostLogRole({ ...ops, rider: "System Operator" }), "Hệ thống");
   assert.equal(lostLogRole({ ...ops, app: "" }), "Chưa rõ vai trò");
   assert.equal(reconcileLostRow(row, { ...check, tracking: { displayStatus: 4, events: [] } }).statusBeforeLost, null);
+});
+
+test("LOST classifies by the latest operational status and preserves the Sheet reason", () => {
+  const source = { ...row, status: "Lost", reason: "Quá hạn tại Hub/SOC" };
+  const classify = (status: number) => reconcileLostRow(source, {
+    shipment_id: source.shipment,
+    tracking: { displayStatus: 11, events: [
+      { status, at: time("09:00:00"), station: 4232 },
+      { status: 650, at: time("09:45:00"), station: 4232 },
+      { status: 11, at: time("10:00:00"), station: 4232 },
+      { status: 39, at: time("10:05:00"), station: 4232, rider: "Rider sau LOST" },
+    ] }, logs: null,
+  });
+  for (const [status, expected] of [
+    [2, "Rider làm mất đơn"], [40, "Rider pickup chưa bàn giao"], [591, "Rider pickup chưa bàn giao"],
+    [10, "Đơn Return mất tại hub"], [67, "Đơn Return mất tại hub"], [72, "Đơn Return mất tại hub"],
+    [7, "Lost (Theo Sheet)"], [650, "Lost (Theo Sheet)"],
+  ] as const) {
+    const classified = classify(status);
+    assert.equal(classified.incidentType, expected);
+    assert.equal(classified.reason, source.reason);
+    assert.notEqual(classified.event?.rider, "Rider sau LOST");
+  }
+  assert.equal(reconcileLostRow(source).incidentType, "Lost (Theo Sheet)");
+  assert.equal(reconcileLostRow({ ...source, status: "Return_FMHub_Returned" }, {
+    shipment_id: source.shipment, tracking: { displayStatus: 11, events: [] }, logs: null,
+  }).incidentType, "Return_FMHub_Returned (Theo Sheet)");
+  assert.equal(reconcileLostRow({ ...source, status: "" }, {
+    shipment_id: source.shipment, tracking: { displayStatus: 11, events: [] }, logs: null,
+  }).incidentType, "Chưa xác định");
+  for (const [status, label, category] of [
+    [3, "Cancelled", "Lost (Theo Sheet)"],
+    [26, "Return_SOC_Received", "Đơn Return mất tại hub"],
+    [73, "Return_FMHub_Returned", "Đơn Return mất tại hub"],
+  ] as const) {
+    const classified = classify(status);
+    assert.equal(classified.operationalStatusBeforeLost, label);
+    assert.equal(classified.incidentType, category);
+    assert.equal(reconcileLostRow(row, {
+      shipment_id: row.shipment, tracking: { displayStatus: status, events: [] }, logs: null,
+    }).lastStatus, label);
+  }
+  const snapshot = prepareLostSnapshot([classify(67)], null, null);
+  assert.equal(selectLostPage(snapshot, { ...defaultLostFilters, q: "don return mat tai hub" }).total, 1);
 });
