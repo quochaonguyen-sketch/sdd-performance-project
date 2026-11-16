@@ -118,6 +118,8 @@
 .summaryCompletion progress::-webkit-progress-value{background:var(--color-success);border-radius:3px}
 .summaryCompletion progress::-moz-progress-bar{background:var(--color-success);border-radius:3px}
 .handoverReport{container-type:inline-size;display:grid;gap:10px;min-width:0}
+.handoverHeader{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px 16px}
+.handoverHeader>div{flex:1 1 440px}
 .handoverReport p{margin:4px 0 0;color:var(--color-muted);font-size:12px;line-height:1.5}
 .handoverGrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .handoverCard h3{margin:0;padding:13px 14px;border-bottom:1px solid var(--color-rule);color:var(--color-ink);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}

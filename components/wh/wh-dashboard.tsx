@@ -56,6 +56,28 @@ import { shiftCalendarDay } from "@/lib/performance/calendar";
 
 const fmt = (v: number) => v.toLocaleString("vi-VN");
 
+function handoverRate(count: number, total: number) {
+  return total ? Math.round(count * 1000 / total) / 10 : null;
+}
+
+function downloadCsv(lines: unknown[][], filename: string) {
+  const cell = (value: unknown) => {
+    let text = String(value ?? "");
+    if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
+  const url = URL.createObjectURL(
+    new Blob(["\ufeff" + lines.map((line) => line.map(cell).join(",")).join("\r\n")], {
+      type: "text/csv;charset=utf-8",
+    }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function HandoverCells({ stats }: { stats: WhHandoverCounts }) {
   const slaTotal = stats.ontime + stats.late;
 
@@ -67,7 +89,7 @@ function HandoverCells({ stats }: { stats: WhHandoverCounts }) {
         {slaTotal ? (
           <>
             <span className={key === "ontime" ? styles.handoverOntime : styles.handoverLate}>
-              {(stats[key] / slaTotal * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%
+              {handoverRate(stats[key], slaTotal)?.toLocaleString("vi-VN")}%
             </span>
             <small>{fmt(stats[key])} đơn</small>
           </>
@@ -584,64 +606,47 @@ export function WhDashboard() {
     return list;
   }, [scope, term, matchesOrder, filterMode, data?.availableDates, currentDay]);
 
-  function download() {
-    const cell = (v: unknown) => {
-      let text = String(v ?? "");
-      if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
-      return '"' + text.replaceAll('"', '""') + '"';
-    };
+  const handoverTables = useMemo(() => data?.handoverWindows?.map((window) => {
+    const total = emptyHandoverCounts();
+    const areas = AREAS.filter((key) => area === "all" || area === key).map((key) => {
+      const stats = window.areas[key];
+      total.received += stats.received;
+      total.delivered += stats.delivered;
+      total.ontime += stats.ontime;
+      total.late += stats.late;
+      return { key, label: key === "UNRESOLVED" ? areaName(key) : key, stats };
+    });
+    return { label: window.label, total, areas };
+  }), [area, data?.handoverWindows]);
+
+  function downloadHandover() {
+    if (!data || expired || !handoverTables?.length) return;
     const lines = [
-      [
-        "Shipment",
-        "Tracking",
-        "KV",
-        "District",
-        "Ward",
-        "Rider",
-        "Rider ID",
-        "Status",
-        "Attempt",
-        "Created",
-        "Received",
-        "Delivering",
-        "Delivered",
-        "Onhold",
-        "SOC pending",
-        "4H",
-        "WH",
-        "SDD",
-      ],
-      ...filtered.map((r) => [
-        r.shipment_id,
-        r.tracking_number,
-        areaName(r.area),
-        r.district,
-        r.ward,
-        r.driver_name,
-        r.driver_id || "",
-        r.raw_status,
-        r.attempt,
-        stamp(r.created_at),
-        stamp(r.received_at),
-        stamp(r.delivering_at),
-        stamp(r.delivered_at),
-        stamp(r.onhold_at),
-        stamp(r.soc_pending_at),
-        sla(r, "4h").state,
-        sla(r, "wh").state,
-        sla(r, "sdd").state,
-      ]),
+      ["Từ ngày", "Đến ngày", "Khung bàn giao", "Khu vực", "Receive", "Đã giao", "Đơn có SLA",
+        "On-time (đơn)", "On-time (%)", "Late (đơn)", "Late (%)"],
+      ...handoverTables.flatMap((window) => [
+        { label: area === "all" ? "Tổng" : `Tổng ${window.areas[0]?.label ?? area}`, stats: window.total },
+        ...window.areas,
+      ].map(({ label, stats }) => {
+        const slaTotal = stats.ontime + stats.late;
+        return [
+          data.from ?? data.day, data.to ?? data.day, window.label, label,
+          stats.received, stats.delivered, slaTotal,
+          stats.ontime, handoverRate(stats.ontime, slaTotal),
+          stats.late, handoverRate(stats.late, slaTotal),
+        ];
+      })),
     ];
-    const url = URL.createObjectURL(
-      new Blob(["\ufeff" + lines.map((line) => line.map(cell).join(",")).join("\r\n")], {
-        type: "text/csv;charset=utf-8",
-      })
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `WH-${data?.day ?? "report"}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(lines, `iPhone-ban-giao-${data.day}${area === "all" ? "" : `-${area}`}.csv`);
+  }
+
+  async function downloadOrders() {
+    try {
+      const { downloadWhOrders } = await import("@/lib/wh/export");
+      downloadWhOrders(filtered, `iPhone-chi-tiet-${data?.day ?? "report"}.xlsx`);
+    } catch {
+      setMessage("Chưa xuất được file Excel chi tiết. Vui lòng thử lại.");
+    }
   }
 
   // Active filter reference dates
@@ -898,23 +903,18 @@ export function WhDashboard() {
 
       {data && !expired && (
         <section className={styles.handoverReport} aria-labelledby="wh-handover-title">
-          <header>
-            <h2 id="wh-handover-title" className={styles.panelTitle}>Tiến độ theo khung bàn giao</h2>
-            <p>Chia theo giờ SOC Pending (giờ Việt Nam). Receive là số đơn đã được LM Hub nhận. Tỷ lệ SLA 3H tính trên các đơn đã giao có đủ mốc thời gian trong từng dòng.</p>
+          <header className={styles.handoverHeader}>
+            <div>
+              <h2 id="wh-handover-title" className={styles.panelTitle}>Tiến độ theo khung bàn giao</h2>
+              <p>Chia theo giờ SOC Pending (giờ Việt Nam). Receive là số đơn đã được LM Hub nhận. Tỷ lệ SLA 3H tính trên các đơn đã giao có đủ mốc thời gian trong từng dòng.</p>
+            </div>
+            <button type="button" onClick={downloadHandover} disabled={!handoverTables?.length} className={styles.exportBtn}>
+              <Download size={15} aria-hidden="true" /> Xuất báo cáo CSV
+            </button>
           </header>
-          {data.handoverWindows ? (
+          {handoverTables ? (
             <div className={styles.handoverGrid}>
-              {data.handoverWindows.map((window) => {
-                const areas = AREAS.filter((key) => area === "all" || area === key);
-                const total = emptyHandoverCounts();
-                for (const key of areas) {
-                  const stats = window.areas[key];
-                  total.received += stats.received;
-                  total.delivered += stats.delivered;
-                  total.ontime += stats.ontime;
-                  total.late += stats.late;
-                }
-                return (
+              {handoverTables.map((window) => (
                   <section className={`${styles.panel} ${styles.handoverCard}`} key={window.label}>
                     <h3>{window.label}</h3>
                     <div className={styles.scroll}>
@@ -929,25 +929,24 @@ export function WhDashboard() {
                         <tbody>
                           <tr className={styles.handoverTotal}>
                             <th scope="row">Tổng</th>
-                            <HandoverCells stats={total} />
+                            <HandoverCells stats={window.total} />
                           </tr>
-                          {areas.map((key) => (
+                          {window.areas.map(({ key, label, stats }) => (
                             <tr key={key}>
                               <th scope="row">
                                 <span className={styles.areaPill} data-area={key}>
                                   <span className={styles.areaDot} aria-hidden="true" />
-                                  {key === "UNRESOLVED" ? areaName(key) : key}
+                                  {label}
                                 </span>
                               </th>
-                              <HandoverCells stats={window.areas[key]} />
+                              <HandoverCells stats={stats} />
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   </section>
-                );
-              })}
+              ))}
             </div>
           ) : <p>Chưa có bản dữ liệu đầy đủ để tính Receive và Đã giao theo khung bàn giao.</p>}
         </section>
@@ -1173,7 +1172,7 @@ export function WhDashboard() {
               <strong>Quy tắc tính SLA SDD 3H:</strong> Đánh giá từ lúc SOC nhận hàng (SOC_pendingReceive) đến lúc giao thành công (Delivered) với quy chuẩn 3 giờ (180 phút). Tỉ lệ On-time và Late tính trên tổng số đơn đã Delivered.
             </span>
             <span className={styles.footnoteMuted}>
-              Bộ lọc thời gian phía trên tự động tổng hợp số liệu cho toàn bộ bảng và file CSV xuất ra.
+              Bộ lọc thời gian phía trên áp dụng cho toàn bộ bảng và file xuất ra.
             </span>
           </div>
         </div>
@@ -1436,7 +1435,7 @@ export function WhDashboard() {
           </div>
           {waiting.length > 50 && (
             <div className={styles.tableFooterNote}>
-              Hiển thị 50 đơn ưu tiên nhất; xem danh sách đầy đủ bên dưới hoặc xuất CSV.
+              Hiển thị 50 đơn ưu tiên nhất. Xem danh sách đầy đủ bên dưới hoặc xuất Excel.
             </div>
           )}
         </section>
@@ -1548,9 +1547,9 @@ export function WhDashboard() {
               </h2>
               <p>Mở một đơn để xem mốc thời gian và lý do On-Hold.</p>
             </div>
-            <button onClick={download} disabled={!filtered.length} className={styles.exportBtn}>
+            <button type="button" onClick={() => void downloadOrders()} disabled={!filtered.length} className={styles.exportBtn}>
               <Download size={15} aria-hidden="true" />
-              Xuất CSV
+              Xuất chi tiết Excel
             </button>
           </div>
           <div className={styles.statusPillGroup}>

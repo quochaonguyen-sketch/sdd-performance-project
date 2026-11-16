@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as XLSX from "xlsx";
+import { whOrderWorkbook } from "../lib/wh/export.ts";
 import {
   compareWhOrders,
   getOrderEffectiveNow,
@@ -36,6 +38,26 @@ function makeOrder(id: string, raw_status: WhOrder["raw_status"], overrides: Par
     ...overrides,
   };
 }
+
+test("iPhone workbook exports real Excel dates and hours in Vietnam time", () => {
+  const workbook = whOrderWorkbook([
+    makeOrder("A", "Delivered", { soc_pending_at: "2026-11-12T08:34:00Z" }),
+    makeOrder("B", "Delivered", { soc_pending_at: "2026-11-12T17:00:00Z" }),
+    makeOrder("C", "Delivering", { soc_pending_at: null }),
+    makeOrder("D", "Delivering", { soc_pending_at: "invalid" }),
+  ]);
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  const sheet = XLSX.read(buffer, { type: "buffer", cellNF: true }).Sheets["Chi tiết đơn"];
+  assert.equal(sheet.O2.t, "n");
+  assert.equal(sheet.O2.w, "12/11/2026 15:34");
+  assert.equal(sheet.P2.w, "12/11/2026");
+  assert.equal(sheet.Q2.t, "n");
+  assert.equal(sheet.Q2.w, "15:34");
+  assert.equal(sheet.O3.w, "13/11/2026 00:00");
+  assert.equal(sheet.Q3.v, 0);
+  for (const cell of ["O4", "P4", "Q4", "O5", "P5", "Q5"]) assert.equal(sheet[cell], undefined);
+  assert.equal(sheet["!autofilter"]?.ref, "A1:T5");
+});
 
 test("handover report counts received, delivered and valid SLA by Vietnam handover window and area", () => {
   const delivered = (id: string, handover: string | null, end: string | null) =>
