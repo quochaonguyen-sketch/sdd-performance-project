@@ -410,13 +410,14 @@ function DeliveryOrderDialog({
                   <p className="min-w-0 break-all font-mono text-xs font-semibold text-[var(--color-ink)]">{row.shipment_id}</p>
                   <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold " + (cotBucket(row.cot_group) === "cot1" ? "bg-blue-50 text-blue-800" : "bg-emerald-50 text-emerald-800")}>{row.cot_group || "—"}</span>
                 </div>
-                  <p className="mt-1 break-words text-xs text-[var(--color-ink-2)]">{[row.area, row.district, row.ward || "Chưa xác định phường"].filter(Boolean).join(" · ")}</p>
-                <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
-                  <dt className="text-[var(--color-muted)]">Zone · Loại</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.zone_id || "—"} · {row.order_type || "—"}</dd>
-                  <dt className="text-[var(--color-muted)]">Trạng thái</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.status || "—"}</dd>
-                  <dt className="text-[var(--color-muted)]">Về hub</dt><dd className="text-right tabular-nums text-[var(--color-ink-2)]">{formatDateTime(row.received_time)}</dd>
-                </dl>
-                <SpxOrderLink shipmentId={row.shipment_id} />
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-ink-2)]">
+                  <span className="min-w-0 break-words">{[row.area, row.district, row.ward || "Chưa xác định phường"].filter(Boolean).join(" · ")}</span>
+                  <span className="whitespace-nowrap tabular-nums">
+                    <span className="mr-1 text-[var(--color-muted)]">Về hub</span>
+                    {formatDateTime(row.received_time)}
+                  </span>
+                  <SpxOrderLink shipmentId={row.shipment_id} />
+                </div>
               </li>
             ))}
           </ul>
