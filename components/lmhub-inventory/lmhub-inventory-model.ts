@@ -21,8 +21,8 @@ export type Counts = { cot1: number; cot2: number; total: number };
 export type WardAgg = { ward: string; district: string; area: Area } & Counts;
 export type DistrictAgg = { district: string; area: Area; wards: WardAgg[]; totals: Counts };
 export type InventoryFocus = {
-  area: Area;
-  district: string;
+  area: Area | "all";
+  district: string | null;
   ward: string | null;
 };
 

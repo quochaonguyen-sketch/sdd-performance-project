@@ -1,5 +1,6 @@
 export type PickupOrderScope = {
   area: string; status: string; cot: "all" | "cot1" | "cot2";
+  geography?: { query: string; heat: "all" | "hot" };
   zone?: string; district?:string; ward?:string; wards?:string[]; rider?: string; riderCot?: string; title: string;
 };
 type PickupOrderCode = { shipment_id: string; sls_tracking_number: string | null };

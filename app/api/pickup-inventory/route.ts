@@ -5,6 +5,9 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
 import { pickupOrderParams } from "@/lib/pickup/inventory-orders";
 import { TtlCache } from "@/lib/cache/ttl-cache";
+import { readAllPages } from "@/lib/pickup/realtime";
+import { buildPickupBoard, filterPickupBoard } from "@/components/lmhub-inventory/pickup-inventory-model";
+import { focusKey, type Area, type CotFilter } from "@/components/lmhub-inventory/lmhub-inventory-model";
 
 // Proxy cung origin cho trang Ton pickup: browser goi /api/pickup-inventory
 // (khong can apikey Supabase), server doc DB bang service key.
@@ -12,6 +15,12 @@ import { TtlCache } from "@/lib/cache/ttl-cache";
 // ("No API key found in request"), trong khi server chay on dinh.
 const dashboardCache = new TtlCache<Record<string, unknown>>(20_000, 10);
 const ridersCache = new TtlCache<Record<string, unknown>>(20_000, 10);
+type GeographyOrder = {
+  shipment_id: string; sls_tracking_number: string | null; pickup_point_id: string | null;
+  pickup_point_name: string | null; area: Area; district: string; ward: string; zone: string;
+  cot_group: string | null; order_cot: "cot1" | "cot2"; create_time: string | null; snapshot_at: string | null;
+};
+const geographyOrdersCache = new TtlCache<GeographyOrder[]>(20_000, 10);
 
 export async function GET(request: Request) {
   const context = await getCurrentUserContext().catch(() => null);
@@ -28,6 +37,39 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
 
   try {
+    if (view === "geography-orders") {
+      const geoQuery = (url.searchParams.get("geo_q") ?? "").trim();
+      const heat = url.searchParams.get("geo_heat") ?? "all";
+      let params;
+      try { params = pickupOrderParams(url.searchParams); }
+      catch { return NextResponse.json({ success:false, error:"Bộ lọc mã đơn pickup không hợp lệ" }, { status:400 }); }
+      if (geoQuery.length > 200 || (heat !== "all" && heat !== "hot")) {
+        return NextResponse.json({ success:false, error:"Bộ lọc địa bàn không hợp lệ" }, { status:400 });
+      }
+      const { p_area: area, p_status: status, p_query: query, p_offset: offset } = params;
+      const cot = params.p_cot as CotFilter;
+      const { value: orders } = await geographyOrdersCache.load(`${status}:${area}`, () =>
+        readAllPages<GeographyOrder>((from, to) => {
+          const page = admin.rpc("pickup_inventory_geography", { p_status: status }).select("*");
+          if (area !== "all") page.eq("area", area);
+          return page.order("shipment_id").range(from, to).abortSignal(AbortSignal.timeout(15_000));
+        }, 1000, 3));
+
+      const areas = OPERATING_AREAS.filter((key) => area === "all" || key === area);
+      const boardRows = orders.map((order) => ({ ...order, cot: order.order_cot, orders: 1 }));
+      const board = areas.flatMap((key) => buildPickupBoard(boardRows, key));
+      const visibleWards = new Set(filterPickupBoard(board, geoQuery, cot, heat)
+        .flatMap((district) => district.wards.map(focusKey)));
+      const term = query.toLowerCase();
+      const matching = orders.filter((order) => visibleWards.has(focusKey(order))
+        && (cot === "all" || order.order_cot === cot)
+        && (!term || `${order.shipment_id} ${order.sls_tracking_number ?? ""}`.toLowerCase().includes(term)));
+      const pageSize = 100;
+      const snapshotAt = orders.reduce<string | null>((latest, { snapshot_at }) =>
+        snapshot_at && (!latest || Date.parse(snapshot_at) > Date.parse(latest)) ? snapshot_at : latest, null);
+      return NextResponse.json({ success:true, rows:matching.slice(offset, offset + pageSize), total:matching.length, pageSize, snapshotAt },
+        { headers:{ "Cache-Control":"private, no-store" } });
+    }
     if (view === "orders") {
       let params;
       try { params = pickupOrderParams(url.searchParams); }

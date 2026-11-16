@@ -2,7 +2,7 @@
 "use client";
 import { useRememberedState } from "@/components/layout/filter-memory";
 
-import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { OPERATING_AREAS, normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { Select } from "@/components/ui/select";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, MapPin, RefreshCcw, Search, X } from "lucide-react";
@@ -204,10 +204,11 @@ export function LmhubInventoryView({ canQueue = false }: { canQueue?: boolean })
     if (!selected) return [];
     return rows
       .filter((row) => {
-        if (row.area !== selected.area) return false;
-        if ((row.district || UNKNOWN_DISTRICT) !== selected.district) return false;
+        const area = normalizeOperatingArea(row.area);
+        if (!area || (selected.area !== "all" && area !== selected.area)) return false;
+        if (selected.district && (row.district || UNKNOWN_DISTRICT) !== selected.district) return false;
         if (selected.ward && (row.ward || UNKNOWN_WARD) !== selected.ward) return false;
-        if (!visibleWards.has(focusKey({ area: selected.area, district: row.district || UNKNOWN_DISTRICT, ward: row.ward || UNKNOWN_WARD }))) return false;
+        if (!visibleWards.has(focusKey({ area, district: row.district || UNKNOWN_DISTRICT, ward: row.ward || UNKNOWN_WARD }))) return false;
         if (cot !== "all" && cotBucket(row.cot_group) !== cot) return false;
         return true;
       })
@@ -374,13 +375,13 @@ function DeliveryOrderDialog({
 
   return (
     <dialog ref={dialog} className="delivery-order-dialog" aria-modal="true" aria-labelledby={titleId}
-      onCancel={event=>{event.preventDefault();onClose();}} onClose={onClose}
+      onCancel={event=>{event.preventDefault();onClose();}}
       onClick={event=>{if(event.target!==event.currentTarget)return;const bounds=event.currentTarget.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)onClose();}}>
     <section data-area={selected.area} className="delivery-order-panel overflow-hidden rounded-2xl border border-[var(--color-rule)] bg-[var(--color-paper)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-rule)] px-4 py-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{selected.area} · {deliveryDistrictLabel(selected.district)}</p>
-          <h2 id={titleId} className="text-base font-bold text-[var(--color-ink)]">{selected.ward ?? "Tất cả phường trong quận"}</h2>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Tồn Delivery · {selected.area === "all" ? "Phạm vi đang lọc" : selected.area}</p>
+          <h2 id={titleId} className="text-base font-bold text-[var(--color-ink)]">{selected.ward ?? (selected.district ? deliveryDistrictLabel(selected.district) : "Danh sách mã đơn")}</h2>
           <p className="text-sm text-[var(--color-muted)]">{total.toLocaleString("vi-VN")} đơn khớp lọc</p>
         </div>
         <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={onClose} autoFocus><X size={16} /> Đóng</Button>
@@ -409,7 +410,7 @@ function DeliveryOrderDialog({
                   <p className="min-w-0 break-all font-mono text-xs font-semibold text-[var(--color-ink)]">{row.shipment_id}</p>
                   <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold " + (cotBucket(row.cot_group) === "cot1" ? "bg-blue-50 text-blue-800" : "bg-emerald-50 text-emerald-800")}>{row.cot_group || "—"}</span>
                 </div>
-                <p className="mt-1 break-words text-xs text-[var(--color-ink-2)]">{row.ward || "Chưa xác định phường"}</p>
+                  <p className="mt-1 break-words text-xs text-[var(--color-ink-2)]">{[row.area, row.district, row.ward || "Chưa xác định phường"].filter(Boolean).join(" · ")}</p>
                 <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
                   <dt className="text-[var(--color-muted)]">Zone · Loại</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.zone_id || "—"} · {row.order_type || "—"}</dd>
                   <dt className="text-[var(--color-muted)]">Trạng thái</dt><dd className="break-words text-right text-[var(--color-ink-2)]">{row.status || "—"}</dd>

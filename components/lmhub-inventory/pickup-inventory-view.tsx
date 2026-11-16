@@ -28,6 +28,7 @@ import {
   type CotFilter,
   type DistrictAgg,
   type HeatFilter,
+  type InventoryFocus,
   type PickupStatusKey,
   type PickupStatusRow,
 } from "@/components/lmhub-inventory/pickup-inventory-model";
@@ -238,6 +239,18 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
   const statusLabel = PICKUP_STATUS_LABEL[status];
   const areaWards = useMemo(() => filtered.map((board) => ({ area: board.area, wards: mergeWards(board.districts, cot) })), [filtered, cot]);
   const allWards = useMemo(() => areaWards.filter(board => areaFilter === "all" || board.area === areaFilter).flatMap((board) => board.wards), [areaWards, areaFilter]);
+  const openOrders = (focus: InventoryFocus) => {
+    const area = focus.area === "all" ? areaFilter : focus.area;
+    setOrderScope({
+      area, cot, status: statusLabel,
+      title: [area === "all" ? "Phạm vi đang lọc" : area, focus.district, focus.ward].filter(Boolean).join(" / "),
+      ...(focus.district ? {
+        district: focus.district,
+        ward: focus.ward ?? undefined,
+        wards: allDistricts.find((district) => district.area === area && district.district === focus.district)?.wards.map((ward) => ward.ward),
+      } : { geography: { query: deferredQuery, heat } }),
+    });
+  };
 
   useSupabaseRealtime({ table: "pickup_48h_no_api2", onChange: scheduleLoad, debounceMs: 1500 });
 
@@ -291,6 +304,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
           value={analytics.visible}
           hint={`${allWards.length} phường còn ${statusLabel}`}
           accent="ink"
+          onClick={() => openOrders({ area: "all", district: null, ward: null })}
         />
         <StatTile
           label="Đơn COT 1"
@@ -427,9 +441,7 @@ export function PickupInventoryView({ canQueue = false }: { canQueue?: boolean }
         </div>
       ) : (
         <DeliveryInventoryBoard kind="Pickup" districts={allDistricts} cot={cot} selected={orderScope?.district&&isOperatingArea(orderScope.area)?{area:orderScope.area as Area,district:orderScope.district,ward:orderScope.ward??null}:null}
-          forceExpanded={!!query||heat==='hot'} onSelect={focus=>setOrderScope({area:focus.area,district:focus.district,ward:focus.ward??undefined,
-            wards:allDistricts.find(d=>d.area===focus.area&&d.district===focus.district)?.wards.map(w=>w.ward),
-            cot,status:statusLabel,title:[focus.area,focus.district,focus.ward].filter(Boolean).join(' / ')})}/>
+          forceExpanded={!!query||heat==='hot'} onSelect={openOrders}/>
       )}
 
       </>}
@@ -466,11 +478,13 @@ function StatTile({
   value,
   hint,
   accent,
+  onClick,
 }: {
   label: string;
   value: number;
   hint: string;
   accent: "ink" | "blue" | "teal" | "red" | "green";
+  onClick?: () => void;
 }) {
   const tone = {
     ink: "text-slate-900",
@@ -483,7 +497,10 @@ function StatTile({
   return (
     <article className="delivery-stat rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-accent={accent}>
       <div><p className="text-xs font-medium text-slate-500">{label}</p></div>
-      <p className={"mt-1 font-mono text-3xl font-black tracking-tight " + tone}>{value.toLocaleString("vi-VN")}</p>
+      <p className={"mt-1 font-mono text-3xl font-black tracking-tight " + tone}>{onClick ? (
+        <button type="button" aria-haspopup="dialog" aria-label={`Xem ${value} mã đơn`} disabled={!value} onClick={onClick}
+          className="rounded underline decoration-dotted underline-offset-4 focus-visible:outline-2 disabled:no-underline">{value.toLocaleString("vi-VN")}</button>
+      ) : value.toLocaleString("vi-VN")}</p>
       <p className="mt-1 text-xs text-slate-500">{hint}</p>
     </article>
   );

@@ -30,7 +30,8 @@ export function PickupOrderDialog({ scope, onClose }: { scope: PickupOrderScope;
   const [loading, setLoading] = useState(true), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [retry, setRetry] = useState(0);
   const filters = new URLSearchParams({
-    view: "orders", p_area: scope.area, p_status: scope.status, p_cot: scope.cot,
+    view: scope.geography ? "geography-orders" : "orders", p_area: scope.area, p_status: scope.status, p_cot: scope.cot,
+    geo_q: scope.geography?.query ?? "", geo_heat: scope.geography?.heat ?? "all",
     p_zone: scope.zone ?? "", p_district: scope.district ?? "", p_ward: scope.ward ?? "",
     p_wards: JSON.stringify(scope.wards ?? []), p_rider: scope.rider ?? "",
     p_rider_cot: scope.riderCot ?? "", q: query,

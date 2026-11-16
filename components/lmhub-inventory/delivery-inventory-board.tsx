@@ -3,7 +3,7 @@
 import { useId, useState, type CSSProperties } from "react";
 import { ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { addCounts, deliveryDistrictLabel, emptyCounts, heatClass, sameFocus, visibleCount, visibleTotal, type CotFilter, type DistrictAgg, type InventoryFocus } from "./lmhub-inventory-model";
+import { addCounts, deliveryDistrictLabel, emptyCounts, heatClass, sameFocus, visibleBoardTotal, visibleCount, visibleTotal, type CotFilter, type DistrictAgg, type InventoryFocus } from "./lmhub-inventory-model";
 
 export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, forceExpanded = false, kind="Delivery" }: {
   kind?:"Delivery"|"Pickup";
@@ -18,17 +18,24 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
     return {area, districts:items, totals:items.reduce((sum,district)=>addCounts(sum,district.totals),emptyCounts()), wards:items.reduce((sum,district)=>sum+district.wards.length,0)};
   });
   const allOpen = forceExpanded || (districts.length > 0 && groups.every(group=>!closedAreas[group.area]) && districts.every((district) => collapsed[`${district.area}:${district.district}`] === false));
+  const total = visibleBoardTotal(districts, cot);
 
   return <section aria-label={`Tồn ${kind} trong phạm vi đã chọn`} className="space-y-3">
     <header className="delivery-board-heading flex flex-wrap items-center justify-between gap-3 text-xs">
       <div><h2 className="text-sm font-bold text-slate-900">Tồn theo khu vực và địa bàn</h2></div>
-      <button type="button" disabled={forceExpanded || !districts.length} onClick={() => {setClosedAreas(Object.fromEntries(groups.map(group=>[group.area,allOpen])));setCollapsed(Object.fromEntries(districts.map((district) => [`${district.area}:${district.district}`, allOpen])));}} className="min-h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">{allOpen ? "Thu tất cả" : "Mở tất cả"}</button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-haspopup="dialog" disabled={!total}
+          className="min-h-8 rounded-md bg-[var(--color-accent-soft)] px-2 font-semibold text-[var(--color-accent)] focus-visible:outline-2 disabled:opacity-40"
+          onClick={() => onSelect({ area: "all", district: null, ward: null })}>Xem {total.toLocaleString("vi-VN")} mã đơn</button>
+        <button type="button" disabled={forceExpanded || !districts.length} onClick={() => {setClosedAreas(Object.fromEntries(groups.map(group=>[group.area,allOpen])));setCollapsed(Object.fromEntries(districts.map((district) => [`${district.area}:${district.district}`, allOpen])));}} className="min-h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">{allOpen ? "Thu tất cả" : "Mở tất cả"}</button>
+      </div>
     </header>
     {!districts.length ? <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center"><p className="text-sm font-semibold text-slate-700">Không có tồn phù hợp</p><p className="mt-1 text-xs text-slate-500">Thử mở rộng địa bàn, đổi COT hoặc đặt lại bộ lọc.</p></div> : null}
     <div className="delivery-area-groups">
       {groups.map(group=>{
         const areaOpen = forceExpanded || !closedAreas[group.area];
         const areaId = `${boardId}-${group.area}`;
+        const groupTotal = visibleTotal(group.totals, cot);
         return <section key={group.area} data-area={group.area} className="delivery-area-group" aria-label={`Tồn ${group.area}`}>
           <header className="delivery-area-group-header">
             <button type="button" aria-expanded={areaOpen} aria-controls={areaId} disabled={forceExpanded} onClick={()=>setClosedAreas(current=>({...current,[group.area]:areaOpen}))}>
@@ -38,7 +45,13 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
             <dl className="delivery-area-group-totals">
               <div><dt>COT 1</dt><dd>{visibleCount(group.totals,"cot1",cot).toLocaleString("vi-VN")}</dd></div>
               <div><dt>COT 2</dt><dd>{visibleCount(group.totals,"cot2",cot).toLocaleString("vi-VN")}</dd></div>
-              <div className="delivery-area-group-total"><dt>Tổng tồn</dt><dd>{visibleTotal(group.totals,cot).toLocaleString("vi-VN")} <small>đơn</small></dd></div>
+              <div className="delivery-area-group-total"><dt>Tổng tồn</dt><dd>
+                <button type="button" aria-haspopup="dialog" aria-label={`Xem ${groupTotal} đơn ${group.area}`}
+                  disabled={!groupTotal} onClick={() => onSelect({ area: group.area, district: null, ward: null })}
+                  className="inline-flex min-h-8 items-center gap-1 rounded-md px-1 text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] focus-visible:outline-2 disabled:opacity-40">
+                  {groupTotal.toLocaleString("vi-VN")} <small>đơn</small><ArrowUpRight size={13} aria-hidden="true" />
+                </button>
+              </dd></div>
             </dl>
           </header>
           <div id={areaId} hidden={!areaOpen} className="delivery-area-group-body">
@@ -68,7 +81,7 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
                 })}
                 {district.wards.length < 8 ? <tr className="delivery-ward-spacer" aria-hidden="true"><td colSpan={4}/></tr> : null}
               </tbody>
-              <tfoot className="sticky bottom-0 border-t border-slate-200 bg-slate-50"><tr><th scope="row" className="px-2 py-1.5 text-[11px] font-semibold text-slate-700">{district.wards.length} phường</th><NumberCell value={visibleCount(district.totals, "cot1", cot)} strong /><NumberCell value={visibleCount(district.totals, "cot2", cot)} strong /><NumberCell value={visibleTotal(district.totals, cot)} strong heat /></tr></tfoot>
+              <tfoot className="sticky bottom-0 border-t border-slate-200 bg-slate-50"><tr><th scope="row" className="px-2 py-1.5 text-[11px] font-semibold text-slate-700">{district.wards.length} phường</th><NumberCell value={visibleCount(district.totals, "cot1", cot)} strong /><NumberCell value={visibleCount(district.totals, "cot2", cot)} strong /><NumberCell value={visibleTotal(district.totals, cot)} strong heat onClick={() => onSelect(focus)} label={`Xem tổng đơn ${label}`} /></tr></tfoot>
             </table>
           </div> : null}
         </article>;
@@ -82,5 +95,5 @@ export function DeliveryInventoryBoard({ districts, cot, selected, onSelect, for
 
 function NumberCell({ value, strong, heat, onClick, label }: { value: number; strong?: boolean; heat?: boolean; onClick?: () => void; label?: string }) {
   const style = cn("inline-block min-w-6 rounded px-1 py-0.5", heat && heatClass(value), !value && "text-slate-400");
-  return <td className={cn("px-1 py-0.5 text-right tabular-nums", strong ? "font-semibold text-slate-900" : "text-slate-600")}>{onClick ? <button type="button" onClick={onClick} aria-label={label} className={cn(style, "min-h-7 cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600")}>{value.toLocaleString("vi-VN")}</button> : <span className={style}>{value.toLocaleString("vi-VN")}</span>}</td>;
+  return <td className={cn("px-1 py-0.5 text-right tabular-nums", strong ? "font-semibold text-slate-900" : "text-slate-600")}>{onClick ? <button type="button" onClick={onClick} aria-label={label} aria-haspopup="dialog" disabled={!value} className={cn(style, "min-h-7 cursor-pointer underline decoration-dotted underline-offset-2 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:no-underline")}>{value.toLocaleString("vi-VN")}</button> : <span className={style}>{value.toLocaleString("vi-VN")}</span>}</td>;
 }

@@ -63,7 +63,7 @@ export function riderCotLabel(value: string | null | undefined) {
   return raw || "COT1";
 }
 
-export function buildPickupBoard(rows: PickupStatusRow[], area: Area): DistrictAgg[] {
+export function buildPickupBoard(rows: Pick<PickupStatusRow, "area" | "district" | "ward" | "cot" | "orders">[], area: Area): DistrictAgg[] {
   const map = new Map<string, Map<string, WardAgg>>();
   for (const row of rows) {
     if (cleanArea(row.area) !== area) continue;
@@ -140,9 +140,9 @@ export function filterPickupBoard(districts: DistrictAgg[], query: string, cot: 
 }
 
 export function matchesFocus(row: PickupStatusRow, focus: InventoryFocus) {
-  if (cleanArea(row.area) !== focus.area) return false;
+  if (focus.area !== "all" && cleanArea(row.area) !== focus.area) return false;
   const district = String(row.district || "").trim() || UNKNOWN_DISTRICT;
-  if (district !== focus.district) return false;
+  if (focus.district && district !== focus.district) return false;
   if (!focus.ward) return true;
   const ward = String(row.ward || "").trim() || UNKNOWN_WARD;
   return ward === focus.ward;
