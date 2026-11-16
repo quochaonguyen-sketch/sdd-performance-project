@@ -38,13 +38,14 @@ export function stageOrders(trip:LinehaulTrip,stage:LoadStage){
  }
  return quantity(trip.orders);
 }
-export function linehaulSummary(trips:LinehaulTrip[],day:string){
+export function linehaulSummary(trips:LinehaulTrip[],from:string,to=from){
  const groups=Object.fromEntries(LOAD_STAGE_KEYS.map(key=>[key,{key,label:LOAD_STAGES[key],trips:[] as LinehaulTrip[],knownOrders:0,missing:0}])) as Record<LoadStage,{key:LoadStage;label:string;trips:LinehaulTrip[];knownOrders:number;missing:number}>;
  const hourly=Array.from({length:24},(_,hour)=>({hour,orders:{unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0},missing:{unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0},trips:[] as LinehaulTrip[]}));
  const unplaced={unloaded:0,unloading:0,incoming:0,loading:0,at_hub:0};
  const byOrigin=new Map<string,{key:string;label:string;trips:number;knownOrders:number;missing:number}>();
  for(const trip of trips){
-  if(trip.trip_day!==day)continue;
+  const day=trip.trip_day;
+  if(day<from||day>to)continue;
   const stage=loadStage(trip);if(!stage)continue;
   const origin=linehaulOrigin(trip);
   let originTotal=byOrigin.get(origin.key);

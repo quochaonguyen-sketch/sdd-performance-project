@@ -30,6 +30,15 @@ test("hour buckets use Vietnamese actual unloading time and planned arrival, nev
  assert.equal(result.unplaced.unloaded,0);
  assert.equal(linehaulSummary([{...trip,hub_unloaded_at:"2026-10-27T12:00:00+07:00"}],day).groups.unloaded.trips.length,0,"Previous-day unloading is not today's throughput");
 });
+test("a date range counts each saved day and checks unloading against the trip's own day",()=>{
+ const previous={...trip,trip_day:"2026-10-27",hub_ata:"2026-10-27T08:00:00+07:00",hub_unloaded_at:"2026-10-27T08:20:00+07:00"};
+ const outside={...trip,trip_day:"2026-10-26",hub_unloaded_at:"2026-10-26T08:20:00+07:00"};
+ const wrongDay={...trip,trip_id:"2",hub_unloaded_at:previous.hub_unloaded_at};
+ const range=linehaulSummary([previous,trip,outside,wrongDay],"2026-10-27",day);
+ assert.deepEqual(range.groups.unloaded.trips.map(row=>row.trip_day),["2026-10-27",day]);
+ assert.equal(range.groups.unloaded.knownOrders,142);
+ assert.equal(range.unloadedByOrigin[0].knownOrders,142);
+});
 test("dashboard unloaded trips without scan units contribute orders to unloaded throughput",()=>{
  const dashTrip={...trip,trip_id:"dash1",source:"dashboard",phase:"unloaded",expected_unload:null,unloaded_units:null,hub_unloaded_at:"2026-10-28T10:00:00+07:00",orders:500} as LinehaulTrip;
  const res=linehaulSummary([dashTrip],day);

@@ -41,6 +41,8 @@ async function main() {
   await db.$transaction(async tx => {
     await tx.$executeRawUnsafe("set local lock_timeout='15s'");
     await tx.$executeRawUnsafe('select pg_advisory_xact_lock(948251,1)');
+    const [state] = await tx.$queryRawUnsafe("select to_regprocedure('public.backlog_archive_rpc(text,jsonb)') is not null as archived");
+    if (state.archived) throw Error('Backlog pivot uses the archive project. Apply backlog-pivot-primary.sql for pivot changes.');
     await tx.$executeRawUnsafe('select pg_advisory_xact_lock(734291,12)');
     await tx.$executeRawUnsafe('lock table public.data_source_jobs,public.lmhub_fetch_jobs,public.pickup_48h_no_api2,public.lmhub_inventory_rows in access exclusive mode');
     for (const sql of statements(fs.readFileSync('prisma/backlog-history.sql', 'utf8'))) await tx.$executeRawUnsafe(sql);
@@ -54,4 +56,7 @@ async function main() {
   }, { timeout: 60000 });
   console.log('Backlog history schema, publication trigger and UTC+7 checkpoint schedule installed.');
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db?.$disconnect());
+module.exports = { statements };
+if (require.main === module) {
+  main().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db?.$disconnect());
+}

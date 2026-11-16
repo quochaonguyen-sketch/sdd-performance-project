@@ -11,8 +11,26 @@ export type LinehaulTrip = {
  next_station:string|null;location_error:string|null;location_checked_at:string|null;
  arrived_lat?:number|null;arrived_lng?:number|null;arrived_at_hub?:boolean|null;arrived_distance_km?:number|null;
 };
+export type LinehaulRange={from:string;to:string};
 export type LinehaulData={day:string;snapshotAt:string|null;trips:LinehaulTrip[];canRefresh:boolean};
+export type LinehaulRangeData=LinehaulData&LinehaulRange&{snapshotDays:number};
 export const LH_PHASES={waiting:"Chờ xuất phát",en_route:"Đang về hub",at_hub:"Đang chờ xả",unloading:"Đang xả hàng",departed:"Đã rời hub",unloaded:"Đã xả tải"};
+export function parseLinehaulDay(value:string|null,today:string){
+ if(value===null)return today;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||value.startsWith("0000-")||value>today||!Number.isFinite(Date.parse(value)))return null;
+ return new Date(value).toISOString().slice(0,10)===value?value:null;
+}
+export function parseLinehaulRange(params:URLSearchParams,today:string):LinehaulRange|null{
+ const fromValue=params.get("from"),toValue=params.get("to");
+ if(fromValue===null&&toValue===null){
+  const day=parseLinehaulDay(params.get("date"),today);
+  return day?{from:day,to:day}:null;
+ }
+ if(fromValue===null||toValue===null)return null;
+ const from=parseLinehaulDay(fromValue,today),to=parseLinehaulDay(toValue,today);
+ return from&&to&&from<=to?{from,to}:null;
+}
+export const linehaulTripKey=(trip:Pick<LinehaulTrip,"trip_day"|"trip_id">)=>`${trip.trip_day}:${trip.trip_id}`;
 export function eventOnDay(value:string|null|undefined,day:string){
  const stamp=value?Date.parse(value):NaN;
  return Number.isFinite(stamp)&&new Date(stamp+7*3600000).toISOString().slice(0,10)===day;

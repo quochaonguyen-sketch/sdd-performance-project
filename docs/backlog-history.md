@@ -6,7 +6,7 @@ Trang `/backlog-history` (Operations → Backlog History) dùng cùng quyền xe
 
 `backlog_snapshots` giữ nguồn, snapshot gốc, job, thời gian bắt đầu đọc/chốt/lưu, ngày UTC+7, khung 30 phút và tổng distinct shipment. `backlog_snapshot_rows` giữ pivot theo khu vực, quận, phường với COT1/COT2/chưa rõ COT. Chỉ giữ pivot, không nhân bản mã đơn hay địa chỉ khách hàng. Snapshot cũ không bị thay khi bảng tồn hiện tại được ghi đè.
 
-Trigger `archive_completed_backlog` chạy khi `lmhub_fetch_jobs` chuyển sang DONE, trong cùng giao dịch công bố tồn. Snapshot trùng mã được bỏ qua; tổng header bằng tổng pivot. Pickup chỉ tính Assigned, distinct shipment và dùng quận từ Coverage/tuyến đã xác nhận. Thiếu địa bàn giữ nhóm Chưa xác định. Lịch sử bắt đầu khi tính năng được cài; không tự tạo dữ liệu của các ngày trước.
+Trigger `archive_completed_backlog` chạy khi `lmhub_fetch_jobs` chuyển sang DONE. Nó ghi pivot sang Supabase archive và kiểm tra tổng trước khi commit lượt công bố tồn ở database chính. Snapshot trùng mã được bỏ qua; khi giao dịch chính phải chạy lại, cùng mã nguồn dùng cùng ID ở archive. Pickup chỉ tính Assigned, distinct shipment và dùng quận từ Coverage/tuyến đã xác nhận. Thiếu địa bàn giữ nhóm Chưa xác định. Lịch sử bắt đầu khi tính năng được cài.
 
 Delivery giữ hàm ghi 6 tham số cũ từ chối snapshot rỗng. Worker chỉ gọi overload 7 tham số với `p_complete=true` khi đã đọc đủ nguồn và không còn dòng unmapped để xác nhận tồn bằng 0. Lỗi nguồn/mapping không xóa tồn hay sinh snapshot 0.
 
@@ -26,14 +26,17 @@ Cập nhật riêng lịch mà không cài lại publisher/schema: `node --env-f
 
 ## Cài đặt và kiểm tra
 
-Theo cấu trúc SQL bootstrap hiện có của repository:
+Database chính lưu `backlog_snapshots` và `backlog_checkpoints`. Database archive lưu `backlog_snapshot_rows` và header phục vụ khóa ngoại. Các RPC hiện có trên database chính lấy pivot qua HTTPS. Khóa API của archive nằm trong Vault với tên `backlog_pivot_archive`. Khi xoay khóa, cập nhật secret đó với cùng cấu trúc JSON `url` và `key`.
+
+Với project mới, cài schema chính bằng `scripts/apply-backlog-history.cjs` và cài `prisma/backlog-snapshot-archive.sql`, `prisma/backlog-pivot-archive.sql` trên project archive. Với nguồn đã có dữ liệu, chạy các bước chuyển sau:
 
 ```powershell
-node --env-file=.env --env-file=.env.local scripts/apply-backlog-history.cjs
-node --env-file=.env --env-file=.env.local scripts/apply-backlog-history.cjs --test
+node --experimental-strip-types scripts/copy-backlog-snapshots.mts --apply
+node --experimental-strip-types scripts/cutover-backlog-pivot.cjs
+node --experimental-strip-types scripts/cutover-backlog-pivot.cjs --apply
 node --test tests/backlog-history.test.ts
 ```
 
-Script kiểm tra DATABASE_URL trỏ đúng project của website, khóa theo thứ tự của worker và cài trong một giao dịch. Nó bổ sung cột district cho Pickup và cập nhật publisher tương thích dữ liệu cũ thiếu cột này. Test SQL luôn rollback fixture, không giữ lịch/job thử. Các bảng/RPC chỉ cấp service_role, có RLS; API kiểm tra đăng nhập và quyền trước khi đọc.
+Cutover xác minh tổng và nội dung pivot, kiểm tra kết quả API theo giờ và chi tiết của Pickup/Delivery rồi mới commit việc xóa bảng ở nguồn. Lượt chạy mặc định rollback các thay đổi ở database chính. Các bảng và RPC chỉ cấp cho service_role, bảng có RLS; API kiểm tra quyền đăng nhập trước khi đọc.
 
 Đã kiểm tra trực tiếp publication thật của hai nguồn: tổng pivot khớp header; cron hoạt động; kiểm thử lịch trước/đúng/trễ mốc, duplicate, UTC+7, zero, quyền truy cập và tổng hợp/chênh lệch. Các file dữ liệu SQL ở `prisma/backlog-history.sql`; mã worker trong `C:/code/sdd-web-data` cần cùng phiên bản để có trường district và xác nhận empty Delivery.

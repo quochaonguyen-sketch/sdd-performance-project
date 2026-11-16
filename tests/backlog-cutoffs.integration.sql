@@ -16,7 +16,9 @@ begin
   perform public.enqueue_backlog_checkpoints(target);
   perform public.enqueue_backlog_checkpoints(target+interval '16 minutes');
   if (select status from public.backlog_checkpoints where source='delivery' and scheduled_for=target) in ('PENDING','QUEUED') then raise exception 'Missed cutoff remains active'; end if;
-  official:=public.capture_backlog_snapshot('delivery',token,target+interval '1 minute',target);
+  insert into public.backlog_snapshots(source,source_snapshot_id,source_started_at,source_snapshot_at,work_date,slot_at)
+    values('delivery',token,target,target+interval '1 minute',day,target)
+    returning id into official;
   update public.backlog_checkpoints set status='CAPTURED',snapshot_id=official where source='delivery' and scheduled_for=target;
   perform public.enqueue_backlog_checkpoints(target+interval '18 minutes');
   if (select snapshot_id from public.backlog_checkpoints where source='delivery' and scheduled_for=target)<>official then raise exception 'Captured cutoff overwritten'; end if;

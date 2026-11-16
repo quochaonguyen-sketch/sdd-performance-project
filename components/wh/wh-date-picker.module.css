@@ -196,10 +196,19 @@
 }
 
 .dayBtn[data-endpoint="true"] {
-  background: var(--color-accent, #0284c7) !important;
-  color: #ffffff !important;
   font-weight: 700;
   border-radius: 6px;
+}
+
+.dayBtn[data-endpoint="true"],
+.applyBtn {
+  background: var(--color-accent, #2459d3);
+  color: var(--color-accent-ink, #ffffff);
+}
+
+.picker :is(summary, button):focus-visible {
+  outline: 2px solid var(--color-focus, #2459d3);
+  outline-offset: 2px;
 }
 
 .dayBtn:disabled {
@@ -256,15 +265,13 @@
   font-weight: 650;
   border: 0;
   border-radius: 8px;
-  background: var(--color-accent, #0284c7);
-  color: #ffffff;
   cursor: pointer;
   transition: background-color 120ms ease;
   margin-left: auto;
 }
 
 .applyBtn:hover {
-  background: color-mix(in srgb, var(--color-accent, #0284c7) 85%, #000);
+  background: var(--color-accent-hover, #1c47ac);
 }
 
 @media (max-width: 640px) {
