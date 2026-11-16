@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildLostAnalysis, parseLostAnalysisFilters, recentLostDays } from "../lib/lost/analysis.ts";
-import { matchesLostGroup, parseLostSheet, reconcileLostRow, type LostSourceRow } from "../lib/lost/model.ts";
+import { lostDisplayLogs, matchesLostGroup, parseLostSheet, reconcileLostRow, type LostSourceRow } from "../lib/lost/model.ts";
 import { defaultLostFilters, parseLostFilters, prepareLostSnapshot, selectLostPage } from "../lib/lost/list.ts";
 
 const row: LostSourceRow = { row: 2, date: "2026-11-12", shipment: "VN12345", status: "OnHold", reason: "Quá hạn tại Hub", reasonType: "Lost", result: "Chốt đền bù", amount: 0 };
@@ -66,6 +66,7 @@ test("LOST pages send 30 summaries and still search rider names from unloaded lo
   const matches = selectLostPage(snapshot, parseLostFilters(new URLSearchParams("q=nguyen+van+b&withLogs=1&page=-1")));
   assert.equal(matches.total, 1);
   assert.equal(matches.rows[0].logRider, "Rider mới nhất");
+  assert.equal(matches.rows[0].logError, "SPX error");
   assert.equal(snapshot.rowsByNumber.get(matches.rows[0].row)?.logs.length, 2);
 });
 
@@ -174,4 +175,37 @@ test("LOST compensation layout keeps all twelve fields, source row numbers and b
   assert.equal(rows[1].amount, 0);
   assert.equal(rows[2].compensationRate, null);
   assert.equal(rows[2].amount, null);
+});
+
+test("LOST uses SPX Last Status, the stage before loss and the latest Driver APP log", () => {
+  const latestLog = log("09:30:00", "Rider pickup");
+  const tracking = {
+    displayStatus: 11,
+    events: [
+      { status: 39, at: time("09:00:00"), station: 4232, rider: "Rider pickup" },
+      { status: 11, at: time("10:00:00"), station: 0 },
+      { status: 648, at: time("11:00:00"), station: 0 },
+    ],
+  };
+  const pickup = reconcileLostRow({ ...row, status: "Lost" }, {
+    shipment_id: row.shipment, tracking, logs: { items: [latestLog] },
+  });
+  assert.equal(pickup.lastStatus, "Lost");
+  assert.equal(pickup.incidentType, "Pickup");
+  assert.equal(matchesLostGroup(pickup, "pickup"), true);
+  assert.equal(pickup.event?.rider, latestLog.rider);
+  assert.deepEqual(pickup.logs, []);
+  assert.deepEqual(lostDisplayLogs(pickup), [latestLog]);
+  const page = selectLostPage(prepareLostSnapshot([pickup], null, null), { ...defaultLostFilters, status: "Lost", withLogs: true });
+  assert.equal(page.rows[0].logRider, latestLog.rider);
+  assert.equal(page.rows[0].logAt, latestLog.at);
+  assert.equal(page.logRows, 1);
+  const hub = reconcileLostRow({ ...row, status: "Lost" }, {
+    shipment_id: row.shipment, tracking: {
+      ...tracking, events: [...tracking.events, { status: 1, at: time("09:45:00"), station: 4232 }],
+    }, logs: null,
+  });
+  assert.equal(hub.incidentType, "Lost tại Hub/SOC");
+  assert.equal(hub.event?.status, 1);
+  assert.equal(hub.event?.rider, undefined);
 });

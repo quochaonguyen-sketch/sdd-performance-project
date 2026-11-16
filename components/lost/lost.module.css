@@ -68,7 +68,7 @@
 .filters select { max-width: 260px; padding: 0 10px; font: inherit; font-weight: 400; }
 
 .scroller { overflow: auto; max-height: min(66vh, 690px); }
-.scroller table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1230px; font-size: 13px; }
+.scroller table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1120px; font-size: 13px; }
 .scroller th, .scroller td { padding: 7px 9px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-rule); }
 .scroller th { position: sticky; top: 0; z-index: 1; color: #fff; background: #1b427b; font-weight: 650; white-space: nowrap; vertical-align: middle; }
 .scroller :is(th, td):not(:last-child) { border-inline-end: 1px solid var(--color-rule); }
@@ -82,12 +82,11 @@
 .scroller td { max-width: 275px; overflow-wrap: anywhere; }
 .scroller tr:hover td { background: var(--color-paper-2); }
 .scroller td small { display: block; margin-top: 3px; color: var(--color-muted); font-size: 12px; }
-.scroller .date, .scroller .identity > details > summary { white-space: nowrap; }
+.scroller .date, .scroller .identity { white-space: nowrap; }
 .scroller .identity strong { font-size: 13px; letter-spacing: .01em; }
-.statusBadge, .badge { display: inline-block; border-radius: 6px; font-size: 12px; line-height: 1.35; }
+.statusBadge { display: inline-block; border-radius: 6px; font-size: 12px; line-height: 1.35; }
 .statusBadge { padding: 3px 7px; background: var(--color-paper-3); color: var(--color-ink-2); font-weight: 600; }
 .statusBadge[data-pickup="true"] { color: var(--color-success); background: var(--color-success-soft); }
-.badge { padding: 2px 6px; white-space: nowrap; background: var(--color-accent-soft); color: var(--color-accent); }
 .muted { color: var(--color-muted); }
 .scroller .money { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mobileLabel { display: none; }
@@ -98,7 +97,7 @@
 .scroller summary::-webkit-details-marker { display: none; }
 .scroller summary svg { flex: none; }
 .scroller details[open] > summary > svg { transform: rotate(90deg); }
-.scroller .identity > details > summary { min-height: 24px; }
+.scroller td .logPreview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .log { margin-top: 6px; padding: 6px 8px; background: var(--color-paper-2); border-left: 2px solid var(--color-rule-strong); border-radius: 3px; }
 .log p { margin: 3px 0 0; }
 
@@ -142,8 +141,9 @@
   .scroller tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--color-rule); border-radius: 9px; background: var(--color-paper); }
   .scroller td, .scroller td:not(:last-child) { display: block; padding: 0; border: 0; min-width: 0; max-width: none; }
   .scroller tr:hover td { background: transparent; }
-  .reason { grid-column: 1 / -1; }
+  .reason, .logCell { grid-column: 1 / -1; }
   .mobileLabel { display: block; margin-bottom: 4px; color: var(--color-muted); font-size: 12px; font-weight: 650; }
-  .scroller summary, .scroller .identity > details > summary { min-height: 44px; flex-wrap: wrap; align-content: center; white-space: normal; }
+  .scroller .identity { white-space: normal; }
+  .scroller summary { min-height: 44px; flex-wrap: wrap; align-content: center; }
   .scroller .money { text-align: left; }
 }

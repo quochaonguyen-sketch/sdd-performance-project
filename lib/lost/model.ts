@@ -8,12 +8,15 @@ export type LostEvent = { status: number; at: number; station: number; code?: st
 export type LostLog = { at: number; rider: string; error: string };
 export type LostCheck = {
   shipment_id: string;
-  tracking: LostEvent[] | null;
+  tracking: LostEvent[] | { events: LostEvent[]; displayStatus: number } | null;
   logs: { items: LostLog[]; matchedCount?: number } | null;
 };
 export type LostRow = LostSourceRow & {
   event: LostEvent | null; eventLabel: string; logs: LostLog[]; logCount: number;
   trackingChecked: boolean; logsChecked: boolean;
+  lastStatus?: string | null;
+  incidentType?: "Pickup" | "Lost tại Hub/SOC";
+  latestLog?: LostLog | null;
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -23,11 +26,24 @@ export const lostSerialEpoch = (serial: number) => Math.round((serial - 25569 - 
 
 export type LostGroup = "all" | "pickup" | "not-received" | "shortage" | "other";
 
-export function matchesLostGroup(row: Pick<LostSourceRow, "status" | "reason">, group: LostGroup) {
+const statusLabels: Record<number, string> = {
+  1: "LMHub Received", 2: "Delivering", 4: "Delivered", 5: "On Hold", 7: "SOC Pending Receive",
+  11: "Lost", 39: "Pickup Done", 591: "Pickup Handedover",
+};
+
+export const lostDisplayStatus = (row: Pick<LostRow, "lastStatus" | "status">) => row.lastStatus ?? row.status;
+
+export function lostDisplayLogs(row: Pick<LostRow, "latestLog" | "logs">) {
+  const latestLog = row.latestLog;
+  if (!latestLog || row.logs.some(log => log.at === latestLog.at && log.rider === latestLog.rider)) return row.logs;
+  return [latestLog, ...row.logs];
+}
+
+export function matchesLostGroup(row: Pick<LostRow, "status" | "reason" | "incidentType">, group: LostGroup) {
   if (group === "all") return true;
   const status = statusKey(row.status);
   const reason = lostNameKey(row.reason);
-  const pickup = ["pickupdone", "fmhubpickupdone", "fmhubpickuphandedovertostation", "fmhubpickuphandedover", "pickuphandover"].includes(status);
+  const pickup = row.incidentType === "Pickup" || ["pickupdone", "fmhubpickupdone", "fmhubpickuphandedovertostation", "fmhubpickuphandedover", "pickuphandover", "pickuphandedover"].includes(status);
   const notReceived = /\bchua nhan(?: duoc)? hang\b/.test(reason);
   const shortage = /\b(?:thieu hang|rong ruot)\b/.test(reason);
   if (group === "pickup") return pickup;
@@ -81,7 +97,10 @@ function sheetNumber(value: unknown): number | null {
 
 export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow {
   const status = statusKey(row.status);
-  const events = check?.tracking ?? [];
+  const tracking = check?.tracking;
+  const events = Array.isArray(tracking) ? tracking : tracking?.events ?? [];
+  const lastStatus = tracking && !Array.isArray(tracking)
+    ? statusLabels[tracking.displayStatus] ?? `SPX ${tracking.displayStatus}` : null;
   const until = Date.parse(`${row.date}T00:00:00+07:00`) / 1000 + 86400;
   const latest = (code: number, through = until) => events.filter(event => event.status === code && event.at < through &&
     (![1, 39].includes(code) || event.station === 4232))
@@ -93,15 +112,28 @@ export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow
     delivered: [4, "Delivered"], lmhubreceived: [1, "LMHub Received"],
     socpendingreceive: [7, "SOC Pending Receive"],
   };
+  const lost = status === "lost" || lastStatus === "Lost";
+  const lostAt = lost ? latest(11)?.at ?? until : until;
+  const beforeLost = lost ? events.filter(event => event.at <= lostAt && [1, 2, 4, 5, 7, 39, 591].includes(event.status))
+    .sort((a, b) => b.at - a.at)[0] : undefined;
+  const pickup = matchesLostGroup(row, "pickup") || lastStatus === "Pickup Done" || lastStatus === "Pickup Handedover" ||
+    [39, 591].includes(beforeLost?.status ?? 0);
+  const incidentType = pickup ? "Pickup" : lost && (beforeLost?.status === 1 || /\bqua han tai (?:hub|soc)\b/.test(lostNameKey(row.reason)))
+    ? "Lost tại Hub/SOC" : undefined;
   let [code, eventLabel] = cases[status] ?? [0, ""];
+  if (!code && pickup) [code, eventLabel] = [39, "Pickup Done"];
+  if (!code && incidentType === "Lost tại Hub/SOC" && beforeLost?.status === 1) [code, eventLabel] = [1, "LMHub Received"];
   if (!code && /\bchua\s+nhan\b/.test(lostNameKey(row.reason))) [code, eventLabel] = [4, "Delivered"];
   const hold = status === "onhold" ? latest(5) : undefined;
-  let event = code ? latest(code, hold ? hold.at + 1 : until) ?? null : null;
+  let event = code ? latest(code, hold ? hold.at + 1 : lostAt) ?? null : null;
   if (event && ![2, 4, 39].includes(event.status)) event = { ...event, rider: undefined, code: undefined };
-  const matched = (check?.logs?.items ?? []).filter(log => !event || (log.at > event.at && (!event.rider || lostNameKey(log.rider) !== lostNameKey(event.rider))))
+  const allLogs = check?.logs?.items ?? [];
+  const latestLog = allLogs.reduce<LostLog | null>((newest, log) => !newest || log.at > newest.at ? log : newest, null);
+  const matched = allLogs.filter(log => !event || (log.at > event.at && (!event.rider || lostNameKey(log.rider) !== lostNameKey(event.rider))))
     .sort((a, b) => b.at - a.at);
   const byRider = new Map<string, LostLog>();
   for (const log of matched) if (!byRider.has(lostNameKey(log.rider))) byRider.set(lostNameKey(log.rider), log);
   const logs = [...byRider.values()];
-  return { ...row, event, eventLabel, logs, logCount: check?.logs?.matchedCount ?? matched.length, trackingChecked: check?.tracking != null, logsChecked: check?.logs != null };
+  return { ...row, event, eventLabel, lastStatus, incidentType, latestLog, logs, logCount: check?.logs?.matchedCount ?? matched.length,
+    trackingChecked: tracking != null, logsChecked: check?.logs != null };
 }

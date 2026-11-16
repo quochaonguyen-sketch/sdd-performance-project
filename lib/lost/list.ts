@@ -1,4 +1,4 @@
-import { lostNameKey, matchesLostGroup, type LostGroup, type LostRow } from "./model.ts";
+import { lostDisplayStatus, lostNameKey, matchesLostGroup, type LostGroup, type LostRow } from "./model.ts";
 
 const groupIds = ["all", "pickup", "not-received", "shortage", "other"] as const satisfies readonly LostGroup[];
 const sortOrders = ["date-desc", "date-asc", "rider-asc", "rider-desc"] as const;
@@ -25,12 +25,12 @@ export function parseLostFilters(params: URLSearchParams): LostFilters {
 export function prepareLostSnapshot(rows: LostRow[], syncedAt: string | null, error: string | null) {
   const indexed = rows.map(row => ({
     row,
-    terms: [row.shipment, row.reason, row.event?.rider, row.event?.code, ...row.logs.map(log => log.rider)]
+    terms: [row.shipment, row.reason, row.event?.rider, row.event?.code, row.latestLog?.rider, ...row.logs.map(log => log.rider)]
       .filter((term): term is string => !!term).map(lostNameKey),
   }));
   const groups = groupIds.map(id => {
     const entries = indexed.filter(({ row }) => matchesLostGroup(row, id));
-    return { id, entries, statuses: [...new Set(entries.map(({ row }) => row.status))].sort() };
+    return { id, entries, statuses: [...new Set(entries.map(({ row }) => lostDisplayStatus(row)))].sort() };
   });
   return {
     groups, syncedAt, error,
@@ -43,7 +43,7 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
   const selected = snapshot.groups.find(group => group.id === filters.group) ?? snapshot.groups[0];
   const term = lostNameKey(filters.q);
   const matching = selected.entries.filter(({ row, terms }) =>
-    (filters.status === "all" || row.status === filters.status) && (!filters.withLogs || row.logs.length > 0) &&
+    (filters.status === "all" || lostDisplayStatus(row) === filters.status) && (!filters.withLogs || row.latestLog || row.logs.length > 0) &&
     (!term || terms.some(value => value.includes(term))));
   const { sort } = filters;
   matching.sort(({ row: a }, { row: b }) => {
@@ -63,12 +63,17 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
   const last = Math.max(0, Math.ceil(total / lostPageSize) - 1);
   const page = Math.min(filters.page, last);
   return {
-    rows: matching.slice(page * lostPageSize, (page + 1) * lostPageSize).map(({ row: { logs, ...row } }) => ({
-      ...row, logRider: logs[0]?.rider ?? null,
-    })),
+    rows: matching.slice(page * lostPageSize, (page + 1) * lostPageSize).map(({ row: { logs, latestLog, ...row } }) => {
+      const log = latestLog ?? logs[0];
+      const error = log?.error ?? "";
+      return {
+        ...row, logRider: log?.rider ?? null, logAt: log?.at ?? null,
+        logError: error.length > 120 ? `${error.slice(0, 120)}…` : error,
+      };
+    }),
     group: selected.id, statuses: selected.statuses, counts: snapshot.counts, total, page, last, sort,
     checked: matching.filter(({ row }) => row.logsChecked && row.trackingChecked).length,
-    logRows: matching.filter(({ row }) => row.logs.length > 0).length,
+    logRows: matching.filter(({ row }) => row.latestLog || row.logs.length > 0).length,
     syncedAt: snapshot.syncedAt, error: snapshot.error,
   };
 }

@@ -67,7 +67,10 @@ def tracking(client, shipment):
             elif re.fullmatch(r'[^\[\]@,;\d]+\s+[^\[\]@,;\d]+', operator) and operator.lower() not in ('system operator', 'spx system'):
                 item.update(rider=operator)
         result.append(item)
-    return result
+    display_status = str(data.get('display_status'))
+    if not display_status.isdigit():
+        raise ValueError('invalid display status')
+    return {'events': result, 'displayStatus': int(display_status)}
 
 
 def failure_logs(client, shipment):

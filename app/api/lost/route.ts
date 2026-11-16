@@ -4,6 +4,7 @@ import { vietnamDay } from "@/lib/data-sources/catalog";
 import { buildLostAnalysis, parseLostAnalysisFilters } from "@/lib/lost/analysis";
 import { parseLostFilters, selectLostPage } from "@/lib/lost/list";
 import { readLostSnapshot } from "@/lib/lost/list-server";
+import { lostDisplayLogs } from "@/lib/lost/model";
 
 const headers = { "Cache-Control": "private, no-store" };
 const reply = (data: object, status = 200) => Response.json(data, { status, headers });
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     if (params.has("row")) {
       const row = snapshot.rowsByNumber.get(rowNumber);
       if (!row || row.shipment !== params.get("shipment")) return reply({ error: "Không tìm thấy đơn trong bản đối soát hiện tại." }, 404);
-      return reply({ logs: row.logs });
+      return reply({ logs: lostDisplayLogs(row) });
     }
     return reply(selectLostPage(snapshot, parseLostFilters(params)));
   } catch {

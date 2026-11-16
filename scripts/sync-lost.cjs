@@ -122,7 +122,7 @@ async function lookupMissing(jobs, checks) {
       const check = checks.get(result.shipment_id);
       if (!check || seen.has(result.shipment_id)) throw Error('Worker SPX trả kết quả trùng hoặc sai mã.');
       seen.add(result.shipment_id);
-      if (Array.isArray(result.tracking)) check.tracking = result.tracking;
+      if (Array.isArray(result.tracking?.events) && Number.isInteger(result.tracking.displayStatus)) check.tracking = result.tracking;
       if (Array.isArray(result.logs?.items)) check.logs = result.logs;
       if (result.errors?.length) {
         failures += 1;
@@ -142,29 +142,36 @@ async function lookupMissing(jobs, checks) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const refresh = args.includes('--refresh');
+  const [seedPath, extra] = args.filter(arg => arg !== '--refresh');
+  if (seedPath?.startsWith('--') || extra !== undefined) {
+    throw Error('Cách chạy: node scripts/sync-lost.cjs [--refresh] [file-đối-soát-cũ.xlsx]');
+  }
   const lease = randomUUID();
   const now = new Date();
-  const target = db.from('lost_report');
-  const claimed = await run(target.update({ lease_id: lease, lease_until: new Date(+now + 11 * 60_000).toISOString() })
-    .eq('id', true).or(`report_day.is.null,report_day.lt.${day}`).or(`lease_until.is.null,lease_until.lt.${now.toISOString()}`).select('id').maybeSingle(), 'Chưa mở được lượt đồng bộ LOST');
+  const target = db.from('lost_report').update({ lease_id: lease, lease_until: new Date(+now + 11 * 60_000).toISOString() })
+    .eq('id', true).or(`lease_until.is.null,lease_until.lt.${now.toISOString()}`);
+  if (!refresh) target.or(`report_day.is.null,report_day.lt.${day}`);
+  const claimed = await run(target.select('id').maybeSingle(), 'Chưa mở được lượt đồng bộ LOST');
   if (!claimed) {
-    console.log('LOST đã đồng bộ trong ngày hoặc đang có lượt chạy. Không gọi SPX.');
+    console.log(refresh ? 'LOST đang có lượt đồng bộ.' : 'LOST đã đồng bộ trong ngày hoặc đang có lượt chạy.');
     return;
   }
   const report = () => db.from('lost_report');
   try {
     const source = await loadSheet();
+    if (!source.length) throw Error('Tab LOST chưa có dòng SDD-01 để đồng bộ.');
     const shipments = [...new Set(source.map(row => row.shipment))].filter(id => /^(?:SPX)?VN[A-Z0-9]{3,40}$/.test(id));
     const checks = new Map(shipments.map(shipment_id => [shipment_id, { shipment_id, tracking: null, logs: null }]));
     for (let i = 0; i < shipments.length; i += 120) {
       const existing = await run(db.from('lost_spx_checks').select('shipment_id,tracking,logs').in('shipment_id', shipments.slice(i, i + 120)), 'Chưa đọc được các đơn đã tra');
       for (const row of existing) checks.set(row.shipment_id, row);
     }
-    const seedPath = process.argv[2];
     const seeded = seedPath ? await importPrevious(path.resolve(seedPath), checks) : 0;
-    const jobs = [...checks.values()].filter(check => check.tracking === null || check.logs === null).map(check => ({
-      shipment_id: check.shipment_id, tracking: check.tracking === null, logs: check.logs === null,
-    }));
+    const jobs = [...checks.values()].map(check => ({
+      shipment_id: check.shipment_id, tracking: !Number.isInteger(check.tracking?.displayStatus), logs: check.logs === null,
+    })).filter(job => job.tracking || job.logs);
     console.log(JSON.stringify({ rows: source.length, seeded, alreadyChecked: shipments.length - jobs.length, requests: { tracking: jobs.filter(job => job.tracking).length, logs: jobs.filter(job => job.logs).length } }));
     const lookup = await lookupMissing(jobs, checks);
     const rows = source.map(row => reconcileLostRow(row, checks.get(row.shipment)));
@@ -172,8 +179,8 @@ async function main() {
       lease_id: null, lease_until: null, last_error: lookup.failures ? `${lookup.failures} đơn còn phần tra cứu SPX chưa hoàn tất.` : null,
     }).eq('id', true).eq('lease_id', lease).select('id').maybeSingle(), 'Chưa đăng được dữ liệu LOST');
     if (!data) throw Error('Lượt đồng bộ LOST đã hết hiệu lực.');
-    console.log(JSON.stringify({ published: rows.length, completed: rows.filter(row => row.trackingChecked && row.logsChecked).length,
-      eventMatched: rows.filter(row => row.event).length, withLogs: rows.filter(row => row.logs.length).length, ...lookup }));
+    console.log(JSON.stringify({ published: rows.length, completed: rows.filter(row => row.lastStatus && row.logsChecked).length,
+      eventMatched: rows.filter(row => row.event).length, withLogs: rows.filter(row => row.latestLog).length, ...lookup }));
   } catch (error) {
     await report().update({ lease_id: null, lease_until: null, last_error: 'Lượt đồng bộ gần nhất gặp lỗi. Kiểm tra log đồng bộ trên máy worker.' }).eq('id', true).eq('lease_id', lease);
     throw error;

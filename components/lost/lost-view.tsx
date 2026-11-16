@@ -6,7 +6,7 @@ import {
   PackageCheck, PackageOpen, PackageSearch, Search, Truck,
 } from "lucide-react";
 import { defaultLostFilters, lostPageSize, type LostFilters, type LostPageData, type LostSort } from "@/lib/lost/list";
-import { matchesLostGroup, type LostLog } from "@/lib/lost/model";
+import { lostDisplayStatus, matchesLostGroup, type LostLog } from "@/lib/lost/model";
 import type { LostAnalysisData } from "@/lib/lost/analysis";
 import { LostAnalysis } from "./lost-analysis";
 import styles from "./lost.module.css";
@@ -56,7 +56,14 @@ function LostLogDetails({ row }: { row: LostPageData["rows"][number] }) {
   }
 
   return <details onToggle={event => { if (event.currentTarget.open) void load(); }}>
-    <summary><ChevronRight size={15} aria-hidden="true" /><span>{row.logRider}</span> <span className={styles.badge}>{row.logCount} log</span></summary>
+    <summary>
+      <ChevronRight size={15} aria-hidden="true" />
+      <span>
+        {row.logRider}
+        {row.logError && <small className={styles.logPreview}>{row.logError}</small>}
+        {row.logAt != null && <small>{displayTime(row.logAt)}</small>}
+      </span>
+    </summary>
     {error ? <div className={styles.log} role="alert">{error} <button className={styles.clear} type="button" onClick={() => void load()}>Thử lại</button></div>
       : !logs ? <small role="status">Đang tải log…</small> : logs.length === 0 ? <small>Đơn này không còn log trong bản đối soát hiện tại.</small>
         : logs.map(log => <div className={styles.log} key={`${log.rider}:${log.at}`}>
@@ -167,7 +174,7 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
           <span className={styles.search}><Search size={17} aria-hidden="true" />
             <input type="search" maxLength={120} value={q} onChange={event => changeFilters({ ...filters, q: event.target.value, page: 0 }, true)}
               placeholder="Mã đơn, tên hoặc mã rider" /></span></label>
-        <label><span>Trạng thái hệ thống</span>
+        <label><span>Last Status</span>
           <select value={status} disabled={loading && data.group !== group} onChange={event => changeFilters({ ...filters, status: event.target.value, page: 0 })}>
             <option value="all">Tất cả trạng thái</option>
             {data.statuses.map(value => <option key={value} value={value}>{displayStatus(value)}</option>)}
@@ -192,15 +199,14 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
             {dateHeader()}
             <th scope="col" role="columnheader">Month</th>
             <th scope="col" role="columnheader">SPX tracking</th>
-            <th scope="col" role="columnheader">Trạng thái hệ thống</th>
-            <th scope="col" role="columnheader">Region</th>
-            <th scope="col" role="columnheader">Hub</th>
-            <th scope="col" role="columnheader">Loại yêu cầu</th>
+            <th scope="col" role="columnheader">Last Status</th>
             <th scope="col" role="columnheader" className={styles.money}>% đền bù</th>
             <th scope="col" role="columnheader" className={styles.money}>COD/COGS</th>
             <th scope="col" role="columnheader" className={styles.money}>Số tiền đền bù</th>
+            <th scope="col" role="columnheader">Phân loại</th>
             <th scope="col" role="columnheader">Lý do</th>
-            <th scope="col" role="columnheader">Kết quả</th>
+            <th scope="col" role="columnheader">Tên rider</th>
+            <th scope="col" role="columnheader">Log lỗi gần nhất</th>
           </tr></thead>
           <tbody role="rowgroup">
             {rows.map(row => <tr role="row" key={`${row.row}:${row.shipment}:${syncedAt}`}>
@@ -208,29 +214,26 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
               <td role="cell"><span className={styles.mobileLabel}>Month</span>{row.month ?? Number(row.date.slice(5, 7))}</td>
               <td role="cell" className={styles.identity}>
                 <span className={styles.mobileLabel}>SPX tracking</span>
-                <details>
-                  <summary aria-label={`Chi tiết SPX ${row.shipment}`}><ChevronRight size={14} aria-hidden="true" /><strong>{row.shipment}</strong></summary>
-                  <small>Rider / Mốc đối soát SPX</small>
-                  {row.event ? <>
-                    <strong>{row.event.rider || row.eventLabel}</strong>
-                    <small>{[row.event.rider && row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>
-                  </> : <span className={styles.muted}>{row.trackingChecked ? "Chưa xác định mốc" : "Chưa đọc được tracking"}</span>}
-                  <small>Log lỗi Driver APP</small>
-                  {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logsChecked ? "Không có log khớp" : "Chưa đọc được log"}</span>}
-                  {row.logRider && !row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
-                </details>
+                <strong>{row.shipment}</strong>
               </td>
-              <td role="cell"><span className={styles.mobileLabel}>Trạng thái hệ thống</span>
-                <span className={styles.statusBadge} data-pickup={matchesLostGroup(row, "pickup")} title={row.status}>{displayStatus(row.status)}</span>
+              <td role="cell"><span className={styles.mobileLabel}>Last Status</span>
+                <span className={styles.statusBadge} data-pickup={matchesLostGroup(row, "pickup")} title={lostDisplayStatus(row)}>{displayStatus(lostDisplayStatus(row))}</span>
+                {!row.lastStatus && <small>Theo Google Sheet</small>}
               </td>
-              <td role="cell"><span className={styles.mobileLabel}>Region</span>{row.region || "—"}</td>
-              <td role="cell"><span className={styles.mobileLabel}>Hub</span>{row.hub || "—"}</td>
-              <td role="cell"><span className={styles.mobileLabel}>Loại yêu cầu</span>{row.requestType || "—"}</td>
               <td role="cell" className={styles.money}><span className={styles.mobileLabel}>% đền bù</span>{row.compensationRate == null ? "—" : percent.format(row.compensationRate)}</td>
               <td role="cell" className={styles.money}><span className={styles.mobileLabel}>COD/COGS</span>{row.codCogs == null ? "—" : number.format(row.codCogs)}</td>
               <td role="cell" className={styles.money}><span className={styles.mobileLabel}>Số tiền đền bù</span>{row.amount === null ? "—" : number.format(row.amount)}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Phân loại</span>{row.incidentType || "—"}</td>
               <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Lý do</span>{row.reason || "—"}{row.reasonType && <small>{row.reasonType}</small>}</td>
-              <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Kết quả</span>{row.result || "—"}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Tên rider</span>
+                <strong>{row.event?.rider || "—"}</strong>
+                {row.event && <small>{[row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>}
+                {!row.trackingChecked && <small>Chưa đọc được tracking</small>}
+              </td>
+              <td role="cell" className={styles.logCell}><span className={styles.mobileLabel}>Log lỗi gần nhất</span>
+                {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logsChecked ? "Không có log khớp" : "Chưa đọc được log"}</span>}
+                {row.logRider && !row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
+              </td>
             </tr>)}
           </tbody>
         </table>
