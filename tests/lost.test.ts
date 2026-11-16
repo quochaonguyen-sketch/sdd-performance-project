@@ -138,6 +138,7 @@ test("LOST list filters inclusively by compensation date before pagination", () 
     row: index + 2,
     shipment: `VN${index}`,
     date: index === 0 ? "2026-11-09" : index === 33 ? "2026-11-13" : index === 1 ? "2026-11-10" : "2026-11-12",
+    incidentType: index === 0 ? "Rider làm mất đơn" as const : "Đơn hàng mất tại hub" as const,
   }));
   const snapshot = prepareLostSnapshot(rows, null, null);
   const filters = parseLostFilters(new URLSearchParams({ from: "2026-11-10", to: "2026-11-12", page: "1" }));
@@ -145,6 +146,13 @@ test("LOST list filters inclusively by compensation date before pagination", () 
   assert.equal(result.total, 32);
   assert.equal(result.rows.length, 2);
   assert.equal(result.rows.at(-1)?.date, "2026-11-10");
+  assert.equal(result.counts.all, 32);
+  assert.equal(result.incidents.find(({ key }) => key === "Đơn hàng mất tại hub")?.count, 32);
+  assert.equal(result.incidents.find(({ key }) => key === "Rider làm mất đơn")?.count, 0);
+  const selectedIncident = selectLostPage(snapshot, { ...filters, incident: "Rider làm mất đơn" });
+  assert.equal(selectedIncident.total, 0);
+  assert.deepEqual(selectedIncident.incidents, result.incidents);
+  assert.equal(selectLostPage(snapshot, defaultLostFilters).counts.all, 34);
   const sameDay = selectLostPage(snapshot, { ...filters, from: "2026-11-12", page: 0 });
   assert.equal(sameDay.total, 31);
   assert.ok(sameDay.rows.every(({ date }) => date === "2026-11-12"));

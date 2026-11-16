@@ -58,9 +58,18 @@ export function prepareLostSnapshot(rows: LostRow[], syncedAt: string | null, er
 
 export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>, filters: LostFilters) {
   const selected = snapshot.groups.find(group => group.id === filters.group) ?? snapshot.groups[0];
+  const inRange = ({ row }: { row: LostRow }) =>
+    (!filters.from || row.date >= filters.from) && (!filters.to || row.date <= filters.to);
+  const hasRange = !!(filters.from || filters.to);
+  const incidentCounts = new Map<string, number>();
+  if (hasRange) {
+    for (const entry of snapshot.groups[0].entries) {
+      if (!inRange(entry)) continue;
+      incidentCounts.set(entry.incidentKey, (incidentCounts.get(entry.incidentKey) ?? 0) + 1);
+    }
+  }
   const term = lostNameKey(filters.q);
-  const matching = selected.entries.filter(({ row, terms, incidentKey }) =>
-    (!filters.from || row.date >= filters.from) && (!filters.to || row.date <= filters.to) &&
+  const matching = selected.entries.filter(inRange).filter(({ row, terms, incidentKey }) =>
     (filters.incident === null || incidentKey === filters.incident) &&
     (filters.status === "all" || lostDisplayStatus(row) === filters.status) && (!filters.withLogs || row.latestLog || row.logs.length > 0) &&
     (!term || terms.some(value => value.includes(term))));
@@ -91,8 +100,12 @@ export function selectLostPage(snapshot: ReturnType<typeof prepareLostSnapshot>,
         logError: error.length > 120 ? `${error.slice(0, 120)}…` : error,
       };
     }),
-    group: selected.id, incident: filters.incident, incidents: snapshot.incidents, statuses: selected.statuses,
-    counts: snapshot.counts, total, page, last, sort,
+    group: selected.id, incident: filters.incident, statuses: selected.statuses,
+    incidents: hasRange ? snapshot.incidents.map(incident => ({ ...incident, count: incidentCounts.get(incident.key) ?? 0 })) : snapshot.incidents,
+    counts: hasRange
+      ? Object.fromEntries(snapshot.groups.map(group => [group.id, group.entries.filter(inRange).length])) as Record<LostGroup, number>
+      : snapshot.counts,
+    total, page, last, sort,
     checked: matching.filter(({ row }) => (row.logSourcesChecked ?? row.logsChecked) && row.trackingChecked).length,
     logRows: matching.filter(({ row }) => row.latestLog || row.logs.length > 0).length,
     syncedAt: snapshot.syncedAt, error: snapshot.error,

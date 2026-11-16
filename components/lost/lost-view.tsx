@@ -247,7 +247,7 @@ export function LostView({ initial, initialAnalysis, compensation }: {
           </tbody>
         </table>
       </div> : <div className={styles.empty}><Search size={23} aria-hidden="true" />
-        <p>{loading ? "Đang tải danh sách…" : data.counts.all ? "Không có đơn khớp bộ lọc." : "Chưa có dữ liệu đối soát."}</p></div>}
+        <p>{loading ? "Đang tải danh sách…" : hasFilters || data.counts.all ? "Không có đơn khớp bộ lọc." : "Chưa có dữ liệu đối soát."}</p></div>}
 
       {total > 0 && <footer className={styles.pagination}>
         <span aria-live="polite">{number.format(current * lostPageSize + 1)}–{number.format(Math.min((current + 1) * lostPageSize, total))} / {number.format(total)} dòng</span>
