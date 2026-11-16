@@ -1,6 +1,8 @@
 export type LostSourceRow = {
   row: number; date: string; shipment: string; status: string; reason: string; reasonType: string;
   result: string; amount: number | null;
+  month?: number; region?: string; hub?: string; requestType?: string;
+  compensationRate?: number | null; codCogs?: number | null;
 };
 export type LostEvent = { status: number; at: number; station: number; code?: string; rider?: string };
 export type LostLog = { at: number; rider: string; error: string };
@@ -35,18 +37,46 @@ export function matchesLostGroup(row: Pick<LostSourceRow, "status" | "reason">, 
 }
 
 export function parseLostSheet(grid: unknown[][]): LostSourceRow[] {
-  const header = grid[0]?.map(value => text(value).toLowerCase()) ?? [];
-  const columns = ["report_date", "station name", "shipment id", "reason", "result", "reason type", "last status", "amount"].map(name => header.indexOf(name));
+  const header = grid[0]?.map(value => lostNameKey(text(value))) ?? [];
+  const compensation = header.includes("spx tracking") || header.includes("ngay chot den bu");
+  const names = compensation
+    ? ["ngay chot den bu", "hub", "spx tracking", "ly do", "ket qua", "trang thai he thong", "so tien den bu",
+      "month", "region", "loai yeu cau", "% den bu", "cod/cogs"]
+    : ["report_date", "station name", "shipment id", "reason", "result", "last status", "amount", "reason type"];
+  const columns = names.map(name => header.indexOf(name));
   if (columns.includes(-1)) throw Error("Tab LOST thiếu cột cần thiết.");
   return grid.slice(1).flatMap((cells, index) => {
-    const [rawDate, station, rawShipment, reason, result, reasonType, status, amount] = columns.map(column => cells[column]);
-    if (!text(rawShipment) || !/\bSDD-01\b/i.test(text(station))) return [];
+    const [rawDate, station, rawShipment, reason, result, status, amount, monthOrReasonType, region, requestType, rate, codCogs] =
+      columns.map(column => cells[column]);
+    const hub = text(station);
+    if (!text(rawShipment) || !/\bSDD-01\b/i.test(hub)) return [];
     const shipment = text(rawShipment).toUpperCase();
     const date = typeof rawDate === "number" && Number.isFinite(rawDate)
       ? new Date((Math.floor(rawDate) - 25569) * 86400000).toISOString().slice(0, 10) : text(rawDate);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Error(`Ngày báo cáo không hợp lệ ở dòng ${index + 2}.`);
-    return [{ row: index + 2, date, shipment, status: text(status), reason: text(reason), reasonType: text(reasonType), result: text(result), amount: typeof amount === "number" && Number.isFinite(amount) ? amount : null }];
+    const row = {
+      row: index + 2, date, shipment, hub, status: text(status), reason: text(reason),
+      reasonType: compensation ? "" : text(monthOrReasonType), result: text(result), amount: sheetNumber(amount),
+    };
+    if (!compensation) return [row];
+
+    const month = sheetNumber(monthOrReasonType);
+    const rateText = text(rate);
+    const percentText = rateText.endsWith("%");
+    const compensationRate = percentText
+      ? sheetNumber(rateText.slice(0, -1).replace(",", ".")) : sheetNumber(rate);
+    return [{
+      ...row, month: month !== null && Number.isInteger(month) && month >= 1 && month <= 12 ? month : Number(date.slice(5, 7)),
+      region: text(region), requestType: text(requestType), codCogs: sheetNumber(codCogs),
+      compensationRate: compensationRate === null ? null : compensationRate / (percentText ? 100 : 1),
+    }];
   });
+}
+
+function sheetNumber(value: unknown): number | null {
+  if (typeof value !== "number" && (typeof value !== "string" || !/^[+-]?\d+(?:\.\d+)?$/.test(value.trim()))) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function reconcileLostRow(row: LostSourceRow, check?: LostCheck): LostRow {

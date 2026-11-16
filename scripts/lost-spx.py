@@ -108,7 +108,7 @@ def main():
     try:
         def lookup(job):
             shipment = job['shipment_id']
-            if not re.fullmatch(r'VN[A-Z0-9]{3,40}', shipment):
+            if not re.fullmatch(r'(?:SPX)?VN[A-Z0-9]{3,40}', shipment):
                 raise ValueError('invalid shipment ID')
             result = {'shipment_id': shipment, 'errors': []}
             for key, method in [('tracking', tracking), ('logs', failure_logs)]:

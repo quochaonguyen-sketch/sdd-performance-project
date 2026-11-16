@@ -14,8 +14,8 @@ import styles from "./lost.module.css";
 const sheet = "https://docs.google.com/spreadsheets/d/1gsUhZMc5jLvFizy804gtAan3vtzxmmjKwOvycrj4xZU/edit?gid=1396828508#gid=1396828508";
 const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", dateStyle: "short", timeStyle: "medium", hourCycle: "h23" });
 const number = new Intl.NumberFormat("vi-VN");
+const percent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 });
 const displayTime = (seconds: number) => dateTime.format(seconds * 1000);
-const displayDate = (date: string) => date.split("-").reverse().join("/");
 
 const groups = [
   { id: "all", label: "Tất cả", icon: Grid2X2 },
@@ -114,15 +114,14 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
     changeFilters({ ...defaultLostFilters, sort: filters.sort });
   }
 
-  function sortHeader(field: "date" | "rider", label: string, action: string) {
-    const order = data.sort === `${field}-asc` ? "ascending" : data.sort === `${field}-desc` ? "descending" : undefined;
+  function dateHeader() {
+    const order = data.sort === "date-asc" ? "ascending" : data.sort === "date-desc" ? "descending" : undefined;
     const Icon = order === "ascending" ? ArrowUp : order === "descending" ? ArrowDown : ArrowUpDown;
-    const [first, second] = field === "date" ? ["date-desc", "date-asc"] as const : ["rider-asc", "rider-desc"] as const;
     return <th scope="col" role="columnheader" aria-sort={order} className={styles.sortHeader}>
-      <span className={styles.mobileSortHeading}>{label}</span>
-      <button type="button" className={styles.sortButton} aria-label={`${label} · ${action}`}
-        onClick={() => changeFilters({ ...filters, sort: filters.sort === first ? second : first, page: 0 })}>
-        {label}<Icon size={14} aria-hidden="true" />
+      <span className={styles.mobileSortHeading}>Ngày chốt đền bù</span>
+      <button type="button" className={styles.sortButton} aria-label="Sắp xếp theo ngày chốt đền bù"
+        onClick={() => changeFilters({ ...filters, sort: filters.sort === "date-desc" ? "date-asc" : "date-desc", page: 0 })}>
+        Ngày chốt đền bù<Icon size={14} aria-hidden="true" />
       </button>
     </th>;
   }
@@ -168,7 +167,7 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
           <span className={styles.search}><Search size={17} aria-hidden="true" />
             <input type="search" maxLength={120} value={q} onChange={event => changeFilters({ ...filters, q: event.target.value, page: 0 }, true)}
               placeholder="Mã đơn, tên hoặc mã rider" /></span></label>
-        <label><span>Trạng thái cuối</span>
+        <label><span>Trạng thái hệ thống</span>
           <select value={status} disabled={loading && data.group !== group} onChange={event => changeFilters({ ...filters, status: event.target.value, page: 0 })}>
             <option value="all">Tất cả trạng thái</option>
             {data.statuses.map(value => <option key={value} value={value}>{displayStatus(value)}</option>)}
@@ -176,10 +175,10 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
         <label className={styles.checkbox}>
           <input type="checkbox" checked={withLogs} onChange={event => changeFilters({ ...filters, withLogs: event.target.checked, page: 0 })} /> Chỉ đơn có log rider
         </label>
-        <label className={styles.mobileSort}><span>Sắp xếp danh sách</span>
+        <label><span>Sắp xếp danh sách</span>
           <select value={filters.sort} onChange={event => changeFilters({ ...filters, sort: event.target.value as LostSort, page: 0 })}>
-            <option value="date-desc">Ngày báo cáo · Mới nhất</option>
-            <option value="date-asc">Ngày báo cáo · Cũ nhất</option>
+            <option value="date-desc">Ngày chốt đền bù · Mới nhất</option>
+            <option value="date-asc">Ngày chốt đền bù · Cũ nhất</option>
             <option value="rider-asc">Tên rider SPX · A → Z</option>
             <option value="rider-desc">Tên rider SPX · Z → A</option>
           </select>
@@ -190,30 +189,48 @@ export function LostView({ initial, initialAnalysis }: { initial: LostPageData; 
       {rows.length ? <div ref={scroller} className={styles.scroller} tabIndex={0} role="region" aria-label="Bảng đối soát" aria-busy={loading}>
         <table role="table">
           <thead role="rowgroup"><tr role="row">
-            {sortHeader("date", "Mã đơn / Ngày báo cáo", "Sắp xếp theo ngày báo cáo")}<th scope="col" role="columnheader">Trạng thái cuối</th>
-            <th scope="col" role="columnheader">Lý do / Kết quả</th>{sortHeader("rider", "Rider / Mốc đối soát SPX", "Sắp xếp theo tên rider SPX")}
-            <th scope="col" role="columnheader">Log lỗi Driver APP</th><th scope="col" role="columnheader" className={styles.money}>Số tiền (₫)</th>
+            {dateHeader()}
+            <th scope="col" role="columnheader">Month</th>
+            <th scope="col" role="columnheader">SPX tracking</th>
+            <th scope="col" role="columnheader">Trạng thái hệ thống</th>
+            <th scope="col" role="columnheader">Region</th>
+            <th scope="col" role="columnheader">Hub</th>
+            <th scope="col" role="columnheader">Loại yêu cầu</th>
+            <th scope="col" role="columnheader" className={styles.money}>% đền bù</th>
+            <th scope="col" role="columnheader" className={styles.money}>COD/COGS</th>
+            <th scope="col" role="columnheader" className={styles.money}>Số tiền đền bù</th>
+            <th scope="col" role="columnheader">Lý do</th>
+            <th scope="col" role="columnheader">Kết quả</th>
           </tr></thead>
           <tbody role="rowgroup">
             {rows.map(row => <tr role="row" key={`${row.row}:${row.shipment}:${syncedAt}`}>
-              <td role="cell" className={styles.identity}><strong>{row.shipment}</strong><small>{displayDate(row.date)}</small></td>
-              <td role="cell" className={styles.statusCell}>
+              <td role="cell" className={styles.date}><span className={styles.mobileLabel}>Ngày chốt đền bù</span><time dateTime={row.date}>{row.date}</time></td>
+              <td role="cell"><span className={styles.mobileLabel}>Month</span>{row.month ?? Number(row.date.slice(5, 7))}</td>
+              <td role="cell" className={styles.identity}>
+                <span className={styles.mobileLabel}>SPX tracking</span>
+                <details>
+                  <summary aria-label={`Chi tiết SPX ${row.shipment}`}><ChevronRight size={14} aria-hidden="true" /><strong>{row.shipment}</strong></summary>
+                  <small>Rider / Mốc đối soát SPX</small>
+                  {row.event ? <>
+                    <strong>{row.event.rider || row.eventLabel}</strong>
+                    <small>{[row.event.rider && row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>
+                  </> : <span className={styles.muted}>{row.trackingChecked ? "Chưa xác định mốc" : "Chưa đọc được tracking"}</span>}
+                  <small>Log lỗi Driver APP</small>
+                  {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logsChecked ? "Không có log khớp" : "Chưa đọc được log"}</span>}
+                  {row.logRider && !row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
+                </details>
+              </td>
+              <td role="cell"><span className={styles.mobileLabel}>Trạng thái hệ thống</span>
                 <span className={styles.statusBadge} data-pickup={matchesLostGroup(row, "pickup")} title={row.status}>{displayStatus(row.status)}</span>
               </td>
-              <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Lý do / Kết quả</span>
-                {row.reason || "—"}<small>{[row.reasonType, row.result].filter(Boolean).join(" · ")}</small>
-              </td>
-              <td role="cell" className={styles.eventCell}><span className={styles.mobileLabel}>Rider / Mốc đối soát SPX</span>
-                {row.event ? <>
-                  <strong>{row.event.rider || row.eventLabel}</strong>
-                  <small>{[row.event.rider && row.eventLabel, row.event.code, displayTime(row.event.at)].filter(Boolean).join(" · ")}</small>
-                </> : <span className={styles.muted}>{row.trackingChecked ? "Chưa xác định mốc" : "Chưa đọc được tracking"}</span>}
-              </td>
-              <td role="cell" className={styles.logCell}><span className={styles.mobileLabel}>Log lỗi Driver APP</span>
-                {row.logRider ? <LostLogDetails row={row} /> : <span className={styles.muted}>{row.logsChecked ? "Không có log khớp" : "Chưa đọc được log"}</span>}
-                {row.logRider && !row.event && <small>Chưa xác định mốc để đối chiếu thời gian</small>}
-              </td>
-              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>Số tiền (₫)</span>{row.amount === null ? "—" : number.format(row.amount)}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Region</span>{row.region || "—"}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Hub</span>{row.hub || "—"}</td>
+              <td role="cell"><span className={styles.mobileLabel}>Loại yêu cầu</span>{row.requestType || "—"}</td>
+              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>% đền bù</span>{row.compensationRate == null ? "—" : percent.format(row.compensationRate)}</td>
+              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>COD/COGS</span>{row.codCogs == null ? "—" : number.format(row.codCogs)}</td>
+              <td role="cell" className={styles.money}><span className={styles.mobileLabel}>Số tiền đền bù</span>{row.amount === null ? "—" : number.format(row.amount)}</td>
+              <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Lý do</span>{row.reason || "—"}{row.reasonType && <small>{row.reasonType}</small>}</td>
+              <td role="cell" className={styles.reason}><span className={styles.mobileLabel}>Kết quả</span>{row.result || "—"}</td>
             </tr>)}
           </tbody>
         </table>

@@ -145,5 +145,33 @@ test("LOST parsing keeps SDD-01 source row numbers and zero amounts", () => {
     ["2026-11-12", "Other Hub", "", "", "", "VN11111"],
     ["2026-11-12", "52-HCM SDD-01 Hub", "", "", "", "vn12345", "Quá hạn tại Hub", "Chốt đền bù", "Lost", "OnHold", 0],
   ]);
-  assert.deepEqual(rows, [{ ...row, row: 3 }]);
+  assert.deepEqual(rows, [{ ...row, row: 3, hub: "52-HCM SDD-01 Hub" }]);
+});
+
+test("LOST compensation layout keeps all twelve fields, source row numbers and blank money fields", () => {
+  const sheet = [
+    ["Ngày chốt đền bù", "Month", "SPX tracking", "Trạng thái hệ thống", "Region", "Hub", "Loại yêu\ncầu",
+      "% đền bù", "COD/COGS", "Số tiền đền bù", "Lý do", "Kết quả"],
+    ["2026-11-12", 11, "SPXVN12345A", "Lost", "HCM", "50-HCM D8 Hub", "Đền bù", 1, 66000, 66000],
+    [46338, "11", "spxvn12345b", "Lost", "HCM", "52-HCM SDD-01 Hub", "Đền bù",
+      "50%", 260928, "130464.0", "Rỗng ruột", "Chốt đền bù"],
+    ["2026-11-11", "", "VN12346", "Delivered", "HCM", "52-HCM SDD-01 Hub", "Đền bù", 1, "", 0, "Giao/Hoàn chéo"],
+    ["2026-11-10", "", "VN12347", "Lost", "HCM", "52-HCM SDD-01 Hub", "Đền bù"],
+  ];
+  const entries = parseLostSheet(sheet);
+  assert.equal(entries.length, 3);
+  assert.deepEqual(entries[0], {
+    row: 3, date: "2026-11-12", month: 11, shipment: "SPXVN12345B", status: "Lost", region: "HCM",
+    hub: "52-HCM SDD-01 Hub", requestType: "Đền bù", compensationRate: 0.5, codCogs: 260928,
+    amount: 130464, reason: "Rỗng ruột", reasonType: "", result: "Chốt đền bù",
+  });
+  const snapshot = prepareLostSnapshot(entries.map(entry => reconcileLostRow(entry)), null, null);
+  const { rows } = selectLostPage(snapshot, defaultLostFilters);
+  assert.equal(rows[0].codCogs, 260928);
+  assert.equal(rows[1].month, 11);
+  assert.equal(rows[1].compensationRate, 1);
+  assert.equal(rows[1].codCogs, null);
+  assert.equal(rows[1].amount, 0);
+  assert.equal(rows[2].compensationRate, null);
+  assert.equal(rows[2].amount, null);
 });

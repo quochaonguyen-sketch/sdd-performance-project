@@ -53,7 +53,7 @@
 .clear:hover { text-decoration: underline; }
 .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px 14px; padding: 7px 16px 14px; }
 .filters label { display: grid; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; }
-.filters .mobileSort, .mobileSortHeading { display: none; }
+.mobileSortHeading { display: none; }
 .filters .searchLabel { flex: 1 1 245px; }
 .filters .checkbox { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 2px; cursor: pointer; }
 .checkbox input { margin: 0; width: 16px; height: 16px; accent-color: var(--color-accent); }
@@ -68,21 +68,21 @@
 .filters select { max-width: 260px; padding: 0 10px; font: inherit; font-weight: 400; }
 
 .scroller { overflow: auto; max-height: min(66vh, 690px); }
-.scroller table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 890px; font-size: 13px; }
-.scroller th, .scroller td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-rule); }
-.scroller th { position: sticky; top: 0; z-index: 1; background: var(--color-paper-2); border-top: 1px solid var(--color-rule); font-weight: 650; white-space: nowrap; }
+.scroller table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1230px; font-size: 13px; }
+.scroller th, .scroller td { padding: 7px 9px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-rule); }
+.scroller th { position: sticky; top: 0; z-index: 1; color: #fff; background: #1b427b; font-weight: 650; white-space: nowrap; vertical-align: middle; }
+.scroller :is(th, td):not(:last-child) { border-inline-end: 1px solid var(--color-rule); }
 .scroller .sortHeader { padding: 0; }
 .sortButton {
-  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; padding: 0 12px;
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; padding: 0 9px;
   border: 0; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer;
 }
-.sortButton:hover { background: var(--color-paper-3); }
-.sortButton svg { flex: none; color: var(--color-muted); }
-.sortHeader[aria-sort] .sortButton svg { color: var(--color-accent); }
-.scroller .sortButton:focus-visible { outline-offset: -2px; }
+.sortButton:hover { background: #26558f; }
+.sortButton svg { flex: none; }
 .scroller td { max-width: 275px; overflow-wrap: anywhere; }
 .scroller tr:hover td { background: var(--color-paper-2); }
 .scroller td small { display: block; margin-top: 3px; color: var(--color-muted); font-size: 12px; }
+.scroller .date, .scroller .identity > details > summary { white-space: nowrap; }
 .scroller .identity strong { font-size: 13px; letter-spacing: .01em; }
 .statusBadge, .badge { display: inline-block; border-radius: 6px; font-size: 12px; line-height: 1.35; }
 .statusBadge { padding: 3px 7px; background: var(--color-paper-3); color: var(--color-ink-2); font-weight: 600; }
@@ -97,7 +97,8 @@
 }
 .scroller summary::-webkit-details-marker { display: none; }
 .scroller summary svg { flex: none; }
-.scroller details[open] summary svg { transform: rotate(90deg); }
+.scroller details[open] > summary > svg { transform: rotate(90deg); }
+.scroller .identity > details > summary { min-height: 24px; }
 .log { margin-top: 6px; padding: 6px 8px; background: var(--color-paper-2); border-left: 2px solid var(--color-rule-strong); border-radius: 3px; }
 .log p { margin: 3px 0 0; }
 
@@ -110,6 +111,7 @@
 .pagination button:disabled { opacity: .5; cursor: default; }
 .warning { margin: 0; padding: 11px 14px; border-radius: 8px; background: var(--color-warning-soft); color: var(--color-warning); }
 .page :is(button, input, select, a, summary, .scroller):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.scroller .sortButton:focus-visible { outline-color: #fff; outline-offset: -2px; }
 .search input:focus-visible, .scroller:focus-visible { outline-offset: -2px; }
 
 @container lost (max-width: 920px) {
@@ -129,7 +131,7 @@
   .groupIcon { width: 30px; height: 30px; }
   .groupCount { font-size: 22px; }
   .filters label:not(.checkbox) { flex: 1 1 100%; }
-  .filters .mobileSort, .mobileSortHeading { display: grid; }
+  .mobileSortHeading { display: block; }
   .sortButton { display: none; }
   .filters select { max-width: none; }
   .filters input:not([type="checkbox"]), .filters select { font-size: 16px; }
@@ -138,12 +140,10 @@
   .scroller thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .scroller tbody { display: grid; gap: 10px; padding: 10px; background: var(--color-paper-2); border-block: 1px solid var(--color-rule); }
   .scroller tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--color-rule); border-radius: 9px; background: var(--color-paper); }
-  .scroller td { display: block; padding: 0; border: 0; min-width: 0; max-width: none; }
+  .scroller td, .scroller td:not(:last-child) { display: block; padding: 0; border: 0; min-width: 0; max-width: none; }
   .scroller tr:hover td { background: transparent; }
-  .scroller .statusCell { text-align: right; }
-  .reason, .money { grid-column: 1 / -1; }
+  .reason { grid-column: 1 / -1; }
   .mobileLabel { display: block; margin-bottom: 4px; color: var(--color-muted); font-size: 12px; font-weight: 650; }
-  .scroller summary { min-height: 44px; flex-wrap: wrap; align-content: center; }
-  .scroller .money { display: flex; justify-content: space-between; align-items: baseline; padding-top: 7px; border-top: 1px solid var(--color-rule); font-weight: 650; }
-  .money .mobileLabel { margin-bottom: 0; }
+  .scroller summary, .scroller .identity > details > summary { min-height: 44px; flex-wrap: wrap; align-content: center; white-space: normal; }
+  .scroller .money { text-align: left; }
 }

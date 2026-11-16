@@ -40,7 +40,7 @@ async function run(query, label) {
 
 async function loadSheet() {
   const token = await googleSheetsAccessToken();
-  const range = encodeURIComponent("'LOST'!A:K");
+  const range = encodeURIComponent("'LOST'!A:L");
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${HUB_SHEET_ID}/values/${range}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, {
     headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000),
   });
@@ -154,7 +154,7 @@ async function main() {
   const report = () => db.from('lost_report');
   try {
     const source = await loadSheet();
-    const shipments = [...new Set(source.map(row => row.shipment))].filter(id => /^VN[A-Z0-9]{3,40}$/.test(id));
+    const shipments = [...new Set(source.map(row => row.shipment))].filter(id => /^(?:SPX)?VN[A-Z0-9]{3,40}$/.test(id));
     const checks = new Map(shipments.map(shipment_id => [shipment_id, { shipment_id, tracking: null, logs: null }]));
     for (let i = 0; i < shipments.length; i += 120) {
       const existing = await run(db.from('lost_spx_checks').select('shipment_id,tracking,logs').in('shipment_id', shipments.slice(i, i + 120)), 'Chưa đọc được các đơn đã tra');
