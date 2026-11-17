@@ -23,6 +23,13 @@ export async function registrationSheet(id: string) {
   return google;
 }
 
+export async function readOffRegistrationRows(google: Awaited<ReturnType<typeof registrationSheet>>) {
+  const response = await google(`/values/${encodeURIComponent(`'${offSheetTitle}'!A1:M`)}?valueRenderOption=UNFORMATTED_VALUE`);
+  if (!response.ok) throw Error("Chưa đọc được tab Đăng ký OFF. Kiểm tra quyền của Google Service Account.");
+  const { values = [] } = await response.json() as { values?: unknown[][] };
+  return values;
+}
+
 export async function writeOffRegistration(id: string, input: OffRegistration, rider: Rider) {
   const google = await registrationSheet(id);
   const headerRange = encodeURIComponent(`'${offSheetTitle}'!A1:M1`);
@@ -56,9 +63,7 @@ export async function writeOffRegistration(id: string, input: OffRegistration, r
   if (result && result.status !== 400 && result.status !== 409 && result.status < 500) throw Error("Không ghi được yêu cầu OFF vào Google Sheets.");
 
   // An interrupted response can follow a committed batch. Verify the same submission before reporting failure.
-  const check = await google(`/values/${encodeURIComponent(`'${offSheetTitle}'!A1:M`)}?valueRenderOption=UNFORMATTED_VALUE`);
-  if (!check.ok) throw Error("Không kiểm tra được kết quả ghi yêu cầu OFF.");
-  const { values = [] } = await check.json() as { values?: unknown[][] };
+  const values = await readOffRegistrationRows(google);
   if (!offSheetHeaders.every((header, index) => values[0]?.[index] === header)) throw Error("Tab đăng ký OFF có tiêu đề không hợp lệ.");
   const requestedDays = new Set(input.dates.map(dateSerial));
   const existing = values.slice(1).filter(row => row[3] === rider.rider_code && requestedDays.has(Number(row[2])));

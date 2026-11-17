@@ -18,7 +18,7 @@ import { ProductUpdateNotifications } from "@/components/feedback/product-update
 import { useRememberedLinks } from "@/components/layout/filter-memory";
 import { FeedbackPopup } from "@/components/feedback/feedback-popup";
 import { AiLauncher } from "@/components/ai/ai-launcher";
-import {pageForPath,canViewPage,type PageAccess} from "@/lib/auth/page-access";
+import {pageForPath,canEditStaff,canViewPage,type PageAccess} from "@/lib/auth/page-access";
 
 const volumeItems = [
   { href: "/volume/delivery", label: "Delivery Volume", icon: Truck },
@@ -31,6 +31,7 @@ const navItems = [
   { href: "/realtime-dashboard", label: "Delivery Realtime", icon: Activity },
   { href: "/riders", label: "Rider Directory", icon: Bike },
   { href: "/team/rider-schedule", label: "Lịch rider", icon: CalendarDays },
+  { href: "/team/off-review", label: "Duyệt lịch OFF", icon: ListChecks },
   { href: "/team", label: "Staffing & Scheduling", icon: UsersRound },
   { href: "/pickup-realtime", label: "Pickup Realtime", icon: PackagePlus },
   { href: "/linehaul", label: "Linehaul Management", icon: Truck },
@@ -72,7 +73,7 @@ const toolItems = [
   { href: "/zone-builder", label: "Zone Builder", icon: PencilRuler },
 ];
 const memberHiddenItems = new Set<string>([]);
-const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/lost", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder", "/team/rider-schedule"];
+const morePaths = ["/linehaul","/backlog-history", "/overnight-holds", "/performance", "/return-orders", "/lost", "/volume", "/pickup-realtime", "/lmhub-inventory", "/inventory-delivery", "/settings", "/notes", "/route-sheet", "/imports", "/pickup-management", "/zones", "/zone-builder", "/team/rider-schedule", "/team/off-review"];
 type ThemeMode = "light" | "dark";
 type WorkspaceModule = "operations" | "wh" | "team" | "routes" | "data" | "settings";
 const subscribeToFrameContext = () => () => {};
@@ -88,7 +89,8 @@ function getTrustedFrameContext() {
 
 export function AppShell({ children, user }: { children: React.ReactNode; user: { email: string; fullName: string | null; role: string; pageAccess?:PageAccess } }) {
   const pathname = usePathname();
-  const rememberedHref = useRememberedLinks();
+  const rememberedLink = useRememberedLinks();
+  const rememberedHref = (href: string) => href === "/team/rider-schedule" ? href : rememberedLink(href);
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTrustedFrame = useSyncExternalStore(subscribeToFrameContext, getTrustedFrameContext, () => false);
@@ -98,13 +100,16 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitRoute, setSplitRoute] = useState("/dashboard");
   const [theme, setTheme] = useState<ThemeMode>("light");
-  const allowedHref=(href:string)=>{const key=pageForPath(href);return key==="admin"?user.role==="admin":!key||canViewPage(user.role,user.pageAccess,key);};
+  const allowedHref=(href:string)=>{
+    if (href === "/team/off-review") return canEditStaff(user.role,user.pageAccess);
+    const key=pageForPath(href);return key==="admin"?user.role==="admin":!key||canViewPage(user.role,user.pageAccess,key);
+  };
   const visibleToolItems = toolItems.filter(item=>allowedHref(item.href));
   const memberToolRestricted = visibleToolItems.length===0;
   const visiblePickupItems = pickupItems.filter(item=>allowedHref(item.href));
   const workspaceItems = navItems.filter((item) => !["/settings", "/role-permissions", "/user-activity", "/site-health", "/feedback"].includes(item.href) && allowedHref(item.href));
   const whPaths = ["/wh-dashboard"];
-  const teamPaths = ["/riders", "/team", "/team/rider-schedule", "/notes"];
+  const teamPaths = ["/riders", "/team", "/team/rider-schedule", "/team/off-review", "/notes"];
   const dataPaths = ["/route-sheet", "/imports", "/data-sources"];
   const systemItems = navItems.filter((item) => ["/settings","/role-permissions","/user-activity","/site-health"].includes(item.href)&&allowedHref(item.href));
   const moreNavItems = [

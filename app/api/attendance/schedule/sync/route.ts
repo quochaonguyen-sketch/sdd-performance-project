@@ -10,13 +10,15 @@ function authorized(request: Request) {
   return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
 }
 
+async function sync(retryNow = false) {
+  const result = await processAttendanceSheetSync(300, null, retryNow)
+    .catch(() => ({ success: false, queued: 0, synced: 0, error: "Chưa xử lý được hàng đợi lịch OFF." }));
+  return NextResponse.json(result);
+}
+
 export async function GET(request: Request) {
   if (!authorized(request)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  try {
-    return NextResponse.json(await processAttendanceSheetSync());
-  } catch (error) {
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Không thể chạy đồng bộ lịch" }, { status: 500 });
-  }
+  return sync();
 }
 
 export async function POST() {
@@ -25,9 +27,5 @@ export async function POST() {
   if (!canEditStaff(context.profile.role, context.profile.page_access)) {
     return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch rider." }, { status: 403 });
   }
-  try {
-    return NextResponse.json(await processAttendanceSheetSync(300, null, true));
-  } catch {
-    return NextResponse.json({ success: false, error: "Chưa xử lý được hàng đợi lịch OFF." }, { status: 503 });
-  }
+  return sync(true);
 }

@@ -74,7 +74,7 @@ export function pagesForApi(path:string,method="GET"):PageAccessKey[]|"admin"|nu
  // Token-authenticated ingestion, public forms, auth and telemetry retain their own guards.
  if(path==="/api/attendance/schedule/google-webhook")return null;
  if(path==="/api/attendance/schedule/sync")return method==="GET" ? null : ["team"];
- if(path==="/api/attendance/schedule/approved-off")return ["team"];
+ if(path==="/api/attendance/schedule/off-review")return ["team"];
  if(["/api/attendance/schedule","/api/attendance/schedule/google-sheet","/api/attendance/schedule/reconcile"].includes(path)||
     /^\/api\/attendance\/riders\/[^/]+$/.test(path))return ["pickup_management","delivery_realtime","team"];
  if(path==="/api/admin"||path.startsWith("/api/admin/"))return "admin";

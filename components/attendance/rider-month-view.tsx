@@ -34,15 +34,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
 
-type ScheduleStatus =
-  | ""
-  | "ON"
-  | "OFF_WEEKLY"
-  | "OFF_APPROVED"
-  | "OFF_UNEXPECTED"
-  | "WORKING_REST_DAY"
-  | "NO_PICKUP"
-  | "NO_DELIVERY";
+import type { RiderScheduleStatus } from "@/lib/attendance/statuses";
+
+type ScheduleStatus = "" | RiderScheduleStatus;
 
 type RiderMonthResponse = {
   success: boolean;
@@ -68,6 +62,9 @@ const statusOptions: Array<{ value: ScheduleStatus; label: string }> = [
   { value: "WORKING_REST_DAY", label: "OFF nhưng không OFF" },
   { value: "NO_PICKUP", label: "Không đi pick" },
   { value: "NO_DELIVERY", label: "Không đi giao" },
+  { value: "OFF_HOLIDAY", label: "OFF lễ" },
+  { value: "SUPPORT", label: "Đi hỗ trợ" },
+  { value: "APP_LOCKED", label: "Khóa app" },
 ];
 
 const weekdayLabels = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "CN"];
@@ -123,7 +120,7 @@ export function RiderMonthView({ riderId, initialMonth, staffCanEdit, offSheetUr
     for (const log of logs) {
       const status = normalizeStatus(log.status);
       if (status === "OFF_WEEKLY") weekly += 1;
-      else if (status === "OFF_APPROVED") approved += 1;
+      else if (status === "OFF_APPROVED" || status === "OFF_HOLIDAY") approved += 1;
       else if (status === "OFF_UNEXPECTED") unexpected += 1;
     }
     const off = weekly + approved + unexpected;
@@ -206,7 +203,7 @@ export function RiderMonthView({ riderId, initialMonth, staffCanEdit, offSheetUr
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between ops-page-header">
         <div className="flex items-start gap-3">
           <Link
-            href={`/team/rider-schedule?month=${month}`}
+            href={`/team/rider-schedule?month=${month}${rider?.kv ? `&area=${encodeURIComponent(rider.kv)}` : ""}`}
             className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft size={19} />
@@ -456,6 +453,7 @@ function normalizeStatus(status: string | null | undefined): ScheduleStatus {
   if (normalized === "WORKING_REST_DAY") return "WORKING_REST_DAY";
   if (normalized === "NO_PICKUP") return "NO_PICKUP";
   if (normalized === "NO_DELIVERY") return "NO_DELIVERY";
+  if (normalized === "OFF_HOLIDAY" || normalized === "SUPPORT" || normalized === "APP_LOCKED") return normalized;
   if (normalized.includes("UNEXPECTED") || normalized.includes("ĐỘT") || normalized.includes("DOT")) {
     return "OFF_UNEXPECTED";
   }
@@ -478,7 +476,7 @@ function statusLabel(status: ScheduleStatus) {
   if (status === "WORKING_REST_DAY") return "Đi làm ngày OFF";
   if (status === "NO_PICKUP") return "Không đi pick";
   if (status === "NO_DELIVERY") return "Không đi giao";
-  return "ON";
+  return statusOptions.find(option => option.value === status)?.label ?? "ON";
 }
 
 function statusClasses(status: ScheduleStatus) {
@@ -489,5 +487,8 @@ function statusClasses(status: ScheduleStatus) {
   if (status === "WORKING_REST_DAY") return "border-cyan-200 bg-cyan-50 text-cyan-700";
   if (status === "NO_PICKUP") return "border-slate-200 bg-slate-100 text-slate-700";
   if (status === "NO_DELIVERY") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (status === "OFF_HOLIDAY") return "border-purple-200 bg-purple-50 text-purple-700";
+  if (status === "SUPPORT") return "border-cyan-200 bg-cyan-50 text-cyan-700";
+  if (status === "APP_LOCKED") return "border-red-200 bg-red-50 text-red-700";
   return "border-slate-200 bg-slate-50 text-slate-400";
 }

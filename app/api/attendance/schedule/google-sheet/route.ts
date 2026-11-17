@@ -1,6 +1,6 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { z } from "zod";
 import { createPrivateKey, createSign } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -9,19 +9,14 @@ import { canEditRiderSchedule } from "@/lib/auth/page-access";
 import { loadRoleAccess } from "@/lib/auth/role-access-server";
 import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
 import { withAttendanceSheetWriter } from "@/lib/google/attendance-sheet-sync";
+import { assertOffScheduleHeaders, offScheduleStatus, parseOffScheduleDate, resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
 
 const bodySchema = z.object({
   sheet_url: z.url().max(1000),
   range_mode: z.enum(["week", "month"]),
   anchor_date: z.iso.date(),
 });
-type Status =
-  | "OFF_WEEKLY"
-  | "OFF_APPROVED"
-  | "OFF_UNEXPECTED"
-  | "WORKING_REST_DAY"
-  | "NO_PICKUP"
-  | "NO_DELIVERY";
+type Status = NonNullable<ReturnType<typeof offScheduleStatus>>;
 
 async function adminSession() {
   const client = await createClient();
@@ -32,7 +27,6 @@ async function adminSession() {
   return { admin, role: profile?.role ?? "viewer", user };
 }
 
-function sheetId(url: string) { return url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] ?? null; }
 function syncRange(mode: "week" | "month", anchor: string) {
   const date = new Date(`${anchor}T00:00:00Z`);
   if (mode === "month") {
@@ -45,26 +39,6 @@ function syncRange(mode: "week" | "month", anchor: string) {
   const start = date.toISOString().slice(0, 10);
   date.setUTCDate(date.getUTCDate() + 6);
   return { start, end: date.toISOString().slice(0, 10) };
-}
-function normalize(value: unknown) { return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").trim().toLowerCase(); }
-function statusValue(value: unknown): Status | null {
-  const text = normalize(value);
-  if (text === "off tuan" || text === "off") return "OFF_WEEKLY";
-  if (["off co xin phep", "off co phep", "off phep"].includes(text)) return "OFF_APPROVED";
-  if (text === "off dot xuat") return "OFF_UNEXPECTED";
-  if (text === "off nhung khong off") return "WORKING_REST_DAY";
-  if (text === "khong di pick") return "NO_PICKUP";
-  if (text === "khong di giao") return "NO_DELIVERY";
-  return null;
-}
-function dateValue(value: unknown, fallbackYear?: number) {
-  if (typeof value === "number") { const parsed = XLSX.SSF.parse_date_code(value); if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`; }
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-  const text = String(value ?? "").trim();
-  const iso = text.match(/^(\d{4})[-/]([01]?\d)[-/]([0-3]?\d)$/); if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
-  const vi = text.match(/^([0-3]?\d)[-/]([01]?\d)[-/](\d{4})$/); if (vi) return `${vi[3]}-${vi[2].padStart(2, "0")}-${vi[1].padStart(2, "0")}`;
-  const viShort = text.match(/^([0-3]?\d)[-/]([01]?\d)$/); if (viShort) { const year = fallbackYear ?? new Date().getFullYear(); return `${year}-${viShort[2].padStart(2, "0")}-${viShort[1].padStart(2, "0")}`; }
-  return null;
 }
 
 function base64Url(value: string | Buffer) { return Buffer.from(value).toString("base64url"); }
@@ -107,18 +81,24 @@ export async function POST(request: Request) {
   if (!canEditRiderSchedule(session.role, await loadRoleAccess(session.role))) return NextResponse.json({ success: false, error: "Bạn không có quyền đồng bộ lịch" }, { status: 403 });
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Link Google Sheet không hợp lệ" }, { status: 400 });
-  const id = sheetId(parsed.data.sheet_url);
-  if (!id) return NextResponse.json({ success: false, error: "Không đọc được ID từ link Google Sheet" }, { status: 400 });
+  const id = resolveOffScheduleSpreadsheetId();
+  if (!id) return NextResponse.json({ success: false, error: "Chưa thiết lập Google Sheet lịch rider." }, { status: 503 });
+  try {
+    resolveOffScheduleSpreadsheetId(parsed.data.sheet_url);
+  } catch {
+    return NextResponse.json({ success: false, error: "Link không khớp với file Google Sheet lịch rider đã cấu hình." }, { status: 400 });
+  }
   const range = syncRange(parsed.data.range_mode, parsed.data.anchor_date);
   try {
-    const result = await withAttendanceSheetWriter(session.admin, () => pullOffSchedule(session, id, range, request));
+    const attendance = createAttendanceClient();
+    const result = await withAttendanceSheetWriter(attendance, () => pullOffSchedule(session, attendance, id, range, request));
     return result ?? NextResponse.json({ success: false, error: "Có lượt đồng bộ đang chạy. Hãy thử lại sau." }, { status: 409 });
   } catch {
     return NextResponse.json({ success: false, error: "Chưa bắt đầu được lượt lấy lịch OFF." }, { status: 503 });
   }
 }
 
-async function pullOffSchedule(session: NonNullable<Awaited<ReturnType<typeof adminSession>>>, id: string,
+async function pullOffSchedule(session: NonNullable<Awaited<ReturnType<typeof adminSession>>>, attendance: ReturnType<typeof createAttendanceClient>, id: string,
   range: { start: string; end: string }, request: Request) {
   let rows: unknown[][];
   try {
@@ -129,23 +109,25 @@ async function pullOffSchedule(session: NonNullable<Awaited<ReturnType<typeof ad
     if (!source.ok) throw new Error(result?.error?.message ?? "Google Sheets API từ chối truy cập");
     if (!result?.values?.length) throw Error("Tab OFF không có tiêu đề hoặc không đọc được dữ liệu.");
     rows = result.values;
+    assertOffScheduleHeaders(rows[0]);
   } catch (error) { return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Không đọc được sheet OFF" }, { status: 400 }); }
 
   const fallbackYear = Number(range.start.slice(0, 4));
   const issues: Array<{ row: number; error: string }> = [];
   const records = new Map<string, { rider_code: string; work_date: string; status: Status; source_row: number }>();
   const seen = new Set<string>();
-  rows.forEach((row, index) => {
+  rows.slice(1).forEach((row, index) => {
+    const sourceRow = index + 2;
     const code = String(row[0] ?? "").trim();
-    if (!code || ["id", "rider id"].includes(normalize(code))) return;
-    const day = dateValue(row[2], fallbackYear);
-    if (!day || !z.iso.date().safeParse(day).success) { issues.push({ row: index + 1, error: "Ngày không hợp lệ" }); return; }
+    if (!code) return;
+    const day = parseOffScheduleDate(row[2], fallbackYear);
+    if (!day || !z.iso.date().safeParse(day).success) { issues.push({ row: sourceRow, error: "Ngày không hợp lệ" }); return; }
     if (day < range.start || day > range.end) return;
     const key = `${code}|${day}`;
     seen.add(key);
-    const status = statusValue(row[3]);
-    if (!status) { issues.push({ row: index + 1, error: "Trạng thái không hợp lệ" }); return; }
-    records.set(key, { rider_code: code, work_date: day, status, source_row: index + 1 });
+    const status = offScheduleStatus(row[3]);
+    if (!status) { issues.push({ row: sourceRow, error: "Trạng thái không hợp lệ" }); return; }
+    records.set(key, { rider_code: code, work_date: day, status, source_row: sourceRow });
   });
 
   const codes = Array.from(new Set(Array.from(records.values(), (item) => item.rider_code)));
@@ -166,7 +148,7 @@ async function pullOffSchedule(session: NonNullable<Awaited<ReturnType<typeof ad
     .filter((item) => riderMap.has(item.rider_code))
     .map((item) => ({ rider_code: item.rider_code, work_date: item.work_date, status: item.status, rider_id: riderMap.get(item.rider_code) }));
   if (request.signal.aborted) return new NextResponse(null, { status: 499 });
-  const { data: result, error } = await session.admin.rpc("import_google_rider_schedule", {
+  const { data: result, error } = await attendance.rpc("import_google_rider_schedule", {
     p_rows: payload, p_seen: [...seen], p_from: range.start, p_to: range.end, p_spreadsheet: id,
   });
   if (error || !result) return NextResponse.json({ success: false, error: "Chưa lưu được lịch từ Google Sheet." }, { status: 502 });

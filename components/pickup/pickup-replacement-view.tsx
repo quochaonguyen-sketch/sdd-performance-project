@@ -18,7 +18,6 @@ import {
   UserRoundX,
 } from "lucide-react";
 import type { AttendanceLog, Rider } from "@/types";
-import { createClient } from "@/lib/supabase/client";
 import { recommendReplacementRiders, type RecommendedRider } from "@/lib/pickup/recommendations";
 import { cn } from "@/utils/cn";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
@@ -39,6 +38,7 @@ type ApiResponse = {
   can_edit?: boolean;
   replacements?: Replacement[];
   replacement?: Replacement;
+  attendance?: AttendanceLog[];
   sheet_sync?: {
     success: boolean;
     error?: string;
@@ -85,14 +85,8 @@ export function PickupReplacementView() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const client = createClient();
-    const [riderResponse, attendanceResult, response] = await Promise.all([
+    const [riderResponse, response] = await Promise.all([
       fetch("/api/riders", { cache: "no-store" }),
-      client
-        .from("attendance_logs")
-        .select("*")
-        .gte("work_date", rangeStart)
-        .lte("work_date", rangeEnd),
       fetch(`/api/pickup-replacements?start=${rangeStart}&end=${rangeEnd}`, {
         cache: "no-store",
       }),
@@ -114,11 +108,10 @@ export function PickupReplacementView() {
           ),
       );
     }
-    if (attendanceResult.error) setError(attendanceResult.error.message);
-    else setAttendance((attendanceResult.data ?? []) as AttendanceLog[]);
     if (!response.ok || !result?.success)
       setError(result?.error ?? "Không thể tải lịch thế pick");
     else {
+      setAttendance(result.attendance ?? []);
       setRecommendation(result.recommendation ?? null);
       setReplacements(result.replacements ?? []);
       setCanEdit(Boolean(result.can_edit));
@@ -822,13 +815,15 @@ function hasPickupRoute(rider: Rider) {
 function isPickupOff(log: AttendanceLog | undefined) {
   if (!log) return false;
   const status = log.status?.trim().toUpperCase() ?? "";
-  return status.startsWith("OFF_") || status === "NO_PICKUP";
+  return status.startsWith("OFF_") || status === "NO_PICKUP" || status === "APP_LOCKED";
 }
 function pickupOffLabel(log: AttendanceLog | undefined) {
   const status = log?.status?.trim().toUpperCase() ?? "";
   if (status === "OFF_WEEKLY") return "OFF tuần";
   if (status === "OFF_APPROVED") return "OFF phép";
   if (status === "OFF_UNEXPECTED") return "OFF đột xuất";
+  if (status === "OFF_HOLIDAY") return "OFF lễ";
+  if (status === "APP_LOCKED") return "Khóa app";
   if (status === "NO_PICKUP") return "Không đi pick";
   return "OFF";
 }

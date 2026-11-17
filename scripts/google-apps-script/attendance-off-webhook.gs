@@ -44,5 +44,5 @@ function toIsoDate(value) {
 
 function toStatus(value) {
   const text = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase().trim();
-  return { 'off': 'OFF_WEEKLY', 'off tuan': 'OFF_WEEKLY', 'off co xin phep': 'OFF_APPROVED', 'off dot xuat': 'OFF_UNEXPECTED', 'off nhung khong off': 'WORKING_REST_DAY', 'khong di pick': 'NO_PICKUP', 'khong di giao': 'NO_DELIVERY', 'on': 'ON' }[text] || '';
+  return { 'off': 'OFF_WEEKLY', 'off tuan': 'OFF_WEEKLY', 'off co xin phep': 'OFF_APPROVED', 'off dot xuat': 'OFF_UNEXPECTED', 'off nhung khong off': 'WORKING_REST_DAY', 'khong di pick': 'NO_PICKUP', 'khong di giao': 'NO_DELIVERY', 'off le': 'OFF_HOLIDAY', 'di ho tro': 'SUPPORT', 'khoa app': 'APP_LOCKED', 'on': 'ON' }[text] || '';
 }

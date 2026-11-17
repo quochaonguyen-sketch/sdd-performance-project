@@ -1,10 +1,11 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canManageOperations, canManageRiders } from "@/lib/auth/permissions";
-import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
+import { THI_CONG_PLAN_SPREADSHEET_ID } from "@/lib/google/thi-cong-plan";
 import { readPickupReplacementsFromGoogleSheet } from "@/lib/google/pickup-replacements";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
       .select("id,work_date,rider_id,rider_code,district,ward,assigned_at,checked_in_at,riders(full_name,cot)")
       .eq("work_date", workDate)
       .order("assigned_at", { ascending: false }),
-    session.admin
+    createAttendanceClient()
       .from("attendance_logs")
       .select("id,rider_id,rider_code,work_date,status,note")
       .eq("work_date", workDate),
@@ -142,7 +143,7 @@ export async function GET(request: Request) {
     });
   }
   try {
-    const spreadsheetId = resolveOffScheduleSpreadsheetId();
+    const spreadsheetId = THI_CONG_PLAN_SPREADSHEET_ID;
     if (spreadsheetId) {
       const sheetRows = await readPickupReplacementsFromGoogleSheet(
         spreadsheetId,

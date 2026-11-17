@@ -1,15 +1,7 @@
 import { createPrivateKey, createSign } from "node:crypto";
-import * as XLSX from "xlsx";
+import type { RiderScheduleStatus } from "../attendance/statuses.ts";
 
-export type GoogleScheduleStatus =
-  | ""
-  | "ON"
-  | "OFF_WEEKLY"
-  | "OFF_APPROVED"
-  | "OFF_UNEXPECTED"
-  | "WORKING_REST_DAY"
-  | "NO_PICKUP"
-  | "NO_DELIVERY";
+export type GoogleScheduleStatus = "" | RiderScheduleStatus;
 
 export type GoogleScheduleUpdate = {
   rider_code: string;
@@ -18,14 +10,23 @@ export type GoogleScheduleUpdate = {
   status: GoogleScheduleStatus;
 };
 
-const STATUS_LABELS: Record<Exclude<GoogleScheduleStatus, "" | "ON">, string> = {
+export const OFF_SCHEDULE_HEADERS = ["Mã rider", "Họ tên rider", "Ngày", "Trạng thái"] as const;
+export const OFF_SCHEDULE_LABELS: Record<Exclude<GoogleScheduleStatus, "" | "ON">, string> = {
   OFF_WEEKLY: "OFF tuần",
   OFF_APPROVED: "OFF có xin phép",
   OFF_UNEXPECTED: "OFF đột xuất",
   WORKING_REST_DAY: "OFF nhưng không OFF",
   NO_PICKUP: "Không đi pick",
   NO_DELIVERY: "Không đi giao",
+  OFF_HOLIDAY: "OFF lễ",
+  SUPPORT: "Đi hỗ trợ",
+  APP_LOCKED: "Khóa app",
 };
+
+const normalizeLabel = (value: unknown) => String(value ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").trim();
+const sheetLabels = new Map(Object.entries(OFF_SCHEDULE_LABELS).map(([status, label]) => [normalizeLabel(label), status as RiderScheduleStatus]));
+sheetLabels.set("off", "OFF_WEEKLY").set("off co phep", "OFF_APPROVED").set("off phep", "OFF_APPROVED");
+export const offScheduleStatus = (label: unknown) => sheetLabels.get(normalizeLabel(label)) ?? null;
 
 function base64Url(value: string | Buffer) {
   return Buffer.from(value).toString("base64url");
@@ -51,22 +52,12 @@ export function extractSpreadsheetId(value: string | null | undefined) {
 }
 
 export function resolveOffScheduleSpreadsheetId(sheetUrl?: string | null) {
-  if (sheetUrl?.trim()) {
-    const id = extractSpreadsheetId(sheetUrl);
-    if (!id) throw new Error("Link Google Sheet lịch OFF không hợp lệ");
-    return id;
+  const configuredId = extractSpreadsheetId(cleanGoogleCredential(process.env.OFF_SCHEDULE_SPREADSHEET_ID));
+  if (!configuredId) return null;
+  if (sheetUrl?.trim() && extractSpreadsheetId(sheetUrl) !== configuredId) {
+    throw new Error("Link không khớp với file Google Sheet lịch rider đã cấu hình.");
   }
-
-  const configuredId = extractSpreadsheetId(
-    cleanGoogleCredential(
-      process.env.OFF_SCHEDULE_SPREADSHEET_ID
-      || process.env.THI_CONG_PLAN_SPREADSHEET_ID,
-    )
-      || "1nc-jsQGOdUHIGjmIWQf01HUXJGS82XYglj46eXSzp8c",
-  );
-  if (configuredId) return configuredId;
-
-  return null;
+  return configuredId;
 }
 
 export async function googleSheetsAccessToken(signal?: AbortSignal) {
@@ -118,12 +109,10 @@ export async function googleSheetsAccessToken(signal?: AbortSignal) {
   return result.access_token;
 }
 
-function dateValue(value: unknown, fallbackYear?: number) {
+export function parseOffScheduleDate(value: unknown, fallbackYear = new Date().getFullYear()) {
   if (typeof value === "number") {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) {
-      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
-    }
+    if (!Number.isFinite(value) || value < 0 || value >= 2_958_466) return null;
+    return new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000).toISOString().slice(0, 10);
   }
   const text = String(value ?? "").trim();
   const iso = text.match(/^(\d{4})[-/]([01]?\d)[-/]([0-3]?\d)$/);
@@ -132,8 +121,7 @@ function dateValue(value: unknown, fallbackYear?: number) {
   if (vi) return `${vi[3]}-${vi[2].padStart(2, "0")}-${vi[1].padStart(2, "0")}`;
   const viShort = text.match(/^([0-3]?\d)[-/]([01]?\d)$/);
   if (viShort) {
-    const year = fallbackYear ?? new Date().getFullYear();
-    return `${year}-${viShort[2].padStart(2, "0")}-${viShort[1].padStart(2, "0")}`;
+    return `${fallbackYear}-${viShort[2].padStart(2, "0")}-${viShort[1].padStart(2, "0")}`;
   }
   return null;
 }
@@ -162,6 +150,12 @@ async function readOffRows(baseUrl: string, headers: Record<string, string>, sig
   return data.values ?? [];
 }
 
+export function assertOffScheduleHeaders(row: unknown[] | undefined) {
+  if (!OFF_SCHEDULE_HEADERS.every((label, index) => row?.[index] === label)) {
+    throw Error("Tab OFF cần đúng tiêu đề Mã rider, Họ tên rider, Ngày và Trạng thái.");
+  }
+}
+
 export async function readOffScheduleKeys(spreadsheetId: string, from: string, to: string, signal: AbortSignal) {
   const token = await googleSheetsAccessToken(signal);
   const rows = await readOffRows(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values`, { Authorization: `Bearer ${token}` }, signal);
@@ -171,11 +165,28 @@ export async function readOffScheduleKeys(spreadsheetId: string, from: string, t
     const code = String(row[0] ?? "").trim();
     if (!code) continue;
     for (const year of years) {
-      const day = dateValue(row[2], year);
+      const day = parseOffScheduleDate(row[2], year);
       if (day && day >= from && day <= to) keys.add(`${code}|${day}`);
     }
   }
   return keys;
+}
+
+export async function readOffScheduleHistory(spreadsheetId: string, year: number, signal: AbortSignal) {
+  const token = await googleSheetsAccessToken(signal);
+  const rows = await readOffRows(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values`, { Authorization: `Bearer ${token}` }, signal);
+  const schedule = new Map<string, { rider_code: string; work_date: string; status: string }>();
+  let skipped = 0;
+  for (const row of rows.slice(1)) {
+    const rider_code = String(row[0] ?? "").trim();
+    if (!rider_code || !String(row[3] ?? "").trim()) continue;
+    const work_date = parseOffScheduleDate(row[2], year);
+    const status = offScheduleStatus(row[3]);
+    if (!work_date || !status || !Number.isFinite(Date.parse(work_date)) ||
+      new Date(work_date).toISOString().slice(0, 10) !== work_date) { skipped++; continue; }
+    schedule.set(`${rider_code}|${work_date}`, { rider_code, work_date, status });
+  }
+  return { rows: [...schedule.values()], skipped };
 }
 
 export async function syncScheduleUpdatesToGoogleSheet(
@@ -187,6 +198,7 @@ export async function syncScheduleUpdatesToGoogleSheet(
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values`;
   const rows = await readOffRows(baseUrl, headers, signal);
+  assertOffScheduleHeaders(rows[0]);
   const rowNumbersByKey = new Map<string, number[]>();
   const blankRowNumbers: number[] = [];
 
@@ -198,7 +210,7 @@ export async function syncScheduleUpdatesToGoogleSheet(
       return;
     }
     const riderCode = String(row[0] ?? "").trim();
-    const workDate = dateValue(row[2], fallbackYear);
+    const workDate = parseOffScheduleDate(row[2], fallbackYear);
     if (!riderCode || !workDate) return;
     const key = `${riderCode}|${workDate}`;
     const rowNumbers = rowNumbersByKey.get(key) ?? [];
@@ -209,7 +221,8 @@ export async function syncScheduleUpdatesToGoogleSheet(
   const latestByKey = new Map(
     updates.map((item) => [`${item.rider_code}|${item.work_date}`, item]),
   );
-  const data: Array<{ range: string; majorDimension: "ROWS"; values: string[][] }> = [];
+  const data: Array<{ range: string; majorDimension: "ROWS"; values: (string | number)[][] }> = [];
+  const appendRows: (string | number)[][] = [];
   const clearRanges: string[] = [];
   let addedRows = 0;
 
@@ -223,8 +236,8 @@ export async function syncScheduleUpdatesToGoogleSheet(
     const values = [
       item.rider_code,
       item.rider_name,
-      item.work_date,
-      STATUS_LABELS[item.status],
+      Date.parse(item.work_date) / 86_400_000 + 25_569,
+      OFF_SCHEDULE_LABELS[item.status],
     ];
     const [firstRow, ...duplicateRows] = rowNumbers;
     if (firstRow) {
@@ -236,18 +249,30 @@ export async function syncScheduleUpdatesToGoogleSheet(
       clearRanges.push(...duplicateRows.map((rowNumber) => `'OFF'!A${rowNumber}:D${rowNumber}`));
     } else {
       const blankRow = blankRowNumbers.pop();
-      if (!blankRow) {
-        throw new Error(
-          "Tab OFF đã hết hàng trống A:D. Cần tạo thêm hàng không khóa trước khi đồng bộ.",
-        );
+      if (blankRow) {
+        data.push({
+          range: `'OFF'!A${blankRow}:D${blankRow}`,
+          majorDimension: "ROWS",
+          values: [values],
+        });
+        addedRows += 1;
+      } else {
+        appendRows.push(values);
       }
-      data.push({
-        range: `'OFF'!A${blankRow}:D${blankRow}`,
-        majorDimension: "ROWS",
-        values: [values],
-      });
-      addedRows += 1;
     }
+  }
+
+  if (appendRows.length) {
+    await googleJson(
+      await fetch(`${baseUrl}/${encodeURIComponent("'OFF'!A:D")}:append?valueInputOption=RAW&insertDataOption=OVERWRITE`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ majorDimension: "ROWS", values: appendRows }),
+        cache: "no-store",
+        signal,
+      }),
+      "Google Sheets API từ chối thêm dòng lịch",
+    );
   }
 
   if (data.length) {
@@ -279,7 +304,7 @@ export async function syncScheduleUpdatesToGoogleSheet(
   return {
     spreadsheet_id: spreadsheetId,
     updated: data.length - addedRows,
-    appended: addedRows,
+    appended: addedRows + appendRows.length,
     cleared: clearRanges.length,
   };
 }

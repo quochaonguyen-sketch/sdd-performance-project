@@ -211,7 +211,13 @@ export function MorningDeliveryView() {
   }, []);
 
   useSupabaseRealtime({ table: "morning_delivery_assignments", onChange: requestRealtimeRefresh });
-  useSupabaseRealtime({ table: "attendance_logs", onChange: requestRealtimeRefresh });
+  useEffect(() => {
+    window.addEventListener("focus", requestRealtimeRefresh);
+    if (typeof BroadcastChannel === "undefined") return () => window.removeEventListener("focus", requestRealtimeRefresh);
+    const channel = new BroadcastChannel("rider-schedule");
+    channel.addEventListener("message", requestRealtimeRefresh);
+    return () => { window.removeEventListener("focus", requestRealtimeRefresh); channel.close(); };
+  }, [requestRealtimeRefresh]);
   useSupabaseRealtime({ table: "morning_delivery_absence_notes", onChange: requestRealtimeRefresh });
   useSupabaseRealtime({ table: "realtime_delivery_riders", onChange: requestRealtimeRefresh });
 
@@ -1372,6 +1378,7 @@ function absentStatusSortRank(status: string | null | undefined) {
 function attendanceStatusLabel(status: string | null | undefined) {
   if (status === "OFF_APPROVED") return "OFF phép";
   if (status === "OFF_UNEXPECTED") return "OFF đột xuất";
+  if (status === "OFF_HOLIDAY") return "OFF lễ";
   return "OFF tuần";
 }
 

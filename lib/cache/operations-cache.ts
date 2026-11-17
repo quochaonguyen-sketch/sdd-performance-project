@@ -1,4 +1,4 @@
-import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { OPERATING_AREAS, type OperatingArea } from "@/lib/locations/operating-areas";
 import type { AttendanceLog, Rider, RiderRegistryItem } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TtlCache } from "@/lib/cache/ttl-cache";
@@ -24,10 +24,10 @@ const RIDERS_CACHE_KEY = "all";
 const RIDERS_TTL_MS = 60_000;
 const NOTES_TTL_MS = 45_000;
 const ATTENDANCE_TTL_MS = 30_000;
-const ridersCache = new TtlCache<Rider[]>(RIDERS_TTL_MS, 1);
+const ridersCache = new TtlCache<Rider[]>(RIDERS_TTL_MS, 1 + OPERATING_AREAS.length);
 const riderRegistryCache = new TtlCache<RiderRegistryItem[]>(RIDERS_TTL_MS, 1);
 const notesCache = new TtlCache<CachedPersonalNote[]>(NOTES_TTL_MS, 100);
-const attendanceCache = new TtlCache<AttendanceSchedulePayload>(ATTENDANCE_TTL_MS, 6);
+const attendanceCache = new TtlCache<AttendanceSchedulePayload>(ATTENDANCE_TTL_MS, 15);
 
 export function invalidateRidersCache() {
   ridersCache.clear();
@@ -40,17 +40,20 @@ export function invalidateNotesCache(userId: string) {
 }
 
 export function invalidateAttendanceCache(month?: string) {
-  if (month) attendanceCache.delete(month);
+  if (month) for (const area of OPERATING_AREAS) attendanceCache.delete(`${month}:${area}`);
   else attendanceCache.clear();
 }
 
-export async function getCachedRiders() {
-  const result = await ridersCache.load(RIDERS_CACHE_KEY, () => fetchAll<Rider>((from, to) =>
+export async function getCachedRiders(area?: OperatingArea) {
+  const result = await ridersCache.load(area ?? RIDERS_CACHE_KEY, () => fetchAll<Rider>((from, to) =>
     createAdminClient()
       .from("riders")
-      .select("*").in("kv", OPERATING_AREAS)
+      .select(area ? "id,rider_code,full_name,kv,cot,delivery_district,delivery_ward,status,current_shift" : "*")
+      .in("kv", area ? [area] : OPERATING_AREAS)
       .order("updated_at", { ascending: false })
-      .range(from, to),
+      .order("id")
+      .range(from, to)
+      .overrideTypes<Rider[], { merge: false }>(),
   ));
   return { data: result.value, cache: cacheState(result) };
 }
@@ -86,8 +89,10 @@ export async function getCachedPersonalNotes(
   }
 }
 
-export async function getCachedAttendanceSchedule(month: string, load: () => Promise<AttendanceSchedulePayload>) {
-  const result = await attendanceCache.load(month, load);
+export async function getCachedAttendanceSchedule(month: string, area: OperatingArea, load: () => Promise<AttendanceSchedulePayload>, fresh = false) {
+  const key = `${month}:${area}`;
+  if (fresh) attendanceCache.delete(key);
+  const result = await attendanceCache.load(key, load);
   return { data: result.value, cache: cacheState(result) };
 }
 

@@ -32,8 +32,9 @@ Sau khi chuyển nguồn, giữ khóa project lưu trữ cho WH. Các ngày phá
 
 ## Lịch rider
 
-Các ngày nghỉ và điều chỉnh lịch từ web được lưu theo tháng tại `public.rider_schedule_archive` trên project thứ hai. Trang Lịch rider kiểm tra phiên bản trước khi đọc. Nếu bản sao cũ hoặc project thứ hai tạm lỗi, web đọc lịch từ nguồn chính. Tác vụ đồng bộ hằng ngày cập nhật các tháng đã thay đổi, và trang lịch tuần làm mới bản sao khi người dùng xem một tháng vừa thay đổi.
+Mã web mới dùng Supabase 2 cho lịch, đăng ký OFF và hàng đợi đồng bộ lịch với Google Sheet. Bảng lưu theo tháng `rider_schedule_archive` giữ làm bản lưu cũ. Hồ sơ rider và phiên đăng nhập tiếp tục dùng Supabase chính.
 
-Thao tác sửa lịch, hồ sơ rider và hàng đợi Google Sheet dùng Supabase chính để Pickup, Delivery và các chức năng liên quan nhìn thấy cùng lịch. Các ngày đi làm mặc định được tính từ lịch trống, vì vậy chúng không tạo thêm dòng trong bản lưu.
-
-Để cài thủ công, chạy `prisma/rider-schedule-archive-source.sql` tại project chính và `prisma/rider-schedule-archive.sql` tại project thứ hai. Chạy `node scripts/sync-rider-schedule-archive.mts --apply` để sao chép, sau đó chạy cùng lệnh với tham số mặc định để đối chiếu `pending: 0`.
+1. Chạy `prisma/rider-schedule-supabase2.sql` tại **Supabase 2** bằng SQL Editor. SQL tạo các bảng riêng tư và RPC cho service role.
+2. Kiểm tra cấu hình hai Supabase và các file nguồn `OFF_SCHEDULE_SPREADSHEET_ID`, `OFF_REGISTRATION_SPREADSHEET_ID` trên máy chạy chuyển. Tránh nhập thêm lịch và đăng ký vào nguồn cũ trong lúc đối chiếu và chuyển mã web.
+3. Chạy `node scripts/move-rider-schedule.mts --apply` để chuyển lịch, đơn đăng ký, quyết định cũ và hàng đợi. Lệnh chỉ thêm dòng còn thiếu. Lịch từ Supabase chính và cập nhật đang chờ gửi được ưu tiên nếu trùng rider/ngày với Sheet. Đối chiếu lại bằng `node scripts/move-rider-schedule.mts`, kết quả cần có `missing_or_changed: 0`.
+4. Triển khai mã web và kiểm tra lần lượt đăng ký, duyệt, xem một khu vực và đồng bộ lịch lên Sheet. Dữ liệu cũ được giữ để đối chiếu.

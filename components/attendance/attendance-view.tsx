@@ -35,6 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import type { AttendanceLog, Rider } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useReportInitialDataLoading } from "@/components/layout/app-loading-store";
-import { ApprovedOffPanel } from "@/components/attendance/approved-off-panel";
+import type { OperatingArea } from "@/lib/locations/operating-areas";
 import {
   WeeklyAttendanceDashboard,
   type WeeklyScheduleValue,
@@ -95,13 +96,16 @@ const statusOptions: Array<{ value: ScheduleStatus; label: string }> = [
   { value: "WORKING_REST_DAY", label: "OFF nhưng không OFF" },
   { value: "NO_PICKUP", label: "Không đi pick" },
   { value: "NO_DELIVERY", label: "Không đi giao" },
+  { value: "OFF_HOLIDAY", label: "OFF lễ" },
+  { value: "SUPPORT", label: "Đi hỗ trợ" },
+  { value: "APP_LOCKED", label: "Khóa app" },
 ];
 
 const riderPageSizes = [25, 50, 100];
 const importIssuePageSize = 50;
 
-export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), initialDate, staffCanEdit, offSheetUrl, registrationConfigured }: {
-  initialMonth?: string; initialDate?: string; staffCanEdit?: boolean; offSheetUrl?: string; registrationConfigured?: boolean;
+export function AttendanceView({ area, initialMonth = format(new Date(), "yyyy-MM"), initialDate, initialRider = "", staffCanEdit, offSheetUrl }: {
+  area: OperatingArea; initialMonth?: string; initialDate?: string; initialRider?: string; staffCanEdit?: boolean; offSheetUrl?: string;
 }) {
   const [riders, setRiders] = useState<Rider[]>([]);
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
@@ -109,9 +113,10 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
   const [selectedDate, setSelectedDate] = useState(
     initialDate ?? (initialMonth === format(new Date(), "yyyy-MM") ? format(new Date(), "yyyy-MM-dd") : `${initialMonth}-01`),
   );
-  const [query, setQuery] = useState("");
-  const [kv, setKv] = useRememberedState("attendance-view:kv", "all");
-  const [cot, setCot] = useRememberedState("attendance-view:cot", "all");
+  const [query, setQuery] = useState(initialRider);
+  const [rangeMode, setRangeMode] = useState<"week" | "month">("week");
+  const [kv, setKv] = useState<string>(area);
+  const [cot, setCot] = useRememberedState(initialRider ? `attendance-link:${area}:cot` : `attendance-view:${area}:cot`, "all");
   const [deliveryDistrict, setDeliveryDistrict] = useState("all");
   const [rosterStatus, setRosterStatus] = useState("all");
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceCategory | "all">("all");
@@ -145,20 +150,24 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
   const sheetSyncAbortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
   const loadVersion = useRef(0);
+  const loadedRange = useRef("");
   const deferredQuery = useDeferredValue(query);
+  const anchorWeek = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
+  const dataMonths = rangeMode === "month" ? month : [...new Set([
+    month, format(anchorWeek, "yyyy-MM"), format(addDays(anchorWeek, 6), "yyyy-MM"),
+  ])].join(",");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false, signal?: AbortSignal, fresh = !background) => {
     const version = ++loadVersion.current;
-    setLoading(true);
-    setError(null);
+    if (!background) {
+      setLoading(true);
+      setError(null);
+    }
     try {
-    // Tuần đang xem có thể tràn sang tháng sau (ví dụ 31/08-06/09) nên phải tải cả 2 tháng để đủ dữ liệu cho WeekStrip/DistrictBreakdown
-    const weekStart = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
-    const weekEnd = addDays(weekStart, 6);
-    const months = Array.from(new Set([month, format(weekStart, "yyyy-MM"), format(weekEnd, "yyyy-MM")]));
-    const responses = await Promise.all(months.map((m) => fetch(`/api/attendance/schedule?month=${m}`, { cache: "no-store" })));
+    const months = dataMonths.split(",");
+    const responses = await Promise.all(months.map((m) => fetch(`/api/attendance/schedule?month=${m}&area=${area}${fresh ? "&fresh=1" : ""}`, { cache: "no-store", signal })));
     const results = await Promise.all(responses.map((r) => r.json().catch(() => null) as Promise<ScheduleResponse | null>));
-    if (version !== loadVersion.current) return;
+    if (signal?.aborted || version !== loadVersion.current) return;
     const firstError = responses.find((r, i) => !r.ok || !results[i]?.success);
     if (firstError) {
       const idx = responses.findIndex((r, i) => !r.ok || !results[i]?.success);
@@ -175,18 +184,20 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
       setRiders(Array.from(riderMap.values()));
       setLogs(Array.from(logMapDedup.values()));
       setCanEdit(staffCanEdit !== false && Boolean(results[0]?.can_edit));
+      loadedRange.current = dataMonths;
     }
     } catch {
-      if (version === loadVersion.current) setError("Mất kết nối khi tải lịch rider.");
+      if (!signal?.aborted && version === loadVersion.current) setError("Mất kết nối khi tải lịch rider.");
     } finally {
-      if (version === loadVersion.current) setLoading(false);
+      if (!signal?.aborted && version === loadVersion.current) setLoading(false);
     }
-  }, [month, selectedDate, staffCanEdit]);
+  }, [area, dataMonths, staffCanEdit]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+  useVisiblePolling(useCallback(async (signal: AbortSignal) => {
+    const background = loadedRange.current === dataMonths;
+    if (background && busyRef.current) return;
+    await load(background, signal);
+  }, [dataMonths, load]), undefined, 45_000);
 
   const autoSyncedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -250,7 +261,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
     if (busyRef.current || Date.now() < suppressRealtimeUntilRef.current) return;
     if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
     realtimeTimerRef.current = setTimeout(() => {
-      void load();
+      if (!busyRef.current) void load(true, undefined, true);
     }, 900);
   }, [load]);
 
@@ -258,10 +269,15 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
     return () => {
       if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
     };
-  }, []);
+  }, [load]);
 
-  useSupabaseRealtime({ table: "attendance_logs", onChange: requestRealtimeRefresh });
   useSupabaseRealtime({ table: "riders", onChange: requestRealtimeRefresh });
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel("rider-schedule");
+    channel.addEventListener("message", requestRealtimeRefresh);
+    return () => channel.close();
+  }, [requestRealtimeRefresh]);
 
   const monthDate = useMemo(() => parseISO(`${month}-01`), [month]);
   const days = useMemo(
@@ -666,7 +682,7 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
       return;
     }
     setServiceAccountEmail(result.service_account_email ?? null);
-    setSheetSyncRange("week");
+    setSheetSyncRange(rangeMode);
     setSheetUrl(offSheetUrl ?? (staffCanEdit === undefined ? window.localStorage.getItem("rider-ops-off-sheet-url") ?? "" : ""));
     setShowSheetSync(true);
   }
@@ -681,15 +697,15 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
   }
 
   if (!showSheetSync && !editor) {
-    const weekStart = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
-    const from = format(weekStart, "yyyy-MM-dd");
-    const to = format(addDays(weekStart, 6), "yyyy-MM-dd");
     return (
       <>
         <WeeklyAttendanceDashboard
           riders={filteredRiders}
           logs={logs}
           selectedDate={selectedDate}
+          title={`Lịch rider · ${area}`}
+          rangeMode={rangeMode}
+          onRangeModeChange={setRangeMode}
           loading={loading}
           canEdit={canEdit && !loading && !syncingSheet && !bulkSyncingSheet}
           savingCells={savingCells}
@@ -711,7 +727,6 @@ export function AttendanceView({ initialMonth = format(new Date(), "yyyy-MM"), i
           notice={<>
             {success && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700" role="status">{success}</p>}
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-            {canEdit && registrationConfigured && <ApprovedOffPanel key={from} start={from} end={to} onImported={load} />}
           </>}
           actions={(
             <>
@@ -1446,6 +1461,7 @@ function normalizeStatus(status: string | null | undefined): ScheduleStatus {
   if (normalized === "WORKING_REST_DAY") return "WORKING_REST_DAY";
   if (normalized === "NO_PICKUP") return "NO_PICKUP";
   if (normalized === "NO_DELIVERY") return "NO_DELIVERY";
+  if (normalized === "OFF_HOLIDAY" || normalized === "SUPPORT" || normalized === "APP_LOCKED") return normalized;
   if (normalized.includes("UNEXPECTED") || normalized.includes("ĐỘT") || normalized.includes("DOT")) {
     return "OFF_UNEXPECTED";
   }
@@ -1472,7 +1488,7 @@ function statusShortLabel(status: ScheduleStatus) {
   if (status === "WORKING_REST_DAY") return "Đi làm OFF";
   if (status === "NO_PICKUP") return "Không pick";
   if (status === "NO_DELIVERY") return "Không giao";
-  return "-";
+  return statusLabel(status);
 }
 
 function statusChipClasses(status: ScheduleStatus) {
@@ -1498,7 +1514,7 @@ function statusClasses(status: ScheduleStatus) {
 }
 
 function isWorkingStatus(status: ScheduleStatus) {
-  return status === "ON" || status === "WORKING_REST_DAY" || status === "NO_PICKUP" || status === "NO_DELIVERY";
+  return status === "ON" || status === "WORKING_REST_DAY" || status === "NO_PICKUP" || status === "NO_DELIVERY" || status === "SUPPORT";
 }
 
 function cellKey(riderId: string, date: string) {

@@ -2,6 +2,8 @@ import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAttendanceClient } from "@/lib/attendance/database";
+import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
 import { createClient } from "@/lib/supabase/server";
 import { canManageOperations } from "@/lib/auth/permissions";
 
@@ -411,45 +413,18 @@ export async function POST(request: Request) {
       };
     });
 
-  for (let index = 0; index < upsertItems.length; index += 500) {
-    const { error } = await session.admin
-      .from("attendance_logs")
-      .upsert(upsertItems.slice(index, index + 500), { onConflict: "rider_code,work_date" });
+  const changes = [...upsertItems, ...clearItems.map(item => ({
+    rider_id: ridersByCode.get(item.rider_code)!.id,
+    rider_code: item.rider_code, work_date: item.work_date, status: "ON",
+  }))];
+  const attendance = createAttendanceClient();
+  for (let index = 0; index < changes.length; index += 500) {
+    const { error } = await attendance.rpc("save_rider_schedule", { p_changes: changes.slice(index, index + 500) });
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
   }
-
-  const clearCodesByDate = new Map<string, Set<string>>();
-  for (const item of clearItems) {
-    const codes = clearCodesByDate.get(item.work_date) ?? new Set<string>();
-    codes.add(item.rider_code);
-    clearCodesByDate.set(item.work_date, codes);
-  }
-
-  const deleteJobs = Array.from(clearCodesByDate, ([workDate, codes]) => {
-    const riderCodes = Array.from(codes);
-    return Array.from({ length: Math.ceil(riderCodes.length / 500) }, (_, index) => ({
-      workDate,
-      riderCodes: riderCodes.slice(index * 500, (index + 1) * 500),
-    }));
-  }).flat();
-
-  for (let index = 0; index < deleteJobs.length; index += 6) {
-    const results = await Promise.all(
-      deleteJobs.slice(index, index + 6).map((job) =>
-        session.admin
-          .from("attendance_logs")
-          .delete()
-          .eq("work_date", job.workDate)
-          .in("rider_code", job.riderCodes),
-      ),
-    );
-    const failed = results.find((result) => result.error);
-    if (failed?.error) {
-      return NextResponse.json({ success: false, error: failed.error.message }, { status: 400 });
-    }
-  }
+  for (const dateMonth of new Set(changes.map(row => row.work_date.slice(0, 7)))) invalidateAttendanceCache(dateMonth);
 
   await session.admin.from("activity_logs").insert({
     entity_type: "attendance_schedule",

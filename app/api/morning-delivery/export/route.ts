@@ -1,9 +1,10 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
+import { THI_CONG_PLAN_SPREADSHEET_ID } from "@/lib/google/thi-cong-plan";
 import { readPickupReplacementsFromGoogleSheet } from "@/lib/google/pickup-replacements";
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +38,7 @@ function formatDateVi(date: string) {
 function attendanceStatusLabel(status: string | null | undefined) {
   if (status === "OFF_APPROVED") return "OFF phép";
   if (status === "OFF_UNEXPECTED") return "OFF đột xuất";
+  if (status === "OFF_HOLIDAY") return "OFF lễ";
   if ((status ?? "").toUpperCase().includes("OFF")) return "OFF tuần";
   return "Chưa điểm danh";
 }
@@ -72,7 +74,7 @@ export async function GET(request: Request) {
       .eq("status", "active")
       .order("rider_code"),
     admin.from("morning_delivery_assignments").select("rider_id,checked_in_at").eq("work_date", workDate),
-    admin.from("attendance_logs").select("rider_id,rider_code,status,note").eq("work_date", workDate),
+    createAttendanceClient().from("attendance_logs").select("rider_id,rider_code,status,note").eq("work_date", workDate),
     admin
       .from("morning_delivery_absence_notes")
       .select("rider_id,reason,is_excused")
@@ -115,7 +117,7 @@ export async function GET(request: Request) {
   }
   // Merge Google Sheet — giống web để Đỗ Khánh Linh (157696) không lệch giữa web và Excel
   try {
-    const spreadsheetId = resolveOffScheduleSpreadsheetId();
+    const spreadsheetId = THI_CONG_PLAN_SPREADSHEET_ID;
     if (spreadsheetId) {
       const sheetRows = await readPickupReplacementsFromGoogleSheet(spreadsheetId, workDate, workDate, AbortSignal.timeout(8000));
       for (const item of sheetRows) {

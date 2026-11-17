@@ -13,7 +13,6 @@ type RealtimeTable =
   | "pickup_48h_realtime_riders"
   | "pickup_48h_rider_groups"
   | "riders"
-  | "attendance_logs"
   | "zones"
   | "activity_logs"
   | "delivery_order"

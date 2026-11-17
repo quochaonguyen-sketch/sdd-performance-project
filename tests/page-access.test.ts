@@ -37,7 +37,8 @@ test("nested pages, query strings, APIs and prefix lookalikes map correctly",()=
 });
 test("rider schedules inherit Staffing read access without giving a team-only member write access", () => {
  assert.equal(pageForPath("/team/rider-schedule/rider-id"), "team");
- assert.deepEqual(pagesForApi("/api/attendance/schedule/approved-off", "POST"), ["team"]);
+ assert.equal(pageForPath("/team/off-review"), "team");
+ assert.deepEqual(pagesForApi("/api/attendance/schedule/off-review", "PATCH"), ["team"]);
  assert.deepEqual(pagesForApi("/api/attendance/riders/1"), ["pickup_management", "delivery_realtime", "team"]);
  assert.deepEqual(pagesForApi("/api/attendance/schedule/import", "POST"), ["pickup_management", "delivery_realtime"]);
  const member = normalizePageAccess("member", { team: true, pickup_management: false, delivery_realtime: false });

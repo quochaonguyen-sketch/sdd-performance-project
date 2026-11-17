@@ -9,20 +9,13 @@ import {
   processAttendanceSheetSync,
 } from "@/lib/google/attendance-sheet-sync";
 import type { Rider } from "@/types";
-import { readScheduleArchive } from "@/lib/attendance/schedule-archive";
+import { createAttendanceClient } from "@/lib/attendance/database";
+import { scheduleStatuses } from "@/lib/attendance/statuses";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 const dateSchema = z.iso.date();
-const scheduleStatusSchema = z.enum([
-  "",
-  "ON",
-  "OFF_WEEKLY",
-  "OFF_APPROVED",
-  "OFF_UNEXPECTED",
-  "WORKING_REST_DAY",
-  "NO_PICKUP",
-  "NO_DELIVERY",
-]);
+const scheduleStatusSchema = z.enum(["", ...scheduleStatuses]);
 
 const updateSchema = z.object({
   sheet_url: z.string().trim().max(1000).optional().nullable(),
@@ -88,8 +81,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const month = new URL(request.url).searchParams.get("month");
+  const params = new URL(request.url).searchParams;
+  const month = params.get("month");
   const parsedMonth = monthSchema.safeParse(month);
+  const area = z.enum(OPERATING_AREAS).safeParse(params.get("area"));
+  if (!area.success) return NextResponse.json({ success: false, error: "Chọn một khu vực từ KV1 đến KV5." }, { status: 400 });
   if (!parsedMonth.success) {
     return NextResponse.json({ success: false, error: "Tháng không hợp lệ" }, { status: 400 });
   }
@@ -97,24 +93,18 @@ export async function GET(request: Request) {
   const { start, end } = monthRange(parsedMonth.data);
 
   try {
-    const { data, cache } = await getCachedAttendanceSchedule(parsedMonth.data, async () => {
-      const [{ data: riders }, logs] = await Promise.all([
-        getCachedRiders(),
-        readScheduleArchive(session.admin, parsedMonth.data).then(archived => archived ?? fetchAll((from, to) =>
-          session.admin
-            .from("attendance_logs")
-            .select("*")
-            .gte("work_date", start)
-            .lte("work_date", end)
-            .neq("status", "ON")
-            .order("updated_at", { ascending: false })
-            .order("id")
-            .range(from, to),
-        )),
-      ]);
-
+    const { data, cache } = await getCachedAttendanceSchedule(parsedMonth.data, area.data, async () => {
+      const { data: riders } = await getCachedRiders(area.data);
+      const attendance = createAttendanceClient();
+      const batches = Array.from({ length: Math.ceil(riders.length / 100) }, (_, index) =>
+        riders.slice(index * 100, (index + 1) * 100).map(rider => rider.rider_code));
+      const logs = (await Promise.all(batches.map(codes => fetchAll((from, to) =>
+        attendance.from("attendance_logs").select("*").in("rider_code", codes)
+          .gte("work_date", start).lte("work_date", end).neq("status", "ON")
+          .order("id").range(from, to),
+      )))).flat();
       return { riders: [...riders].sort(compareScheduleRiders), logs };
-    });
+    }, params.get("fresh") === "1");
 
     return NextResponse.json({
       success: true,
@@ -153,7 +143,18 @@ export async function PUT(request: Request) {
     item.rider_id + ":" + item.work_date,
     { ...item, status: item.status || "ON" },
   ])).values()];
-  const { data: saved, error } = await session.admin.rpc("save_rider_schedule", { p_changes: updates });
+  const ids = [...new Set(updates.map(row => row.rider_id))];
+  const riderCodes = new Map<string, string>();
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const { data, error } = await session.admin.from("riders").select("id,rider_code")
+      .in("kv", OPERATING_AREAS).in("id", ids.slice(offset, offset + 100));
+    if (error) return NextResponse.json({ success: false, error: "Chưa đối chiếu được rider." }, { status: 503 });
+    for (const rider of data) riderCodes.set(rider.id, rider.rider_code);
+  }
+  if (riderCodes.size !== ids.length) return NextResponse.json({ success: false, error: "Có rider không hợp lệ." }, { status: 400 });
+  const { data: saved, error } = await createAttendanceClient().rpc("save_rider_schedule", {
+    p_changes: updates.map(row => ({ ...row, rider_code: riderCodes.get(row.rider_id) })),
+  });
   if (error || !saved) {
     return NextResponse.json({ success: false, error: "Chưa lưu được lịch rider. Kiểm tra rider và thử lại." }, { status: 400 });
   }

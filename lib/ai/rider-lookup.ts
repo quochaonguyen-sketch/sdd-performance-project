@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import { getActiveVolumeMaskMap } from "@/lib/rider-volume-mask/service";
 
@@ -100,7 +101,7 @@ export async function lookupRidersContext(
       .eq("id", 1)
       .maybeSingle(),
     readWhSnapshots(admin, { from: day, to: day }).catch(() => []),
-    admin
+    createAttendanceClient()
       .from("attendance_logs")
       .select("rider_code, status, work_date")
       .in("rider_code", codes)

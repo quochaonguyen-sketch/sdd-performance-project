@@ -1,4 +1,5 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -49,7 +50,7 @@ type RealtimeRow = {
   failed: number;
 };
 
-const absentStatuses = new Set(["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED"]);
+const absentStatuses = new Set(["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED", "OFF_HOLIDAY"]);
 
 function groupCounts(rows: RiderRow[], field: "kv" | "cot" | "delivery_district") {
   const counts = new Map<string, number>();
@@ -94,7 +95,7 @@ export async function GET(request: Request) {
           .from("riders")
           .select("id,rider_code,kv,cot,pickup_district,pickup_ward,delivery_district,status").in("kv", OPERATING_AREAS)
           .order("rider_code"),
-        admin
+        createAttendanceClient()
           .from("attendance_logs")
           .select("rider_id,rider_code,status")
           .eq("work_date", parsedDate.data),
@@ -221,7 +222,7 @@ export async function GET(request: Request) {
       summary: `${activeRiders.length} rider active và ${inactiveRiders.length} rider inactive trong master; nguồn realtime có ${activeDeliveryRiderCount} rider có đơn, trong đó ${managedActiveDeliveryRiderCount} rider khớp master active; ${absentRiderKeys.size} rider master active có lịch OFF.`,
       definitions: {
         absent_rider_count:
-          "Số rider active có trạng thái OFF_WEEKLY, OFF_APPROVED hoặc OFF_UNEXPECTED trong attendance_logs của ngày.",
+          "Số rider active có trạng thái nghỉ trong attendance_logs của ngày, gồm OFF tuần, OFF phép, OFF đột xuất và OFF lễ.",
         unassigned_cot1_rider_count:
           "Số rider active COT 1 chưa có khu vực pickup mặc định và chưa check-in vào phân công buổi sáng.",
         active_delivery_rider_count:

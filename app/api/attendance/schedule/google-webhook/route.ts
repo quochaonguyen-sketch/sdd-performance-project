@@ -3,13 +3,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { invalidateAttendanceCache } from "@/lib/cache/operations-cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAttendanceClient } from "@/lib/attendance/database";
+import { scheduleStatuses } from "@/lib/attendance/statuses";
+import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
 
 export const dynamic = "force-dynamic";
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const statusSchema = z.enum([
-  "ON", "OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED", "WORKING_REST_DAY", "NO_PICKUP", "NO_DELIVERY",
-]);
+const dateSchema = z.iso.date();
+const statusSchema = z.enum(scheduleStatuses);
 const bodySchema = z.object({
   spreadsheet_id: z.string().trim().min(1).max(200),
   records: z.array(z.object({
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
   }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Dữ liệu Google Sheet không hợp lệ" }, { status: 400 });
+  if (parsed.data.spreadsheet_id !== resolveOffScheduleSpreadsheetId()) {
+    return NextResponse.json({ success: false, error: "File Google Sheet không khớp với nguồn lịch rider đã cấu hình." }, { status: 409 });
+  }
 
   const recordsByKey = new Map(parsed.data.records.map((item) => [`${item.rider_code}|${item.work_date}`, item]));
   const records = [...recordsByKey.values()];
@@ -36,28 +40,20 @@ export async function POST(request: Request) {
   const riderIds = new Map((riders ?? []).map((rider) => [rider.rider_code, rider.id]));
   const missingRiderCodes = codes.filter((code) => !riderIds.has(code));
 
-  const upserts = records.filter((item) => item.status !== "ON" && riderIds.has(item.rider_code)).map((item) => ({
-    rider_id: riderIds.get(item.rider_code),
-    rider_code: item.rider_code,
-    work_date: item.work_date,
-    status: item.status,
-    raw_data: { source: "google_sheet_webhook", spreadsheet_id: parsed.data.spreadsheet_id, received_at: new Date().toISOString() },
-  }));
-  if (upserts.length) {
-    const { error } = await admin.from("attendance_logs").upsert(upserts, { onConflict: "rider_code,work_date" });
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-  const clears = records.filter((item) => item.status === "ON" && riderIds.has(item.rider_code));
-  for (const item of clears) {
-    const { error } = await admin.from("attendance_logs").delete().eq("rider_code", item.rider_code).eq("work_date", item.work_date);
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+  const updates = records.filter(item => riderIds.has(item.rider_code))
+    .map(item => ({ ...item, rider_id: riderIds.get(item.rider_code) }));
+  const days = records.map(item => item.work_date).sort();
+  const { data, error } = await createAttendanceClient().rpc("import_google_rider_schedule", {
+    p_rows: updates, p_seen: [], p_from: days[0], p_to: days.at(-1),
+    p_spreadsheet: parsed.data.spreadsheet_id, p_webhook: true,
+  });
+  if (error || !data) return NextResponse.json({ success: false, error: "Chưa lưu được lịch từ Google Sheet." }, { status: 500 });
   records.forEach((item) => invalidateAttendanceCache(item.work_date.slice(0, 7)));
   await admin.from("activity_logs").insert({
     entity_type: "attendance_schedule",
     action: "google_webhook_synced",
-    message: `Received ${upserts.length + clears.length} attendance updates from Google Sheet`,
-    raw_data: { spreadsheet_id: parsed.data.spreadsheet_id, imported: upserts.length, cleared: clears.length, missing_rider_codes: missingRiderCodes },
+    message: `Received ${data.imported + data.removed} attendance updates from Google Sheet`,
+    raw_data: { spreadsheet_id: parsed.data.spreadsheet_id, imported: data.imported, cleared: data.removed, missing_rider_codes: missingRiderCodes },
   });
-  return NextResponse.json({ success: true, imported: upserts.length, cleared: clears.length, missing_rider_codes: missingRiderCodes });
+  return NextResponse.json({ success: true, imported: data.imported, cleared: data.removed, pending: data.pending, missing_rider_codes: missingRiderCodes });
 }

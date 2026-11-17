@@ -5,26 +5,22 @@
 - Quản lý PUP và thế pick: `/pickup-management`, `/pickup-management?view=replacement`.
 - Return đầy đủ: tổng quan, tra cứu / gán đơn, rider trả, phân công COT ở `/return-orders`.
 - Ghi chú cá nhân `/notes` và nút ghi chú nhanh toàn ứng dụng.
-- Rider gửi yêu cầu tại `/off-registration`. Quản lý duyệt trong tab **Đăng ký OFF** qua liên kết **Quản lý đăng ký OFF** trên trang Staffing & Scheduling.
+- Rider gửi yêu cầu tại `/off-registration`. Admin và Leader có quyền Workforce xử lý tại `/team/off-review`.
 - Giao việc `/tasks`, theo dõi vi phạm `/violations`.
 - Khu vực `/zones`, vẽ tuyến `/zone-builder`.
 - Trợ lý AI trên header, cấu hình kết nối AI trong `/settings`.
 - Hướng dẫn các API import tại `/imports`.
 - Excel / Google Sheet tại `/route-sheet`.
 
-Mở **Lịch rider** từ mục **Workforce** ở thanh bên hoặc **Thêm** trên điện thoại. Trang tuần có bộ lọc rider, quận và COT. Bấm tên rider để xem lịch tháng.
+Mở **Lịch rider** từ mục **Workforce**, chọn một khu vực KV1–KV5 để tải lịch riêng của khu vực đó. Sau đó chọn **Theo tuần** hoặc **Theo tháng** và lọc theo rider, quận hoặc COT. Bấm **Đổi khu vực** để quay lại bảng chọn.
 
 ## Đăng ký OFF
 
-Đặt `OFF_REGISTRATION_SPREADSHEET_ID` trên máy chủ và cấp quyền Editor cho Google Service Account của app trên file quản lý. Cấu hình này trỏ tới file khác với nguồn lịch OFF chấm công. Tạo tab bằng `node --env-file=.env --env-file=.env.local scripts/setup-off-registration.mts`.
+Supabase 2 lưu lịch rider, đơn đăng ký, quyết định và hàng đợi đồng bộ lịch sang Google Sheet. Hồ sơ rider và phân quyền dùng Supabase chính. Mỗi ngày đăng ký có một dòng và các ngày gửi cùng lượt dùng chung **Mã yêu cầu**.
 
-Mỗi ngày đăng ký có một dòng, nhiều ngày gửi cùng lượt dùng chung **Mã yêu cầu**. Quản lý cập nhật **Trạng thái** và **Ghi chú quản lý** trong Sheet. Nếu rider cần đổi ngày đã gửi, quản lý xử lý yêu cầu cũ trước khi nhận thay đổi.
+Duyệt nghỉ cả ngày sẽ lưu quyết định, lịch rider và hàng đợi trong cùng một giao dịch. Từ chối cần lý do. Nghỉ theo ca cần xử lý riêng vì lịch làm/nghỉ lưu theo ngày. Các yêu cầu duyệt trước đây trên Google Sheet có thể dùng **Đưa vào lịch** nếu còn thiếu lịch.
 
-Sau khi duyệt, vào **Lịch rider → Nhập đăng ký OFF đã duyệt**. Chọn khoảng ngày, bấm **Xem trước**, rồi **Nhập vào lịch rider**. Web bỏ qua các ngày đã có lịch và đánh dấu nghỉ theo ca để quản lý xử lý riêng vì tab OFF hiện ghi theo ngày.
-
-Khi sửa trên web, thay đổi được lưu cùng hàng đợi gửi sang Google Sheet lịch OFF. **Lấy lịch từ Sheet OFF** lấy dữ liệu vào web theo tuần hoặc tháng và giữ các thay đổi web đang chờ gửi. Nếu lần ghi không thành công, bấm **Gửi thay đổi lên Sheet** để thử lại.
-
-Trên Supabase chính, cài `prisma/approved-rider-off.sql` trước khi triển khai mã web. File Google Sheet lịch làm/nghỉ dùng `OFF_SCHEDULE_SPREADSHEET_ID` và tài khoản dịch vụ cần quyền sửa tab `OFF`.
+Google Sheet đăng ký cũ là nguồn chuyển dữ liệu. Google Sheet **lịch OFF** vẫn đồng bộ qua các nút trên web hoặc tác vụ gọi `GET /api/attendance/schedule/sync` với `Authorization: Bearer <CRON_SECRET>`. Xem cách chuyển dữ liệu trong [hướng dẫn hai Supabase](onhold-archive.md#lịch-rider).
 
 ## File Excel
 

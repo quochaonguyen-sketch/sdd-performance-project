@@ -1,11 +1,12 @@
 import {canViewPage} from "@/lib/auth/page-access";
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessPickupManagement } from "@/lib/auth/permissions";
-import { resolveOffScheduleSpreadsheetId } from "@/lib/google/off-schedule";
+import { THI_CONG_PLAN_SPREADSHEET_ID } from "@/lib/google/thi-cong-plan";
 import {
   readPickupReplacementsFromGoogleSheet,
   syncPickupReplacementToGoogleSheet,
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
 const HISTORY_WEEKS = 8;
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const unavailablePickupStatuses = ["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED", "NO_PICKUP"] as const;
+const unavailablePickupStatuses = ["OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED", "OFF_HOLIDAY", "NO_PICKUP", "APP_LOCKED"] as const;
 const updateSchema = z.object({
   rider_id: z.string().uuid(),
   rider_code: z.string().trim().min(1),
@@ -106,7 +107,7 @@ export async function GET(request: Request) {
 
   const { start, end } = parsedRange.data;
   const historyStart = shiftDate(start, -7 * HISTORY_WEEKS);
-  const [{ data, error }, { data: riders, error: riderError }, historyQuery, volumeQuery] = await Promise.all([
+  const [{ data, error }, { data: riders, error: riderError }, historyQuery, volumeQuery, attendance] = await Promise.all([
     auth.admin
       .from("pickup_replacements")
       .select("*")
@@ -121,9 +122,11 @@ export async function GET(request: Request) {
       .lte("work_date", end)
       .eq("status", "ASSIGNED"),
     loadLatestPickupWardVolume(auth.admin),
+    createAttendanceClient().from("attendance_logs").select("rider_code,work_date,status,note")
+      .gte("work_date", start).lte("work_date", end).in("status", [...unavailablePickupStatuses]),
   ]);
-  if (error || riderError) {
-    return NextResponse.json({ success: false, error: (error ?? riderError)?.message }, { status: 400 });
+  if (error || riderError || attendance.error) {
+    return NextResponse.json({ success: false, error: (error ?? riderError ?? attendance.error)?.message }, { status: 400 });
   }
 
   const historyCounts = new Map<string, number>();
@@ -161,8 +164,7 @@ export async function GET(request: Request) {
     | { success: false; error: string };
 
   try {
-    const spreadsheetId = resolveOffScheduleSpreadsheetId();
-    if (!spreadsheetId) throw new Error("Chưa cấu hình Google Sheet Khu 5-6");
+    const spreadsheetId = THI_CONG_PLAN_SPREADSHEET_ID;
     const sheetRows = await readPickupReplacementsFromGoogleSheet(
       spreadsheetId,
       historyStart,
@@ -218,6 +220,7 @@ export async function GET(request: Request) {
     success: true,
     can_edit: auth.role === "admin" || auth.role === "leader",
     replacements: Array.from(merged.values()).sort((a, b) => a.work_date.localeCompare(b.work_date)),
+    attendance: attendance.data,
     sheet_sync: sheetSync,
     recommendation: {
       history: Object.fromEntries(historyCounts),
@@ -264,7 +267,7 @@ export async function PUT(request: Request) {
   }
 
   if (replacement) {
-    const { data: unavailableLog, error: attendanceError } = await auth.admin
+    const { data: unavailableLog, error: attendanceError } = await createAttendanceClient()
       .from("attendance_logs")
       .select("status")
       .eq("rider_code", replacement.rider_code)
@@ -302,8 +305,7 @@ export async function PUT(request: Request) {
     | { success: true; spreadsheet_id: string; row_numbers: number[]; verified: boolean }
     | { success: false; error: string };
   try {
-    const spreadsheetId = resolveOffScheduleSpreadsheetId();
-    if (!spreadsheetId) throw new Error("Chưa cấu hình Google Sheet Khu 5-6");
+    const spreadsheetId = THI_CONG_PLAN_SPREADSHEET_ID;
     const result = await syncPickupReplacementToGoogleSheet({
       spreadsheetId,
       riderCode: rider.rider_code,

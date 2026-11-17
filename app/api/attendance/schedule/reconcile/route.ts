@@ -1,4 +1,6 @@
 import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
+import { createAttendanceClient } from "@/lib/attendance/database";
+import { scheduleStatuses } from "@/lib/attendance/statuses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -40,16 +42,7 @@ function monthRange(month: string) {
 
 function normalizeGoogleScheduleStatus(value: string | null | undefined): GoogleScheduleStatus {
   const normalized = value?.trim().toUpperCase() ?? "";
-  if (!normalized || normalized === "ON") return "ON";
-
-  if (normalized === "OFF_WEEKLY") return "OFF_WEEKLY";
-  if (normalized === "OFF_APPROVED") return "OFF_APPROVED";
-  if (normalized === "OFF_UNEXPECTED") return "OFF_UNEXPECTED";
-  if (normalized === "WORKING_REST_DAY") return "WORKING_REST_DAY";
-  if (normalized === "NO_PICKUP") return "NO_PICKUP";
-  if (normalized === "NO_DELIVERY") return "NO_DELIVERY";
-
-  return "ON";
+  return scheduleStatuses.find(status => status === normalized) ?? "";
 }
 
 export async function POST(request: Request) {
@@ -65,7 +58,8 @@ export async function POST(request: Request) {
   }
 
   const { start, end } = monthRange(parsed.data.month);
-  const { data: rows, error } = await session.admin
+  const attendance = createAttendanceClient();
+  const { data: rows, error } = await attendance
     .from("attendance_logs")
     .select("rider_code, work_date, status")
     .gte("work_date", start)
@@ -91,14 +85,14 @@ export async function POST(request: Request) {
     rider_name: riderNameMap.get(row.rider_code) ?? "",
     work_date: row.work_date,
     status: normalizeGoogleScheduleStatus(row.status),
-  }));
+  })).filter(row => row.status && riderNameMap.has(row.rider_code));
 
   try {
     const spreadsheetId = resolveOffScheduleSpreadsheetId(parsed.data.sheet_url ?? null);
     if (!spreadsheetId) throw new Error("Chưa chọn Google Sheet lịch OFF để đồng bộ.");
 
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
-    const result = await withAttendanceSheetWriter(session.admin, () => syncScheduleUpdatesToGoogleSheet(spreadsheetId, updates, signal));
+    const result = await withAttendanceSheetWriter(attendance, () => syncScheduleUpdatesToGoogleSheet(spreadsheetId, updates, signal));
     if (!result) return NextResponse.json({ success: false, error: "Có lượt đồng bộ lịch OFF đang chạy." }, { status: 409 });
     invalidateAttendanceCache(parsed.data.month);
 

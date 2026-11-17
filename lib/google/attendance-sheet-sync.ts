@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAttendanceClient } from "@/lib/attendance/database";
+import { scheduleStatuses } from "@/lib/attendance/statuses";
+import { OPERATING_AREAS } from "@/lib/locations/operating-areas";
 import {
   resolveOffScheduleSpreadsheetId,
   syncScheduleUpdatesToGoogleSheet,
@@ -7,8 +10,8 @@ import {
 } from "@/lib/google/off-schedule";
 
 type OutboxRow = { id: string; attempts: number };
-type Admin = ReturnType<typeof createAdminClient>;
-type PendingValue = { rider_code: string; rider_name: string; work_date: string; status: GoogleScheduleStatus };
+type Admin = ReturnType<typeof createAttendanceClient>;
+type PendingValue = { rider_code: string; work_date: string; status: GoogleScheduleStatus };
 
 export type AttendanceSheetSyncResult = {
   success: boolean;
@@ -17,7 +20,7 @@ export type AttendanceSheetSyncResult = {
   error?: string;
 };
 
-const statuses = new Set(["ON", "OFF_WEEKLY", "OFF_APPROVED", "OFF_UNEXPECTED", "WORKING_REST_DAY", "NO_PICKUP", "NO_DELIVERY"]);
+const statuses = new Set<string>(scheduleStatuses);
 
 export async function withAttendanceSheetWriter<T>(admin: Admin, run: () => Promise<T>): Promise<T | null> {
   const owner = randomUUID();
@@ -36,7 +39,9 @@ export async function processAttendanceSheetSync(
   sheetUrl?: string | null,
   retryNow = false,
 ): Promise<AttendanceSheetSyncResult> {
-  const admin = createAdminClient();
+  const spreadsheetId = resolveOffScheduleSpreadsheetId(sheetUrl);
+  if (!spreadsheetId) return { success: false, queued: 0, synced: 0, error: "Chưa chọn tab Google Sheet lịch rider." };
+  const admin = createAttendanceClient();
   const result = await withAttendanceSheetWriter(admin, async () => {
     const now = new Date().toISOString();
     const stale = new Date(Date.now() - 90_000).toISOString();
@@ -58,9 +63,18 @@ export async function processAttendanceSheetSync(
       await updateRows({ state: "PROCESSING", updated_at: now });
       const { data: schedule, error: readError } = await admin.rpc("read_attendance_sheet_queue_values", { p_ids: ids });
       if (readError) throw Error("Chưa đọc được trạng thái mới nhất của lịch rider.");
-      const values = ((schedule ?? []) as PendingValue[]).filter(item => statuses.has(item.status));
-      const spreadsheetId = resolveOffScheduleSpreadsheetId(sheetUrl);
-      if (!spreadsheetId) throw Error("Chưa cấu hình Google Sheet lịch OFF.");
+      const candidates = ((schedule ?? []) as PendingValue[]).filter(item => statuses.has(item.status));
+      const primary = createAdminClient();
+      const names = new Map<string, string>();
+      const codes = [...new Set(candidates.map(item => item.rider_code))];
+      for (let offset = 0; offset < codes.length; offset += 100) {
+        const { data, error } = await primary.from("riders").select("rider_code,full_name")
+          .in("kv", OPERATING_AREAS).in("rider_code", codes.slice(offset, offset + 100));
+        if (error) throw Error("Chưa đọc được tên rider để đồng bộ.");
+        for (const rider of data) names.set(rider.rider_code, rider.full_name ?? "");
+      }
+      const values = candidates.filter(item => names.has(item.rider_code))
+        .map(item => ({ ...item, rider_name: names.get(item.rider_code) ?? "" }));
       if (values.length) await syncScheduleUpdatesToGoogleSheet(spreadsheetId, values, AbortSignal.timeout(45_000));
       await updateRows({ state: "SYNCED", synced_at: new Date().toISOString(), last_error: null });
       return { success: true, queued: rows.length, synced: values.length };
