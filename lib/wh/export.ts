@@ -9,8 +9,8 @@ function vietnamExcelTimestamp(value: string | null): number | null {
   return Number.isFinite(timestamp) ? (timestamp + 7 * 3600000) / 86400000 + 25569 : null;
 }
 
-function dateCell(value: number | null): XLSX.CellObject | null {
-  return value === null ? null : { t: "n", v: value, z: timestampFormat };
+function dateCell(value: number | null, format = timestampFormat): XLSX.CellObject | null {
+  return value === null ? null : { t: "n", v: value, z: format };
 }
 
 export function whOrderWorkbook(orders: readonly WhOrder[]) {
@@ -21,8 +21,9 @@ export function whOrderWorkbook(orders: readonly WhOrder[]) {
   const rows = orders.map((order) => [
     order.shipment_id, order.tracking_number, areaName(order.area), order.district, order.ward,
     order.driver_name, order.driver_id, order.raw_status, order.attempt,
-    ...[order.created_at, order.received_at, order.delivering_at, order.delivered_at, order.onhold_at, order.soc_pending_at]
+    ...[order.created_at, order.received_at, order.delivering_at, order.delivered_at, order.onhold_at]
       .map((value) => dateCell(vietnamExcelTimestamp(value))),
+    dateCell(vietnamExcelTimestamp(order.soc_pending_at), "mm/dd/yyyy hh:mm"),
     sla(order, "4h").state, sla(order, "wh").state, sla(order, "sdd").state,
   ]);
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);

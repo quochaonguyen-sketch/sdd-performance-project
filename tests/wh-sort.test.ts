@@ -50,8 +50,9 @@ test("iPhone workbook exports one handover timestamp column in Vietnam time", ()
   const sheet = XLSX.read(buffer, { type: "buffer", cellNF: true }).Sheets["Chi tiết đơn"];
   assert.deepEqual(["O1", "P1", "Q1", "R1"].map(cell => sheet[cell].v), ["Bàn giao", "4H", "WH", "SDD"]);
   assert.equal(sheet.O2.t, "n");
-  assert.equal(sheet.O2.w, "12/11/2026 15:34");
-  assert.equal(sheet.O3.w, "13/11/2026 00:00");
+  assert.equal(sheet.O2.w, "11/12/2026 15:34");
+  assert.equal(sheet.O3.w, "11/13/2026 00:00");
+  assert.equal(sheet.J2.w, "06/11/2026 13:00");
   assert.equal(sheet.O4, undefined);
   assert.equal(sheet.O5, undefined);
   assert.equal(sheet["!autofilter"]?.ref, "A1:R5");
