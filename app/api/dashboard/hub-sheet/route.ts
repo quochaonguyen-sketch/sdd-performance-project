@@ -6,17 +6,17 @@ import { summarizeHubRoster } from "@/lib/dashboard/hub-roster";
 import { parseHubFc } from "@/lib/dashboard/hub-fc";
 import { TtlCache } from "@/lib/cache/ttl-cache";
 
-const hubCache = new TtlCache<unknown[][]>(60_000, 1);
+const hubCache = new TtlCache<ReturnType<typeof parseHubSheet>>(60_000, 1);
 // Cache source rows, not active-shift totals: shift boundaries are recalculated on every request.
 const rosterCache = new TtlCache<unknown[][]>(300_000, 1);
-const fcCache = new TtlCache<unknown[][]>(900_000, 1);
+const fcCache = new TtlCache<ReturnType<typeof parseHubFc>>(900_000, 1);
 
 export async function GET(request: Request) {
   if (!await getCurrentUserContext()) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   try {
     const force = request.headers.get("x-dashboard-refresh") === "1";
     let token: ReturnType<typeof googleSheetsAccessToken> | undefined;
-    async function read(range: string, cache: TtlCache<unknown[][]>, validate: (grid: unknown[][]) => unknown, formatted = false) {
+    async function read<T>(range: string, cache: TtlCache<T>, parse: (grid: unknown[][]) => T, formatted = false) {
       if (force) cache.delete(range);
       return (await cache.load(range, async () => {
         token ??= googleSheetsAccessToken();
@@ -24,8 +24,7 @@ export async function GET(request: Request) {
         const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${HUB_SHEET_ID}/values/${encodeURIComponent(range)}?valueRenderOption=${formatted ? "FORMATTED_VALUE" : "UNFORMATTED_VALUE"}`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(30000) });
         if (!response.ok) throw Error(`Không đọc được nguồn ${range.split("!")[0]} (Google ${response.status})`);
         const grid: unknown[][] = (await response.json()).values ?? [];
-        validate(grid);
-        return grid;
+        return parse(grid);
       })).value;
     }
     const [hubResult, rosterResult, fcResult] = await Promise.allSettled([
@@ -34,7 +33,7 @@ export async function GET(request: Request) {
       read("FC!A1:E5001", fcCache, parseHubFc, true),
     ]);
     if (hubResult.status === "rejected") throw hubResult.reason;
-    const hub = parseHubSheet(hubResult.value);
+    const hub = hubResult.value;
     let roster;
     try {
       if (rosterResult.status === "rejected") throw rosterResult.reason;
@@ -46,7 +45,7 @@ export async function GET(request: Request) {
     let fc;
     try {
       if (fcResult.status === "rejected") throw fcResult.reason;
-      fc = { data: parseHubFc(fcResult.value), error: null };
+      fc = { data: fcResult.value, error: null };
     } catch (e) { fc = { data: null, error: e instanceof Error ? e.message : "Không tải được FC" }; }
     return NextResponse.json({ ...hub, roster, fc }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

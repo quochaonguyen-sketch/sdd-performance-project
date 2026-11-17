@@ -633,6 +633,7 @@ export function RidersView({
           </div>
         </div>
         <div className="riders-command-actions ops-page-actions">
+          <Button asChild variant="secondary" className="riders-action"><Link href="/riders/churn">Đối chiếu nghỉ việc</Link></Button>
           {canManageRiders ? <>
             <input
               ref={fileInputRef}

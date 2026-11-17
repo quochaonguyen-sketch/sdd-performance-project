@@ -16,7 +16,7 @@ function dateCell(value: number | null, format = timestampFormat): XLSX.CellObje
 export function whOrderWorkbook(orders: readonly WhOrder[]) {
   const headers = [
     "Shipment", "Tracking", "KV", "District", "Ward", "Rider", "Rider ID", "Status", "Attempt",
-    "Created", "Received", "Delivering", "Delivered", "Onhold", "Bàn giao", "4H", "WH", "SDD",
+    "Created", "Received", "Delivering", "Delivered", "Onhold", "SOC bàn giao", "4H", "WH", "SDD",
   ];
   const rows = orders.map((order) => [
     order.shipment_id, order.tracking_number, areaName(order.area), order.district, order.ward,

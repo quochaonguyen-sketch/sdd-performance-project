@@ -19,12 +19,55 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 const { DashboardOverviewContent } = require('../components/dashboard/operations-dashboard.tsx');
 const data = Object.fromEntries(['operations', 'pickup', 'pickupBacklog', 'volume'].map(key => [key, { data: null, error: null }]));
-const dashboard = render(DashboardOverviewContent, { data, loading: false, updated: null, onRefresh() {} });
+data.noOrders = { data: { asOf: '2026-10-30', windowStart: '2026-10-01', rows: [{ riderCode: 'R1', riderName: 'Rider A', area: 'KV1', cot: 'COT2', days: 30, since: '2026-10-01' }] }, error: null };
+const dashboardProps = { data, loading: false, updated: null, onRefresh() {} };
+const dashboard = render(DashboardOverviewContent, dashboardProps);
 assert.ok(!dashboard.includes('id="onhold-overview"'));
 assert.ok(!dashboard.includes('Phân bố hiệu suất rider'));
 assert.ok(!dashboard.includes('Xu hướng hoàn thành'));
 assert.ok(dashboard.includes('href="/onhold"'));
 assert.ok(dashboard.includes('href="/performance"'));
+assert.ok(dashboard.includes('href="#volume-overview">Volume &amp; FC'));
+assert.ok(!dashboard.includes('href="#fc-overview"'));
+const fcPosition = dashboard.indexOf('id="fc-overview"');
+const volumePosition = dashboard.indexOf('id="volume-overview"');
+const livePosition = dashboard.indexOf('<h2>Live Operations</h2>');
+assert.ok(volumePosition >= 0 && fcPosition > volumePosition && livePosition > fcPosition);
+assert.ok(dashboard.indexOf('id="rider-no-orders"') > dashboard.indexOf('<h2>Area Overview</h2>'));
+assert.ok(dashboard.includes('href="#rider-no-orders"'));
+assert.ok(dashboard.includes('Rider không phát sinh đơn'));
+assert.ok(dashboard.includes('Rider A'));
+assert.ok(dashboard.includes('≥30 ngày'));
+assert.ok(dashboard.includes('01/10/2026'));
+assert.ok(dashboard.includes('30/10/2026'));
+assert.ok(!dashboard.includes('Rider đã nghỉ việc'));
+assert.ok(!dashboard.includes('#rider-churn'));
+const unavailable = render(DashboardOverviewContent, { ...dashboardProps, data: { ...data, noOrders: { data: null, error: 'Bạn chưa có quyền xem mục này.' } } });
+assert.ok(!unavailable.includes('Rider A'));
+assert.ok(unavailable.includes('Bạn chưa có quyền xem mục này.'));
+const { DashboardFc } = require('../components/dashboard/dashboard-fc.tsx');
+const { parseHubFc } = require('../lib/dashboard/hub-fc.ts');
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+const nextDay = new Date(Date.parse(today) + 86400000).toISOString().slice(0, 10);
+const fcComparison = render(DashboardFc, {
+  source: { data: parseHubFc([['Date', 'Day', 'HCM MP', 'HCM WH', 'HCM Total'], [today, 'Today', 500, 500, 1000], [nextDay, 'Tomorrow', 400, 400, 800]]), error: null },
+  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 900 } },
+});
+assert.ok(fcComparison.includes('FC so với thực tế'));
+assert.ok(fcComparison.includes('FC theo tháng'));
+assert.ok(fcComparison.includes('Hôm nay, tạm tính'));
+assert.ok(fcComparison.includes('-100'));
+assert.ok(fcComparison.includes('-10%'));
+assert.equal((fcComparison.match(/data-compared="true"/g) ?? []).length, 1);
+const fcLoading = render(DashboardFc, {});
+assert.ok(fcLoading.includes('Đang tải dự báo FC và sản lượng thực tế'));
+assert.ok(!fcLoading.includes('<select'));
+const fcUnavailable = render(DashboardFc, {
+  source: { data: null, error: 'Nguồn FC chưa khả dụng.' },
+  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 900 } },
+});
+assert.ok(fcUnavailable.includes('Nguồn FC chưa khả dụng.'));
+assert.ok(fcUnavailable.includes('900'));
 const { OHAnalysisContent } = require('../components/onhold/oh-analysis.tsx');
 const onhold = render(OHAnalysisContent, { source: { data: { reports: [], cells: [] }, error: null }, end: '2026-10-30', loading: false, onRefresh() {} });
 assert.ok(onhold.includes('Phân tích Onhold'));

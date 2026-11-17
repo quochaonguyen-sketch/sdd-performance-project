@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { readJsonResponse } from "@/lib/http/json-response";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Activity, ArrowUpRight, Clock3, Layers3, PackageCheck, RefreshCcw, Truck } from "lucide-react";
+import { Activity, ArrowUpRight, CalendarDays, Clock3, Layers3, PackageCheck, RefreshCcw, Truck } from "lucide-react";
 import type { PickupRider } from "@/lib/pickup/realtime";
 import { OPERATING_AREAS, normalizeOperatingArea } from "@/lib/locations/operating-areas";
 import { completionRate, type OperationsOverview } from "@/lib/dashboard/operations-overview";
@@ -17,6 +17,7 @@ import { DashboardHubSheet, useHubSheet } from "./dashboard-hub-sheet";
 import { DashboardFc } from "./dashboard-fc";
 import { DashboardReportButton } from "./dashboard-report-button";
 import type { DashboardVolumeData } from "@/lib/dashboard/volume-overview";
+import type { RiderNoOrdersReport } from "@/lib/dashboard/rider-no-orders";
 
 type PickupLive = { riders: PickupRider[]; riderSnapshotAt: string | null; snapshotAt: string | null; riderStale?: boolean };
 type PickupBacklog = { rows: { area: string; zone: string; cot: string; orders: number }[]; snapshotAt: string | null };
@@ -24,8 +25,9 @@ type Source<T> = { data: T | null; error: string | null; loading?: boolean };
 export type DashboardOverviewData = {
   operations: Source<OperationsOverview>;
   pickup: Source<PickupLive>; pickupBacklog: Source<PickupBacklog>; volume: Source<DashboardVolumeData>;
+  noOrders: Source<RiderNoOrdersReport>;
 };
-const empty: DashboardOverviewData = { operations: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null } };
+const empty: DashboardOverviewData = { operations: { data: null, error: null }, pickup: { data: null, error: null }, pickupBacklog: { data: null, error: null }, volume: { data: null, error: null }, noOrders: { data: null, error: null } };
 const fmt = (n: number | null | undefined) => n == null ? "—" : n.toLocaleString("vi-VN");
 const pct = (n: number | null | undefined) => n == null ? "—" : `${n.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
 const dayLabel = (date: string) => `${date.slice(8,10)}/${date.slice(5,7)}`;
@@ -86,6 +88,7 @@ export function OperationsDashboard() {
       source("pickup", "/api/pickup-realtime", 30_000),
       source("pickupBacklog", "/api/pickup-inventory?view=zone-board&p_status=Assigned", 30_000),
       source("volume", "/api/dashboard/volume", 300_000),
+      source("noOrders", "/api/dashboard/rider-no-orders", 60_000),
     ]);
     if (id !== request.current || abort.signal.aborted) return;
     inFlight.current = false;
@@ -134,7 +137,7 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       <div><h1>Operations Overview</h1></div>
       <div className={`ops-page-actions ${s.headerActions}`}><span><Clock3 size={14} />{updated ? `Đã kiểm tra ${stamp(updated)}` : "Đang tổng hợp dữ liệu"}</span><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw size={15} className={loading ? s.spinning : ""} />{loading ? "Đang tải" : "Làm mới"}</button></div>
     </header>
-    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume","#volume-overview"],["Onhold Analytics","/onhold"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["FC","#fc-overview"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
+    <nav className={s.sourceNav} aria-label="Các trang dữ liệu nguồn">{[["Hub Overview","#hub-overview"],["Volume & FC","#volume-overview"],["Onhold Analytics","/onhold"],["Live Dashboard","/realtime-dashboard"],["Rider Performance","/performance"],["Live Pickup","/pickup-realtime"],["Pickup Backlog","/lmhub-inventory"],["Delivery Backlog","/inventory-delivery"],["Rider 0 đơn","#rider-no-orders"]].map(([label,href]) => href.startsWith("#") ? <a key={href} href={href}>{label}<ArrowUpRight size={13}/></a> : <Link key={href} href={href}>{label}<ArrowUpRight size={13}/></Link>)}</nav>
     <div className={s.scope}><span><i/> KV1–KV5</span><span>Snapshot mới nhất của từng nguồn</span><span>Realtime mỗi phút · Phân tích cache 2–5 phút · UTC+7</span></div>
     {!!issues.length && <div className={s.notice} role="status">Chưa tải được: {issues.join(", ")}. Các phần còn lại vẫn hiển thị dữ liệu đã tải.<button type="button" disabled={loading} onClick={onRefresh}>Thử lại</button></div>}
 
@@ -147,8 +150,15 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       <Kpi label="Delivery backlog" value={fmt(delivery?.total)} detail="Đơn đang tồn giao · snapshot tồn" href="/inventory-delivery" icon={<Truck size={19}/>} tone="amber" />
     </section>
 
-    <SectionTitle number="01" title="Volume Overview" sub="Sản lượng giao nhận · ngày gần nhất và xu hướng 7/14 ngày" />
-    <section id="volume-overview" aria-label="Tổng hợp Volume"><DashboardVolume source={data.volume} loading={data.volume.loading ?? loading}/></section>
+    <section id="volume-overview" className={s.volumeSection} aria-label="Volume & FC">
+      <SectionTitle number="01" title="Volume & FC" sub="Sản lượng giao nhận KV1–KV5 và FC HCM theo ngày" />
+      <DashboardVolume source={data.volume} loading={data.volume.loading ?? loading}>
+        <DashboardFc
+          source={hub.error ? { data: null, error: "Chưa cập nhật được nguồn FC. Thử làm mới Dashboard." } : hub.data?.fc}
+          hub={hub.error ? null : hub.data}
+        />
+      </DashboardVolume>
+    </section>
 
     <SectionTitle number="02" title="Live Operations" sub="Tiến độ hiện tại" />
     <div className={s.twoColumns}>
@@ -194,8 +204,61 @@ export function DashboardOverviewContent({ data, loading, updated, onRefresh, re
       const db = delivery?.areas.find(r=>r.area===area)?.orders;
       return <tr key={area}><th><span className={s.areaBadge}>{area}</span></th><td>{d ? `${fmt(d.delivered)} / ${fmt(d.assigned)}` : "—"}</td><td>{p ? `${fmt(p.picked)} / ${fmt(p.assigned)}` : "—"}</td><td><Rate value={d ? completionRate(d.delivered,d.assigned):null} tone="blue"/></td><td><Rate value={p ? completionRate(p.picked,p.assigned):null} tone="teal"/></td><td>{fmt(pb)}</td><td>{fmt(db)}</td></tr>;
     })}</tbody></table></div></section>
-    <DashboardFc source={hub.error ? { data: hub.data?.fc?.data ?? null, error: "Chưa cập nhật được nguồn FC. Thử làm mới dashboard." } : hub.data?.fc} />
+    <RiderNoOrders source={data.noOrders} loading={data.noOrders.loading ?? loading} />
   </div>;
+}
+
+function RiderNoOrders({ source, loading }: { source: Source<RiderNoOrdersReport>; loading: boolean }) {
+  const report = source.error ? null : source.data;
+  const dateLabel = (date: string) => `${dayLabel(date)}/${date.slice(0, 4)}`;
+  const longest = Math.max(1, ...(report?.rows.map(row => row.days) ?? []));
+
+  return (
+    <section id="rider-no-orders" className={`${s.panel} ${s.noOrdersPanel}`} aria-labelledby="rider-no-orders-title">
+      <header className={s.noOrdersHeading}>
+        <div>
+          <h2 id="rider-no-orders-title">Rider không phát sinh đơn</h2>
+          <p>Top 10 rider Active có từ 2 ngày liên tiếp với 0 đơn giao và 0 đơn lấy.</p>
+        </div>
+        {report?.asOf && (
+          <p className={s.noOrdersPeriod}>
+            <CalendarDays size={15} aria-hidden="true" />
+            <span className="sr-only">Kỳ theo dõi</span>
+            <time dateTime={report.windowStart}>{dateLabel(report.windowStart)}</time>
+            <span>–</span>
+            <time dateTime={report.asOf}>{dateLabel(report.asOf)}</time>
+          </p>
+        )}
+      </header>
+      {source.error ? <p className={s.error} role="status">{source.error}</p> : report?.asOf ? (
+        report.rows.length > 0 ? (
+          <div className={s.noOrdersFrame}>
+            <table className={s.noOrdersTable} aria-labelledby="rider-no-orders-title">
+              <thead><tr><th scope="col">Hạng</th><th scope="col">Rider</th><th scope="col">Khu vực</th><th scope="col">Chuỗi 0 đơn</th></tr></thead>
+              <tbody>
+                {report.rows.map((row, index) => (
+                  <tr key={row.riderCode}>
+                    <td>{index + 1}</td>
+                    <th scope="row">{row.riderName}{row.riderName !== row.riderCode && <small>{row.riderCode}</small>}</th>
+                    <td><div className={s.noOrdersArea}><span>{row.area}</span>{row.cot && <small>{riderCotLabel(row.cot)}</small>}</div></td>
+                    <td>
+                      <div className={s.noOrdersStreak}>
+                        <span className={s.noOrdersTrack} aria-hidden="true"><span style={{ width: `${row.days / longest * 100}%` }} /></span>
+                        <div>
+                          <strong>{row.since === report.windowStart ? "≥" : ""}{row.days} ngày</strong>
+                          <small>Từ <time dateTime={row.since}>{dayLabel(row.since)}</time></small>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className={s.empty} role="status">Chưa ghi nhận rider có từ 2 ngày liên tiếp không phát sinh đơn.</p>
+      ) : <p className={s.empty} role="status">{loading ? "Đang tải bảng xếp hạng…" : "Chưa có ngày đủ dữ liệu giao và lấy hàng trong 30 ngày qua."}</p>}
+    </section>
+  );
 }
 
 function SectionTitle({number,title,sub}:{number:string;title:string;sub:string}) { return <div className={s.sectionHeading}><div><span>{number}</span><h2>{title}</h2></div><p>{sub}</p></div>; }
