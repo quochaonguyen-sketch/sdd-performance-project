@@ -26,15 +26,19 @@ export function parseHubFc(grid: unknown[][]) {
   return { rows, checkedAt: new Date().toISOString(), months: [...new Set(rows.map(r => r.date.slice(0,7)))] };
 }
 export type HubFc = ReturnType<typeof parseHubFc>;
+export type HubInbound = {
+  date: string;
+  totals: Record<string, number | null>;
+  inboundByDate?: Record<string, number | null>;
+};
 
 export function compareHubInbound(
   forecast: { date: string; total: number | null },
-  hub: { date: string; totals: Record<string, number | null> } | null | undefined,
+  hub: HubInbound | null | undefined,
   today: string,
 ) {
-  const actual = hub?.date === forecast.date && forecast.date <= today
-    ? hub.totals.lm_hub_inbounded_order_qty_eod ?? null
-    : null;
+  const inbound = hub?.date === forecast.date ? hub.totals.lm_hub_inbounded_order_qty_eod : hub?.inboundByDate?.[forecast.date];
+  const actual = forecast.date <= today ? inbound ?? null : null;
   const delta = forecast.total !== null && actual !== null ? actual - forecast.total : null;
   return {
     actual,

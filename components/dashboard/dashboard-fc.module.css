@@ -14,12 +14,19 @@
 .date {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 9px;
-  border: 1px solid var(--color-rule);
-  border-radius: var(--radius-control);
+  flex-wrap: wrap;
+  gap: 6px 8px;
   color: var(--color-muted);
   font-size: 12px;
+}
+.date input {
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 .overviewBody { display: grid; gap: 16px; padding: 0 20px 18px; }
@@ -63,8 +70,8 @@
 .tableWrap th:first-child { text-align: left; }
 .tableWrap thead th { position: sticky; top: 0; background: var(--color-paper-2); font-size: 12px; font-weight: 650; color: var(--color-muted); z-index: 1; }
 .tableWrap tbody th { font-weight: 500; }
-.tableWrap td:last-child, .tableWrap tr[data-compared=true] > * { font-weight: 650; }
-.tableWrap tr[data-compared=true] > * { background: var(--color-accent-soft); }
+.tableWrap td:last-child, .tableWrap tr[data-selected=true] > * { font-weight: 650; }
+.tableWrap tr[data-selected=true] > * { background: var(--color-accent-soft); }
 .tableWrap small { display: block; margin-top: 2px; font-size: 11px; color: var(--color-muted); font-weight: 400; }
 .tableWrap .split { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0 6px; white-space: normal; }
 .split span { white-space: nowrap; }
@@ -86,7 +93,7 @@
 @media (max-width: 760px) {
   .header, .footer, .message { padding-inline: 16px; }
   .overviewBody, .loading, .tableSkeleton { padding-inline: 16px; }
-  .controls select { min-height: 44px; font-size: 16px; }
+  .controls select, .date input { min-height: 44px; font-size: 16px; }
   .variance strong { font-size: 27px; }
   .tableWrap th, .tableWrap td { padding-inline: 7px; }
 }

@@ -44,3 +44,10 @@ test("does not carry actual inbound to other dates or treat missing values as ze
   assert.deepEqual(compareHubInbound({ ...fc, total: 0 }, hub, date), { actual: 0, delta: 0, ratio: null, partial: true });
   assert.equal(compareHubInbound(fc, hub, date).ratio, -1);
 });
+
+test("compares a selected past day with its own snapshot when available", () => {
+  const today = "2026-11-17";
+  const hub = { date: today, totals: { lm_hub_inbounded_order_qty_eod: 700 }, inboundByDate: { "2026-11-16": 500 } };
+  assert.deepEqual(compareHubInbound({ date: "2026-11-16", total: 1000 }, hub, today), { actual: 500, delta: -500, ratio: -0.5, partial: false });
+  assert.equal(compareHubInbound({ date: "2026-11-15", total: 1000 }, hub, today).actual, null);
+});

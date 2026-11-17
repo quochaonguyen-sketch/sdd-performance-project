@@ -48,23 +48,31 @@ assert.ok(unavailable.includes('Bạn chưa có quyền xem mục này.'));
 const { DashboardFc } = require('../components/dashboard/dashboard-fc.tsx');
 const { parseHubFc } = require('../lib/dashboard/hub-fc.ts');
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
 const nextDay = new Date(Date.parse(today) + 86400000).toISOString().slice(0, 10);
 const fcComparison = render(DashboardFc, {
-  source: { data: parseHubFc([['Date', 'Day', 'HCM MP', 'HCM WH', 'HCM Total'], [today, 'Today', 500, 500, 1000], [nextDay, 'Tomorrow', 400, 400, 800]]), error: null },
-  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 900 } },
+  source: { data: parseHubFc([['Date', 'Day', 'HCM MP', 'HCM WH', 'HCM Total'], [yesterday, 'Yesterday', 500, 500, 1000], [today, 'Today', 500, 500, 1000], [nextDay, 'Tomorrow', 400, 400, 800]]), error: null },
+  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 777 }, inboundByDate: { [yesterday]: 900 } },
 });
 assert.ok(fcComparison.includes('FC so với thực tế'));
 assert.ok(fcComparison.includes('FC theo tháng'));
-assert.ok(fcComparison.includes('Hôm nay, tạm tính'));
+assert.match(fcComparison, new RegExp(`<input[^>]+type="date"[^>]+value="${yesterday}"`));
+assert.ok(!fcComparison.includes('Hôm nay, tạm tính'));
 assert.ok(fcComparison.includes('-100'));
 assert.ok(fcComparison.includes('-10%'));
-assert.equal((fcComparison.match(/data-compared="true"/g) ?? []).length, 1);
+assert.equal((fcComparison.match(/data-selected="true"/g) ?? []).length, 1);
+const fcWithoutHistory = render(DashboardFc, {
+  source: { data: parseHubFc([['Date', 'Day', 'HCM MP', 'HCM WH', 'HCM Total'], [yesterday, 'Yesterday', 500, 500, 1000]]), error: null },
+  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 777 } },
+});
+assert.ok(fcWithoutHistory.includes('Chưa có Inbound thực tế cho ngày này.'));
+assert.ok(!fcWithoutHistory.includes('777'));
 const fcLoading = render(DashboardFc, {});
 assert.ok(fcLoading.includes('Đang tải dự báo FC và sản lượng thực tế'));
 assert.ok(!fcLoading.includes('<select'));
 const fcUnavailable = render(DashboardFc, {
   source: { data: null, error: 'Nguồn FC chưa khả dụng.' },
-  hub: { date: today, totals: { lm_hub_inbounded_order_qty_eod: 900 } },
+  hub: { date: yesterday, totals: { lm_hub_inbounded_order_qty_eod: 900 } },
 });
 assert.ok(fcUnavailable.includes('Nguồn FC chưa khả dụng.'));
 assert.ok(fcUnavailable.includes('900'));

@@ -8,6 +8,24 @@ test("only latest day is totaled; different metrics remain separate", () => {
   assert.equal(data.stations.length, 1);
   assert.equal(data.totals.Picked, 10);
   assert.equal(data.totals.lm_hub_total_driver_qty_eod, 10);
+  assert.deepEqual(data.inboundByDate, { "2026-10-28": 10, "2026-10-29": 10 });
+});
+
+test("past inbound requires the same station coverage and one valid count per station", () => {
+  const missingInbound = row("2026-10-26", "b");
+  missingInbound[3] = "";
+  const zero = row("2026-10-28", "a");
+  zero[3] = "0";
+  const { inboundByDate } = parseHubSheet([header,
+    row("2026-10-25", "a"), row("2026-10-25", "a"),
+    row("2026-10-26", "a"), missingInbound,
+    row("2026-10-27", "a"), row("2026-10-27", "different-station"),
+    zero, row("2026-10-28", "b"),
+    row("2026-10-29", "a"), row("2026-10-29", "b"),
+  ]);
+  assert.deepEqual(inboundByDate, {
+    "2026-10-25": null, "2026-10-26": null, "2026-10-27": null, "2026-10-28": 10, "2026-10-29": 20,
+  });
 });
 test("blank is unavailable, zero is valid, duplicates and invalid counts are rejected", () => {
   const r = row("2026-10-29"); r[3] = ""; r[4] = "0";

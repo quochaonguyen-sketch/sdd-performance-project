@@ -42,9 +42,23 @@ export function parseHubSheet(grid: unknown[][]) {
     return { stationId: get("station_id"), stationName: get("station_name"), date, fetchedAt: sheetDateTime(row[headers.indexOf("fetched_at")]) ?? get("fetched_at"), status: get("data_status"), metrics };
   });
   if (!rows.length) throw Error("Nguồn dashboard chưa có dữ liệu");
-  const latestDate = rows.map(r => r.date).sort().at(-1)!;
-  const latest = rows.filter(r => r.date === latestDate);
-  if (new Set(latest.map(r => r.stationId)).size !== latest.length) throw Error("Trùng snapshot của hub trong ngày; chưa tổng hợp");
-  return { date: latestDate, stations: latest, totals: Object.fromEntries(HUB_METRICS.map(([key]) => [key, latest.some(r => r.metrics[key] === null) ? null : latest.reduce((n, r) => n + r.metrics[key]!, 0)])) };
+  const byDate = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const day = byDate.get(row.date) ?? [];
+    day.push(row);
+    byDate.set(row.date, day);
+  }
+  const latestDate = [...byDate.keys()].sort().at(-1)!;
+  const latest = byDate.get(latestDate)!;
+  const stationIds = new Set(latest.map(row => row.stationId));
+  if (stationIds.size !== latest.length) throw Error("Trùng snapshot của hub trong ngày; chưa tổng hợp");
+  const total = (day: typeof rows, key: string) => day.some(row => row.metrics[key] === null) ? null : day.reduce((sum, row) => sum + row.metrics[key]!, 0);
+  const inboundByDate = Object.fromEntries([...byDate].map(([date, day]) => {
+    const ids = new Set(day.map(row => row.stationId));
+    // Compare HCM only when the day covers the same stations as the current source.
+    const complete = day.length === stationIds.size && ids.size === stationIds.size && [...ids].every(id => stationIds.has(id));
+    return [date, complete ? total(day, "lm_hub_inbounded_order_qty_eod") : null];
+  }));
+  return { date: latestDate, stations: latest, totals: Object.fromEntries(HUB_METRICS.map(([key]) => [key, total(latest, key)])), inboundByDate };
 }
 export type HubSheetData = ReturnType<typeof parseHubSheet>;
